@@ -7,6 +7,7 @@ import { LayoutDashboard, Map as MapIcon, ClipboardList, ChefHat, Wallet, Menu a
 import Dashboard from "@/pages/dashboard";
 import FloorPlan from "@/pages/floor-plan";
 import Kitchen from "@/pages/kitchen";
+import MenuPage from "@/pages/menu";
 import NotFound from "@/pages/not-found";
 import logoPath from "@assets/viber_image_2026-04-06_15-22-24-661_1775465574018.jpg";
 
@@ -70,7 +71,7 @@ function Router() {
         <Route path="/orders/:id" component={() => <StubPage title="Order Detail" />} />
         <Route path="/kitchen" component={Kitchen} />
         <Route path="/cashier" component={() => <StubPage title="Cashier POS" />} />
-        <Route path="/menu" component={() => <StubPage title="Menu Management" />} />
+        <Route path="/menu" component={MenuPage} />
         <Route path="/inventory" component={() => <StubPage title="Inventory" />} />
         <Route path="/staff" component={() => <StubPage title="Staff" />} />
         <Route path="/finance" component={() => <StubPage title="Finance" />} />
