@@ -5,9 +5,8 @@
  * Min Khaung Tea House & Restaurant Management System API
  * OpenAPI spec version: 0.1.0
  */
+import type { ListKitchenOrdersStation } from "./listKitchenOrdersStation";
 
-export interface CreateMenuCategoryBody {
-  name: string;
-  nameMyanmar: string;
-  sortOrder?: number;
-}
+export type ListKitchenOrdersParams = {
+  station?: ListKitchenOrdersStation;
+};

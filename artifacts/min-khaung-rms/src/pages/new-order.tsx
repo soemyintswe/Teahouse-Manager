@@ -5,6 +5,7 @@ import {
   useListMenuCategories,
   useListMenuItems,
   useCreateOrder,
+  getGetTableQueryKey,
   getListTablesQueryKey,
   getListMenuCategoriesQueryKey,
   getListMenuItemsQueryKey,
@@ -99,7 +100,12 @@ export default function NewOrderPage() {
 
   const { data: table, isLoading: tableLoading } = useGetTable(
     tableId ?? 0,
-    { query: { enabled: tableId != null } }
+    {
+      query: {
+        enabled: tableId != null,
+        queryKey: getGetTableQueryKey(tableId ?? 0),
+      },
+    }
   );
 
   const { data: categories = [], isLoading: catsLoading } = useListMenuCategories({

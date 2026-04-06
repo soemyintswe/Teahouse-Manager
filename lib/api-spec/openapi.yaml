@@ -222,6 +222,12 @@ paths:
           required: false
           schema:
             type: ["string", "null"]
+        - name: station
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["salad", "tea-coffee", "juice", "kitchen"]
       responses:
         "200":
           description: List of menu items
@@ -478,6 +484,13 @@ paths:
       operationId: listKitchenOrders
       tags: [kitchen]
       summary: Get active kitchen orders
+      parameters:
+        - name: station
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["salad", "tea-coffee", "juice", "kitchen"]
       responses:
         "200":
           description: Active kitchen orders
@@ -986,6 +999,9 @@ components:
           type: string
         nameMyanmar:
           type: string
+        station:
+          type: string
+          enum: ["salad", "tea-coffee", "juice", "kitchen"]
         description:
           type: ["string", "null"]
         price:
@@ -1010,6 +1026,7 @@ components:
         - categoryId
         - name
         - nameMyanmar
+        - station
         - price
         - available
         - sortOrder
@@ -1025,6 +1042,9 @@ components:
           type: string
         nameMyanmar:
           type: string
+        station:
+          type: string
+          enum: ["salad", "tea-coffee", "juice", "kitchen"]
         description:
           type: string
         price:
@@ -1052,6 +1072,9 @@ components:
           type: string
         nameMyanmar:
           type: string
+        station:
+          type: string
+          enum: ["salad", "tea-coffee", "juice", "kitchen"]
         description:
           type: string
         price:

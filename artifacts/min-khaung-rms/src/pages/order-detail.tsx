@@ -6,6 +6,7 @@ import {
   useUpdateOrder,
   useListMenuCategories,
   useListMenuItems,
+  getGetOrderQueryKey,
   getListTablesQueryKey,
   getListMenuCategoriesQueryKey,
   getListMenuItemsQueryKey,
@@ -38,7 +39,10 @@ export default function OrderDetailPage() {
   const qc = useQueryClient();
 
   const { data: order, isLoading, refetch } = useGetOrder(orderId, {
-    query: { refetchInterval: 15000 }
+    query: {
+      queryKey: getGetOrderQueryKey(orderId),
+      refetchInterval: 15000,
+    }
   });
 
   const addItem = useAddOrderItem();

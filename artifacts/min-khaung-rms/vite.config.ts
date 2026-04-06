@@ -2,74 +2,46 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-const rawPort = process.env.PORT;
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
-
-const basePath = process.env.BASE_PATH;
-
-if (!basePath) {
-  throw new Error(
-    "BASE_PATH environment variable is required but was not provided.",
-  );
-}
-
+// Windows Environment အတွက် သင့်တော်အောင် ပြင်ဆင်ထားသော Config
 export default defineConfig({
-  base: basePath,
+  // Base path ကို default "/" ပဲ ထားပေးလိုက်ပါတယ်
+  base: "/",
   plugins: [
     react(),
     tailwindcss(),
-    runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
-      ? [
-          await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer({
-              root: path.resolve(import.meta.dirname, ".."),
-            }),
-          ),
-          await import("@replit/vite-plugin-dev-banner").then((m) =>
-            m.devBanner(),
-          ),
-        ]
-      : []),
+    // Replit plugins တွေကို ဖယ်ထုတ်လိုက်ပါပြီ
   ],
   resolve: {
     alias: {
+      // Path တွေကို Uncle ရဲ့ စက်ထဲက folder တည်ဆောက်ပုံနဲ့ ကိုက်အောင် ပြင်ထားပါတယ်
       "@": path.resolve(import.meta.dirname, "src"),
-      "@assets": path.resolve(import.meta.dirname, "..", "..", "attached_assets"),
+      "@assets": path.resolve(import.meta.dirname, "public"),
     },
     dedupe: ["react", "react-dom"],
   },
   root: path.resolve(import.meta.dirname),
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    outDir: path.resolve(import.meta.dirname, "dist"),
     emptyOutDir: true,
   },
   server: {
-    port,
+    // Port ကို အသေ (5173) သတ်မှတ်ပေးလိုက်ပါတယ်
+    port: 5173,
     host: "0.0.0.0",
-    allowedHosts: true,
+    proxy: {
+      "/api": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+    },
     fs: {
       strict: true,
       deny: ["**/.*"],
     },
   },
   preview: {
-    port,
+    port: 5173,
     host: "0.0.0.0",
-    allowedHosts: true,
   },
 });

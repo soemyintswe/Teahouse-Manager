@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, menuCategoriesTable, menuItemsTable } from "@workspace/db";
 import {
   CreateMenuCategoryBody,
@@ -54,7 +54,6 @@ router.delete("/menu-categories/:id", async (req, res): Promise<void> => {
 // ─── Menu Items ───────────────────────────────────────────────────────────────
 router.get("/menu-items", async (req, res): Promise<void> => {
   const qp = ListMenuItemsQueryParams.safeParse(req.query);
-  let query = db.select().from(menuItemsTable);
   const conditions: ReturnType<typeof eq>[] = [];
   if (qp.success && qp.data.categoryId != null) {
     conditions.push(eq(menuItemsTable.categoryId, qp.data.categoryId));
@@ -62,12 +61,13 @@ router.get("/menu-items", async (req, res): Promise<void> => {
   if (qp.success && qp.data.available != null) {
     conditions.push(eq(menuItemsTable.available, qp.data.available));
   }
-  let results;
-  if (conditions.length > 0) {
-    results = await (query as ReturnType<typeof db.select>).$dynamic().where(conditions[0]).orderBy(menuItemsTable.sortOrder);
-  } else {
-    results = await (query as ReturnType<typeof db.select>).orderBy(menuItemsTable.sortOrder);
+  if (qp.success && qp.data.station != null) {
+    conditions.push(eq(menuItemsTable.station, qp.data.station));
   }
+  const results =
+    conditions.length > 0
+      ? await db.select().from(menuItemsTable).where(and(...conditions)).orderBy(menuItemsTable.sortOrder)
+      : await db.select().from(menuItemsTable).orderBy(menuItemsTable.sortOrder);
   res.json(ListMenuItemsResponse.parse(results.map(i => ({
     ...i,
     price: i.price.toString(),
@@ -80,7 +80,12 @@ router.post("/menu-items", async (req, res): Promise<void> => {
   const parsed = CreateMenuItemBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const qrCode = `item-${parsed.data.name.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`;
-  const [item] = await db.insert(menuItemsTable).values({ ...parsed.data, qrCode, sortOrder: parsed.data.sortOrder ?? 0 }).returning();
+  const [item] = await db.insert(menuItemsTable).values({
+    ...parsed.data,
+    station: parsed.data.station ?? "kitchen",
+    qrCode,
+    sortOrder: parsed.data.sortOrder ?? 0,
+  }).returning();
   res.status(201).json(GetMenuItemResponse.parse({ ...item, price: item.price.toString(), createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString() }));
 });
 

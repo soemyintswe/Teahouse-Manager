@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import { useListTables, getListTablesQueryKey, useUpdateTable } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, RefreshCw, Users, Clock, Circle, X, ChefHat, CreditCard, Sparkles, PlusCircle } from "lucide-react";
@@ -257,7 +257,7 @@ export default function FloorPlan() {
     try {
       await updateTable.mutateAsync({ id: table.id, data: { status: newStatus } });
       queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
-      toast({ title: `Table ${table.tableNumber} → ${STATUS_CONFIG[newStatus]?.label ?? newStatus}` });
+      toast({ title: `Table ${table.tableNumber} -> ${STATUS_CONFIG[newStatus]?.label ?? newStatus}` });
       setSelectedTable(prev => prev ? { ...prev, status: newStatus } : null);
     } catch {
       toast({ title: "Failed to update status", variant: "destructive" });

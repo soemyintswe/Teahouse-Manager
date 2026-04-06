@@ -11,7 +11,7 @@ import MenuPage from "@/pages/menu";
 import NewOrderPage from "@/pages/new-order";
 import OrderDetailPage from "@/pages/order-detail";
 import NotFound from "@/pages/not-found";
-import logoPath from "@assets/viber_image_2026-04-06_15-22-24-661_1775465574018.jpg";
+import logoPath from "@assets/viber_image_2026-04-06_15-22-24-661.jpg";
 
 const queryClient = new QueryClient();
 
@@ -32,7 +32,7 @@ function Layout({ children }: { children: React.ReactNode }) {
                 <SidebarMenuItem><SidebarMenuButton asChild><Link href="/" className="text-sidebar-foreground hover:bg-sidebar-accent"><LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard</Link></SidebarMenuButton></SidebarMenuItem>
                 <SidebarMenuItem><SidebarMenuButton asChild><Link href="/floor-plan" className="text-sidebar-foreground hover:bg-sidebar-accent"><MapIcon className="mr-2 h-4 w-4" /> Floor Plan</Link></SidebarMenuButton></SidebarMenuItem>
                 <SidebarMenuItem><SidebarMenuButton asChild><Link href="/orders" className="text-sidebar-foreground hover:bg-sidebar-accent"><ClipboardList className="mr-2 h-4 w-4" /> Orders</Link></SidebarMenuButton></SidebarMenuItem>
-                <SidebarMenuItem><SidebarMenuButton asChild><Link href="/kitchen" className="text-sidebar-foreground hover:bg-sidebar-accent"><ChefHat className="mr-2 h-4 w-4" /> KDS</Link></SidebarMenuButton></SidebarMenuItem>
+                <SidebarMenuItem><SidebarMenuButton asChild><Link href="/kds?station=kitchen" className="text-sidebar-foreground hover:bg-sidebar-accent"><ChefHat className="mr-2 h-4 w-4" /> KDS</Link></SidebarMenuButton></SidebarMenuItem>
                 <SidebarMenuItem><SidebarMenuButton asChild><Link href="/cashier" className="text-sidebar-foreground hover:bg-sidebar-accent"><Wallet className="mr-2 h-4 w-4" /> Cashier</Link></SidebarMenuButton></SidebarMenuItem>
                 <SidebarMenuItem><SidebarMenuButton asChild><Link href="/menu" className="text-sidebar-foreground hover:bg-sidebar-accent"><MenuIcon className="mr-2 h-4 w-4" /> Menu</Link></SidebarMenuButton></SidebarMenuItem>
                 <SidebarMenuItem><SidebarMenuButton asChild><Link href="/inventory" className="text-sidebar-foreground hover:bg-sidebar-accent"><Package className="mr-2 h-4 w-4" /> Inventory</Link></SidebarMenuButton></SidebarMenuItem>
@@ -69,8 +69,9 @@ function Router() {
         <Route path="/" component={Dashboard} />
         <Route path="/floor-plan" component={FloorPlan} />
         <Route path="/orders" component={() => <StubPage title="Orders" />} />
-        <Route path="/orders/new" component={() => <StubPage title="New Order" />} />
-        <Route path="/orders/:id" component={() => <StubPage title="Order Detail" />} />
+        <Route path="/orders/new" component={NewOrderPage} />
+        <Route path="/orders/:id" component={OrderDetailPage} />
+        <Route path="/kds" component={Kitchen} />
         <Route path="/kitchen" component={Kitchen} />
         <Route path="/cashier" component={() => <StubPage title="Cashier POS" />} />
         <Route path="/menu" component={MenuPage} />

@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
-import { eq, inArray } from "drizzle-orm";
-import { db, ordersTable, orderItemsTable, tablesTable } from "@workspace/db";
+import { and, eq, inArray } from "drizzle-orm";
+import { db, ordersTable, orderItemsTable, menuItemsTable, tablesTable } from "@workspace/db";
 import {
+  ListKitchenOrdersQueryParams,
   ListKitchenOrdersResponse,
   UpdateKitchenItemStatusParams,
   UpdateKitchenItemStatusBody,
@@ -10,33 +11,73 @@ import {
 
 const router: IRouter = Router();
 
-router.get("/kitchen/orders", async (_req, res): Promise<void> => {
+router.get("/kitchen/orders", async (req, res): Promise<void> => {
+  const query = ListKitchenOrdersQueryParams.safeParse(req.query);
+  if (!query.success) { res.status(400).json({ error: query.error.message }); return; }
+
   // Get open orders that have items not yet served
   const activeOrders = await db.select().from(ordersTable).where(
     inArray(ordersTable.status, ["open", "ready_to_pay"])
   );
 
-  const result = [];
-  for (const order of activeOrders) {
-    const items = await db.select().from(orderItemsTable).where(
-      inArray(orderItemsTable.kitchenStatus, ["new", "cooking", "ready"])
-    ).then(rows => rows.filter(r => r.orderId === order.id));
+  if (activeOrders.length === 0) {
+    res.json(ListKitchenOrdersResponse.parse([]));
+    return;
+  }
 
-    if (items.length === 0) continue;
+  const activeOrderIds = activeOrders.map((order) => order.id);
+  const condition = query.data.station
+    ? and(
+        inArray(orderItemsTable.orderId, activeOrderIds),
+        inArray(orderItemsTable.kitchenStatus, ["new", "cooking", "ready"]),
+        eq(menuItemsTable.station, query.data.station),
+      )
+    : and(
+        inArray(orderItemsTable.orderId, activeOrderIds),
+        inArray(orderItemsTable.kitchenStatus, ["new", "cooking", "ready"]),
+      );
 
-    const [table] = await db.select().from(tablesTable).where(eq(tablesTable.id, order.tableId));
-    result.push({
+  const kitchenItems = await db.select({
+    item: orderItemsTable,
+  }).from(orderItemsTable)
+    .innerJoin(menuItemsTable, eq(orderItemsTable.menuItemId, menuItemsTable.id))
+    .where(condition);
+
+  if (kitchenItems.length === 0) {
+    res.json(ListKitchenOrdersResponse.parse([]));
+    return;
+  }
+
+  const tableIds = [...new Set(activeOrders.map((order) => order.tableId))];
+  const tableRows = await db
+    .select({ id: tablesTable.id, zone: tablesTable.zone })
+    .from(tablesTable)
+    .where(inArray(tablesTable.id, tableIds));
+  const zoneByTableId = new Map(tableRows.map((table) => [table.id, table.zone]));
+
+  const itemsByOrderId = new Map<number, Array<(typeof kitchenItems)[number]["item"]>>();
+  for (const row of kitchenItems) {
+    const existing = itemsByOrderId.get(row.item.orderId);
+    if (existing) existing.push(row.item);
+    else itemsByOrderId.set(row.item.orderId, [row.item]);
+  }
+
+  const result = activeOrders.flatMap((order) => {
+    const items = itemsByOrderId.get(order.id);
+    if (!items || items.length === 0) return [];
+
+    return [{
       orderId: order.id,
       tableNumber: order.tableNumber,
-      zone: table?.zone ?? "hall",
+      zone: zoneByTableId.get(order.tableId) ?? "hall",
       orderTime: order.createdAt.toISOString(),
       items: items.map(item => ({
         ...item,
         unitPrice: item.unitPrice.toString(),
         createdAt: item.createdAt.toISOString(),
       })),
-    });
-  }
+    }];
+  });
 
   res.json(ListKitchenOrdersResponse.parse(result));
 });

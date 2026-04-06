@@ -15,6 +15,7 @@ export const menuItemsTable = pgTable("menu_items", {
   categoryId: integer("category_id").notNull(),
   name: text("name").notNull(),
   nameMyanmar: text("name_myanmar").notNull(),
+  station: text("station").notNull().default("kitchen"), // salad, tea-coffee, juice, kitchen
   description: text("description"),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
   imageUrl: text("image_url"),
