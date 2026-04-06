@@ -9,6 +9,7 @@ const corsOrigins = (process.env.CORS_ORIGINS ?? "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+const nativeOrigins = new Set(["capacitor://localhost", "http://localhost", "https://localhost"]);
 
 app.use(
   pinoHttp({
@@ -35,7 +36,7 @@ if (corsOrigins.length > 0) {
     cors({
       origin(origin, callback) {
         // Allow native app requests (no Origin header) and explicitly listed web origins.
-        if (!origin || corsOrigins.includes(origin)) {
+        if (!origin || corsOrigins.includes(origin) || nativeOrigins.has(origin)) {
           callback(null, true);
           return;
         }

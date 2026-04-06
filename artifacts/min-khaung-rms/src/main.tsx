@@ -5,13 +5,13 @@ import App from "./App";
 import "./index.css";
 
 const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
+const fallbackCloudApiBaseUrl = "https://teahouse-api.onrender.com";
 
 if (configuredApiBaseUrl) {
   setBaseUrl(configuredApiBaseUrl);
 } else if (Capacitor.isNativePlatform()) {
-  // Native app မှာ /api relative path ကို မသုံးနိုင်သောကြောင့်
-  // API Base URL မထည့်ထားပါက network call မအောင်မြင်နိုင်သည်။
-  console.warn("VITE_API_BASE_URL is not configured for native app.");
+  // Native app build time env မထည့်ထားသည့်အခါ cloud API ကို fallback သုံးမည်။
+  setBaseUrl(fallbackCloudApiBaseUrl);
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

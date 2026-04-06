@@ -16,6 +16,8 @@ import { setupAutoUpdate } from "@/lib/mobile-updater";
 import logoPath from "@assets/viber_image_2026-04-06_15-22-24-661.jpg";
 
 const queryClient = new QueryClient();
+const baseUrl = import.meta.env.BASE_URL ?? "/";
+const routerBase = baseUrl.startsWith("/") ? (baseUrl.replace(/\/$/, "") || "/") : "/";
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -96,7 +98,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+        <WouterRouter base={routerBase}>
           <Router />
         </WouterRouter>
         <Toaster />
