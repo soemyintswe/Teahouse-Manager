@@ -21,7 +21,6 @@ services:
   - type: web
     name: teahouse-web
     env: static
-    plan: free
     rootDir: .
     buildCommand: |
       corepack enable
