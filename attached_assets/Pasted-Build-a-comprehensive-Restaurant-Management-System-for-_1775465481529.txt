@@ -1,0 +1,42 @@
+Build a comprehensive Restaurant Management System for 'Min Khaung Tea House & Restaurant' using React Native (Web/Mobile compatible) and Firebase. The app should be high-performance, visually appealing (Modern & Clean UI), and handle the following core modules:
+
+1. Table & Zone Management (Visual Map)
+Create an interactive Floor Plan/Table Layout.
+
+Support for two zones: Hall (Standard) and Air-con Room (with an optional extra service fee).
+
+Table Status: Available (Green), Occupied (Yellow), Payment Pending (Red), and Dirty/Cleaning.
+
+Each table must have a unique ID linked to a QR Code for customer ordering.
+
+2. Digital Menu & QR Ordering System
+Customer Side: A web-based menu (Accessible via QR scan).
+
+Menu Items: Detailed descriptions, high-quality images, prices, and individual Item QR codes.
+
+Customization: Allow customers to specify preferences (e.g., Less sugar, More spicy, Choice of meat: Chicken/Pork).
+
+Cart & Billing: Auto-calculate total price, including optional Air-con charges and Tax (configurable by Admin).
+
+3. Workflow & Roles
+Staff/Waitress: Tablet-based interface to take orders manually if needed.
+
+Kitchen Display System (KDS): A monitor view for chefs to see incoming orders with real-time notifications. Status updates: 'New', 'Cooking', 'Ready for Pickup'.
+
+Cashier/Admin: A central POS dashboard to manage payments (Cash/Mobile Wallets), print receipts, and track 'Paid/Unpaid' statuses.
+
+4. Admin Dashboard & Finance
+Inventory tracking (Stock management).
+
+Staff profiles and permission levels.
+
+Financial reporting: Daily/Monthly sales, Bank deposit/withdrawal logs.
+
+5. Technical Requirements
+Backend: Google Firebase (Firestore) for real-time data sync.
+
+Offline Support: Implement local caching (LAN support) for connectivity issues.
+
+Design: Use a professional color palette (reflecting the logo: Green, Yellow, Red) with a focus on ease of use for fast-paced environments.
+
+Please generate the initial structure, navigation flow, and the Firebase configuration file to get started.
