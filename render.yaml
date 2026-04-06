@@ -1,11 +1,11 @@
 services:
   - type: web
     name: teahouse-api
-    runtime: node
+    env: node
     plan: free
     rootDir: .
     buildCommand: |
-      corepack enable
+      npm install -g pnpm
       pnpm install --frozen-lockfile
       pnpm -C artifacts/api-server run build
     startCommand: pnpm -C artifacts/api-server run start
@@ -20,10 +20,11 @@ services:
 
   - type: web
     name: teahouse-web
-    runtime: static
+    env: static
+    plan: free
     rootDir: .
     buildCommand: |
-      corepack enable
+      npm install -g pnpm
       pnpm install --frozen-lockfile
       pnpm -C artifacts/min-khaung-rms run build
     staticPublishPath: artifacts/min-khaung-rms/dist
