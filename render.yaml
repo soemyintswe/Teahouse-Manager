@@ -1,7 +1,7 @@
 services:
   - type: web
     name: teahouse-api
-    env: node
+    runtime: node
     plan: free
     rootDir: .
     buildCommand: |
@@ -20,8 +20,7 @@ services:
 
   - type: web
     name: teahouse-web
-    env: static
-    plan: free
+    runtime: static
     rootDir: .
     buildCommand: |
       npm install -g pnpm
