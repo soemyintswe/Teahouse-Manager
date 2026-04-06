@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Switch, Route, Router as WouterRouter, Link } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -11,6 +12,7 @@ import MenuPage from "@/pages/menu";
 import NewOrderPage from "@/pages/new-order";
 import OrderDetailPage from "@/pages/order-detail";
 import NotFound from "@/pages/not-found";
+import { setupAutoUpdate } from "@/lib/mobile-updater";
 import logoPath from "@assets/viber_image_2026-04-06_15-22-24-661.jpg";
 
 const queryClient = new QueryClient();
@@ -86,6 +88,11 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    const cleanup = setupAutoUpdate();
+    return () => cleanup();
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

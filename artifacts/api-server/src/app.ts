@@ -5,6 +5,10 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
+const corsOrigins = (process.env.CORS_ORIGINS ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 app.use(
   pinoHttp({
@@ -25,7 +29,24 @@ app.use(
     },
   }),
 );
-app.use(cors());
+
+if (corsOrigins.length > 0) {
+  app.use(
+    cors({
+      origin(origin, callback) {
+        // Allow native app requests (no Origin header) and explicitly listed web origins.
+        if (!origin || corsOrigins.includes(origin)) {
+          callback(null, true);
+          return;
+        }
+        callback(new Error("Not allowed by CORS"));
+      },
+    }),
+  );
+} else {
+  app.use(cors());
+}
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

@@ -3,18 +3,13 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
-// Windows Environment အတွက် သင့်တော်အောင် ပြင်ဆင်ထားသော Config
-export default defineConfig({
-  // Base path ကို default "/" ပဲ ထားပေးလိုက်ပါတယ်
-  base: "/",
-  plugins: [
-    react(),
-    tailwindcss(),
-    // Replit plugins တွေကို ဖယ်ထုတ်လိုက်ပါပြီ
-  ],
+// Android WebView build မှာ white screen မဖြစ်အောင်
+// build time တွင် relative base path ("./") သုံးပေးသည်။
+export default defineConfig(({ command }) => ({
+  base: command === "build" ? "./" : "/",
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      // Path တွေကို Uncle ရဲ့ စက်ထဲက folder တည်ဆောက်ပုံနဲ့ ကိုက်အောင် ပြင်ထားပါတယ်
       "@": path.resolve(import.meta.dirname, "src"),
       "@assets": path.resolve(import.meta.dirname, "public"),
     },
@@ -44,4 +39,4 @@ export default defineConfig({
     port: 5173,
     host: "0.0.0.0",
   },
-});
+}));

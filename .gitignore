@@ -1,55 +1,59 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
-
-# compiled output
-dist
-tmp
-out-tsc
+# Compiled output
+dist/
+tmp/
+.tmp/
+out-tsc/
 *.tsbuildinfo
-.expo
-.expo-shared
+.expo/
+.expo-shared/
 
-# dependencies
-node_modules
+# Dependencies
+node_modules/
 
-# IDEs and editors
-/.idea
-.project
-.classpath
-.c9/
-*.launch
-.settings/
-*.sublime-workspace
+# Logs and Process IDs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+testem.log
+*.pid
+*.seed
 
-# IDE - VSCode
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDEs and Editors
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
-
-# misc
-/.sass-cache
-/connect.lock
-/coverage
-/libpeerconnection.log
-npm-debug.log
-yarn-error.log
-testem.log
-/typings
+.idea/
+*.sublime-workspace
 
 # System Files
 .DS_Store
 Thumbs.db
 
-.cursor/rules/nx-rules.mdc
-.github/instructions/nx.instructions.md
+# Python temporary files (for Uncle's other scripts)
+__pycache__/
+*.py[cod]
+*$py.class
 
-# Replit
+# Misc
+/connect.lock
+/coverage
+/typings
 .cache/
 .local/
 
-node_modules
-.env
-.env.local
-.next
-dist
+# Android (Capacitor)
+artifacts/min-khaung-rms/android/.gradle/
+artifacts/min-khaung-rms/android/build/
+artifacts/min-khaung-rms/android/app/build/
+artifacts/min-khaung-rms/android/local.properties
+artifacts/min-khaung-rms/android/capacitor-cordova-android-plugins/
