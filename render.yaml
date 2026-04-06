@@ -14,9 +14,12 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        sync: false
+        value: postgresql://neondb_owner:npg_tNMU4Cn9OxAz@ep-blue-scene-ancrv0zj.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require
       - key: CORS_ORIGINS
-        sync: false
+        fromService:
+          type: web
+          name: teahouse-web
+          envVarKey: RENDER_EXTERNAL_URL
 
   - type: web
     name: teahouse-web
@@ -29,7 +32,10 @@ services:
     staticPublishPath: artifacts/min-khaung-rms/dist
     envVars:
       - key: VITE_API_BASE_URL
-        sync: false
+        fromService:
+          type: web
+          name: teahouse-api
+          envVarKey: RENDER_EXTERNAL_URL
     routes:
       - type: rewrite
         source: /*
