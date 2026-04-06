@@ -8,6 +8,8 @@ import Dashboard from "@/pages/dashboard";
 import FloorPlan from "@/pages/floor-plan";
 import Kitchen from "@/pages/kitchen";
 import MenuPage from "@/pages/menu";
+import NewOrderPage from "@/pages/new-order";
+import OrderDetailPage from "@/pages/order-detail";
 import NotFound from "@/pages/not-found";
 import logoPath from "@assets/viber_image_2026-04-06_15-22-24-661_1775465574018.jpg";
 
@@ -19,9 +21,9 @@ function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex h-screen w-full bg-background overflow-hidden">
         <Sidebar>
           <SidebarHeader className="p-4 flex items-center justify-center bg-sidebar">
-            <img src={logoPath} alt="Min Khaung Logo" className="w-16 h-16 rounded-full object-cover border-2 border-primary-foreground" />
-            <div className="mt-2 text-sidebar-foreground font-bold text-center leading-tight">
-              Min Khaung<br/>Tea House
+            <img src={logoPath} alt="Logo" className="w-16 h-16 rounded-full object-cover border-2 border-primary-foreground" />
+            <div className="mt-2 text-sidebar-foreground font-bold text-center leading-tight text-sm">
+              Teahouse<br/>Management System
             </div>
           </SidebarHeader>
           <SidebarContent className="bg-sidebar">
