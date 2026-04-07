@@ -126,6 +126,14 @@ async function validateRoomCodeExists(zoneCode: string): Promise<boolean> {
   return Boolean(room);
 }
 
+async function findTableByNumber(tableNumber: string): Promise<{ id: number } | null> {
+  const [table] = await db
+    .select({ id: tablesTable.id })
+    .from(tablesTable)
+    .where(eq(tablesTable.tableNumber, tableNumber));
+  return table ?? null;
+}
+
 router.get("/rooms", async (_req, res): Promise<void> => {
   const rooms = await db.select().from(roomsTable).orderBy(roomsTable.sortOrder, roomsTable.name);
   res.json(rooms.map(toIsoRoom));
@@ -233,13 +241,25 @@ router.post("/tables", async (req, res): Promise<void> => {
     return;
   }
 
+  const tableNumber = parsed.data.tableNumber.trim();
+  if (!tableNumber) {
+    res.status(400).json({ error: "Table number is required." });
+    return;
+  }
+
   if (!(await validateRoomCodeExists(parsed.data.zone))) {
     res.status(400).json({ error: "Room does not exist for this zone code." });
     return;
   }
 
-  const qrCode = `table-${parsed.data.tableNumber}-${Date.now()}`;
-  const [table] = await db.insert(tablesTable).values({ ...parsed.data, qrCode }).returning();
+  const existing = await findTableByNumber(tableNumber);
+  if (existing) {
+    res.status(409).json({ error: "Table number already exists." });
+    return;
+  }
+
+  const qrCode = `table-${tableNumber}-${Date.now()}`;
+  const [table] = await db.insert(tablesTable).values({ ...parsed.data, tableNumber, qrCode }).returning();
   res.status(201).json(GetTableResponse.parse(toIsoTable(table)));
 });
 
@@ -270,6 +290,20 @@ router.patch("/tables/:id", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const payload = { ...parsed.data };
+
+  if (payload.tableNumber != null) {
+    payload.tableNumber = payload.tableNumber.trim();
+    if (!payload.tableNumber) {
+      res.status(400).json({ error: "Table number is required." });
+      return;
+    }
+
+    const existing = await findTableByNumber(payload.tableNumber);
+    if (existing && existing.id !== params.data.id) {
+      res.status(409).json({ error: "Table number already exists." });
+      return;
+    }
+  }
 
   if (payload.zone && !(await validateRoomCodeExists(payload.zone))) {
     res.status(400).json({ error: "Room does not exist for this zone code." });

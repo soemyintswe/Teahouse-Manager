@@ -8,7 +8,7 @@ import {
 } from "@workspace/api-client-react";
 import type { CreateTableBody, Table, UpdateTableBody } from "@workspace/api-client-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Pencil, Trash2, Settings2, Check } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, Settings2, Check, Copy } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -81,6 +81,28 @@ type RoomFormState = {
 };
 
 const ROOM_CODE_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function getNextTableNumber(baseTableNumber: string, existingTableNumbers: Set<string>): string {
+  const base = baseTableNumber.trim();
+  const tailNumberMatch = /^(.*?)(\d+)$/.exec(base);
+
+  if (tailNumberMatch) {
+    const [, prefix, numberText] = tailNumberMatch;
+    let nextNumber = Number.parseInt(numberText, 10) + 1;
+    while (existingTableNumbers.has(`${prefix}${nextNumber}`)) {
+      nextNumber += 1;
+    }
+    return `${prefix}${nextNumber}`;
+  }
+
+  let candidate = `${base}-copy`;
+  let count = 2;
+  while (existingTableNumbers.has(candidate)) {
+    candidate = `${base}-copy-${count}`;
+    count += 1;
+  }
+  return candidate;
+}
 
 function getInitialForm(defaultZone: string, table?: Table): FormState {
   return {
@@ -361,6 +383,10 @@ export default function TableSettingsPage() {
     () => [...tables].sort((a, b) => a.tableNumber.localeCompare(b.tableNumber, undefined, { numeric: true })),
     [tables],
   );
+  const existingTableNumbers = useMemo(
+    () => new Set(sortedTables.map((table) => table.tableNumber)),
+    [sortedTables],
+  );
   const sortedRooms = useMemo(
     () => [...rooms].sort((a, b) => (a.sortOrder - b.sortOrder) || a.name.localeCompare(b.name)),
     [rooms],
@@ -461,6 +487,38 @@ export default function TableSettingsPage() {
     } catch (error) {
       toast({
         title: t("tableSettings.failedUpdateStatus"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDuplicateTable = async (table: Table) => {
+    const nextTableNumber = getNextTableNumber(table.tableNumber, existingTableNumbers);
+    try {
+      await createTable.mutateAsync({
+        data: {
+          tableNumber: nextTableNumber,
+          zone: table.zone,
+          capacity: table.capacity,
+          category: table.category,
+          status: "Active",
+          isBooked: false,
+          occupancyStatus: "available",
+          posX: table.posX + 24,
+          posY: table.posY + 24,
+        },
+      });
+      await refreshAll();
+      toast({
+        title: t("tableSettings.tableDuplicated", {
+          source: table.tableNumber,
+          target: nextTableNumber,
+        }),
+      });
+    } catch (error) {
+      toast({
+        title: t("tableSettings.failedDuplicate"),
         description: error instanceof Error ? error.message : t("common.unknownError"),
         variant: "destructive",
       });
@@ -707,6 +765,15 @@ export default function TableSettingsPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1.5">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDuplicateTable(table)}
+                      title={t("tableSettings.duplicateTableAction")}
+                      disabled={createTable.isPending}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => toggleServiceStatus(table)} title={t("tableSettings.toggleServiceStatus")}>
                       <Settings2 className="h-4 w-4" />
                     </Button>

@@ -83,6 +83,16 @@ const OCCUPANCY_CONFIG: Record<
 const FLOOR_CANVAS_WIDTH = 620;
 const FLOOR_CANVAS_HEIGHT = 350;
 const DEFAULT_FLOOR_ZOOM = 0.8;
+const TABLE_CARD_WIDTH = 92;
+const TABLE_CARD_HEIGHT = 92;
+
+type DragState = {
+  tableId: number;
+  startClientX: number;
+  startClientY: number;
+  startX: number;
+  startY: number;
+};
 
 type RoomOption = {
   code: string;
@@ -117,28 +127,45 @@ function getRoomLabel(
   return formatRoomCodeLabel(roomCode);
 }
 
-function TableCard({ table, onClick }: { table: TableData; onClick: () => void }) {
+function TableCard({
+  table,
+  onClick,
+  onPointerDown,
+  positionOverride,
+  isLayoutEditMode,
+  isDragging,
+}: {
+  table: TableData;
+  onClick: () => void;
+  onPointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
+  positionOverride?: { x: number; y: number };
+  isLayoutEditMode: boolean;
+  isDragging: boolean;
+}) {
   const { t } = useTranslation();
   const occupancyConfig = OCCUPANCY_CONFIG[table.occupancyStatus] ?? OCCUPANCY_CONFIG.available;
   const occupancyLabel = t(occupancyConfig.labelKey);
   const isMaintenance = table.status === "Maintenance";
 
   const baseClass = isMaintenance
-    ? "bg-slate-300 border-slate-500 text-slate-100 cursor-not-allowed"
+    ? `bg-slate-300 border-slate-500 text-slate-100 ${isLayoutEditMode ? "" : "cursor-not-allowed"}`
     : `${occupancyConfig.bg} ${occupancyConfig.border} ${occupancyConfig.text} hover:scale-[1.03]`;
 
   const card = (
     <button
       data-testid={`table-card-${table.id}`}
       onClick={onClick}
-      disabled={isMaintenance}
+      onPointerDown={onPointerDown}
+      disabled={isMaintenance && !isLayoutEditMode}
       className={`
         absolute w-[74px] h-[74px] sm:w-[92px] sm:h-[92px] rounded-xl border-2 shadow-md
         flex flex-col items-center justify-center gap-1
         transition-all duration-150 select-none
+        ${isLayoutEditMode ? "cursor-grab active:cursor-grabbing hover:scale-100 touch-none" : ""}
+        ${isDragging ? "ring-2 ring-primary ring-offset-2 z-10" : ""}
         ${baseClass}
       `}
-      style={{ left: table.posX, top: table.posY }}
+      style={{ left: positionOverride?.x ?? table.posX, top: positionOverride?.y ?? table.posY }}
     >
       {!isMaintenance && (table.occupancyStatus === "occupied" || table.occupancyStatus === "payment_pending" || table.occupancyStatus === "paid") && (
         <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
@@ -179,7 +206,7 @@ function TableCard({ table, onClick }: { table: TableData; onClick: () => void }
     </button>
   );
 
-  if (!isMaintenance) return card;
+  if (!isMaintenance || isLayoutEditMode) return card;
 
   return (
     <Tooltip>
@@ -290,6 +317,10 @@ export default function FloorPlan() {
   const [lastRefreshed, setLastRefreshed] = useState(new Date());
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
   const [selectedRoomCode, setSelectedRoomCode] = useState<string | null>(null);
+  const [isLayoutEditMode, setIsLayoutEditMode] = useState(false);
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const [draftPositions, setDraftPositions] = useState<Record<number, { x: number; y: number }>>({});
+  const [savingLayoutTableId, setSavingLayoutTableId] = useState<number | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -310,6 +341,27 @@ export default function FloorPlan() {
     () => ((tables ?? []) as TableData[]).filter((table) => table.status !== "Archived"),
     [tables],
   );
+
+  const clampPosition = useCallback((x: number, y: number) => {
+    const maxX = FLOOR_CANVAS_WIDTH - TABLE_CARD_WIDTH;
+    const maxY = FLOOR_CANVAS_HEIGHT - TABLE_CARD_HEIGHT;
+    return {
+      x: Math.max(0, Math.min(maxX, x)),
+      y: Math.max(0, Math.min(maxY, y)),
+    };
+  }, []);
+
+  useEffect(() => {
+    const validIds = new Set(visibleTables.map((table) => table.id));
+    setDraftPositions((prev) => {
+      const next: Record<number, { x: number; y: number }> = {};
+      for (const [idText, pos] of Object.entries(prev)) {
+        const id = Number(idText);
+        if (validIds.has(id)) next[id] = pos;
+      }
+      return next;
+    });
+  }, [visibleTables]);
 
   const roomOptions = useMemo<RoomOption[]>(() => {
     const map = new Map<string, RoomOption>();
@@ -412,6 +464,96 @@ export default function FloorPlan() {
     setFloorZoom(DEFAULT_FLOOR_ZOOM);
   }, []);
 
+  const persistTablePosition = useCallback(
+    async (tableId: number, x: number, y: number) => {
+      const table = visibleTables.find((item) => item.id === tableId);
+      if (!table) return;
+
+      try {
+        setSavingLayoutTableId(tableId);
+        await updateTable.mutateAsync({
+          id: tableId,
+          data: { posX: x, posY: y },
+        });
+        await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+        toast({
+          title: t("floorPlan.layoutSavedToast", { tableNumber: table.tableNumber }),
+        });
+      } catch (error) {
+        await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+        toast({
+          title: t("floorPlan.layoutSaveFailedTitle"),
+          description: error instanceof Error ? error.message : t("common.unknownError"),
+          variant: "destructive",
+        });
+      } finally {
+        setSavingLayoutTableId(null);
+        setDraftPositions((prev) => {
+          const next = { ...prev };
+          delete next[tableId];
+          return next;
+        });
+      }
+    },
+    [queryClient, t, toast, updateTable, visibleTables],
+  );
+
+  const handleTablePointerDown = useCallback(
+    (table: TableData, event: React.PointerEvent<HTMLButtonElement>) => {
+      if (!isLayoutEditMode || savingLayoutTableId !== null) return;
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+
+      event.preventDefault();
+      setSelectedTableId(null);
+      const currentPos = draftPositions[table.id] ?? { x: table.posX, y: table.posY };
+      setDragState({
+        tableId: table.id,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        startX: currentPos.x,
+        startY: currentPos.y,
+      });
+    },
+    [draftPositions, isLayoutEditMode, savingLayoutTableId],
+  );
+
+  useEffect(() => {
+    if (!dragState) return;
+
+    const onPointerMove = (event: PointerEvent) => {
+      const dx = (event.clientX - dragState.startClientX) / floorZoom;
+      const dy = (event.clientY - dragState.startClientY) / floorZoom;
+      const next = clampPosition(dragState.startX + dx, dragState.startY + dy);
+      setDraftPositions((prev) => ({ ...prev, [dragState.tableId]: next }));
+    };
+
+    const onPointerUp = () => {
+      const current = draftPositions[dragState.tableId] ?? { x: dragState.startX, y: dragState.startY };
+      const moved = Math.abs(current.x - dragState.startX) > 0.5 || Math.abs(current.y - dragState.startY) > 0.5;
+      const tableId = dragState.tableId;
+      setDragState(null);
+
+      if (!moved) {
+        setDraftPositions((prev) => {
+          const next = { ...prev };
+          delete next[tableId];
+          return next;
+        });
+        return;
+      }
+
+      void persistTablePosition(tableId, Math.round(current.x), Math.round(current.y));
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [clampPosition, dragState, draftPositions, floorZoom, persistTablePosition]);
+
   const updateOccupancy = useCallback(
     async (table: TableData, next: TableData["occupancyStatus"], clearOrder = false) => {
       try {
@@ -442,6 +584,9 @@ export default function FloorPlan() {
   );
 
   const handleTableClick = useCallback((table: TableData) => {
+    if (isLayoutEditMode) {
+      return;
+    }
     if (table.status !== "Active") {
       return;
     }
@@ -449,7 +594,7 @@ export default function FloorPlan() {
       return;
     }
     setSelectedTableId(table.id);
-  }, [roomActiveByCode]);
+  }, [isLayoutEditMode, roomActiveByCode]);
 
   const handleStartOrder = useCallback((table: TableData) => {
     if (table.occupancyStatus === "payment_pending" && table.currentOrderId) {
@@ -502,6 +647,20 @@ export default function FloorPlan() {
             <span className="hidden sm:inline text-xs text-muted-foreground">
               {lastRefreshed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </span>
+          </Button>
+
+          <Button
+            variant={isLayoutEditMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              setSelectedTableId(null);
+              setDragState(null);
+              setDraftPositions({});
+              setIsLayoutEditMode((prev) => !prev);
+            }}
+            disabled={savingLayoutTableId !== null}
+          >
+            {isLayoutEditMode ? t("floorPlan.exitLayoutEdit") : t("floorPlan.editLayout")}
           </Button>
 
           <div className="flex items-center gap-1 rounded-md border bg-card px-1 py-1">
@@ -611,6 +770,14 @@ export default function FloorPlan() {
         })}
       </div>
 
+      {isLayoutEditMode ? (
+        <div className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+          {savingLayoutTableId !== null
+            ? t("floorPlan.layoutSaving")
+            : t("floorPlan.layoutEditHint")}
+        </div>
+      ) : null}
+
       <div className="flex-1 min-h-0">
         <div className="flex items-center gap-2 mb-2 flex-shrink-0">
           <div className="h-0.5 flex-1 bg-border" />
@@ -634,7 +801,15 @@ export default function FloorPlan() {
                 }}
               />
               {roomTables.map((table) => (
-                <TableCard key={table.id} table={table} onClick={() => handleTableClick(table)} />
+                <TableCard
+                  key={table.id}
+                  table={table}
+                  onClick={() => handleTableClick(table)}
+                  onPointerDown={(event) => handleTablePointerDown(table, event)}
+                  positionOverride={draftPositions[table.id]}
+                  isLayoutEditMode={isLayoutEditMode}
+                  isDragging={dragState?.tableId === table.id}
+                />
               ))}
               {roomTables.length === 0 && (
                 <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
