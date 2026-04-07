@@ -51,7 +51,14 @@ router.patch("/tables/:id", async (req, res): Promise<void> => {
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateTableBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const [table] = await db.update(tablesTable).set(parsed.data).where(eq(tablesTable.id, params.data.id)).returning();
+
+  const payload = { ...parsed.data };
+  if (payload.status && payload.status !== "Active") {
+    payload.currentOrderId = null;
+    payload.occupancyStatus = payload.occupancyStatus ?? "dirty";
+  }
+
+  const [table] = await db.update(tablesTable).set(payload).where(eq(tablesTable.id, params.data.id)).returning();
   if (!table) { res.status(404).json({ error: "Table not found" }); return; }
   res.json(UpdateTableResponse.parse({ ...table, createdAt: table.createdAt.toISOString(), updatedAt: table.updatedAt.toISOString() }));
 });

@@ -98,6 +98,12 @@ router.post("/orders", async (req, res): Promise<void> => {
         throw error;
       }
 
+      if (table.status !== "Active") {
+        const error = new Error("This table is currently unavailable.") as Error & { statusCode?: number };
+        error.statusCode = 409;
+        throw error;
+      }
+
       if (table.currentOrderId) {
         const [activeOrder] = await tx.select().from(ordersTable).where(eq(ordersTable.id, table.currentOrderId));
         if (activeOrder && (activeOrder.status === "open" || activeOrder.status === "ready_to_pay")) {
@@ -115,7 +121,7 @@ router.post("/orders", async (req, res): Promise<void> => {
       }).returning();
 
       await tx.update(tablesTable)
-        .set({ status: "occupied", currentOrderId: order.id })
+        .set({ occupancyStatus: "occupied", currentOrderId: order.id })
         .where(eq(tablesTable.id, parsed.data.tableId));
 
       if (parsed.data.items && parsed.data.items.length > 0) {
@@ -176,10 +182,13 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
 
   // If paid/cancelled, free the table
   if (parsed.data.status === "paid" || parsed.data.status === "cancelled") {
-    await db.update(tablesTable).set({ status: "dirty", currentOrderId: null }).where(eq(tablesTable.currentOrderId, order.id));
+    await db.update(tablesTable).set({ occupancyStatus: "dirty", currentOrderId: null }).where(eq(tablesTable.currentOrderId, order.id));
   }
   if (parsed.data.status === "ready_to_pay") {
-    await db.update(tablesTable).set({ status: "payment_pending" }).where(eq(tablesTable.currentOrderId, order.id));
+    await db.update(tablesTable).set({ occupancyStatus: "payment_pending" }).where(eq(tablesTable.currentOrderId, order.id));
+  }
+  if (parsed.data.status === "open") {
+    await db.update(tablesTable).set({ occupancyStatus: "occupied" }).where(eq(tablesTable.currentOrderId, order.id));
   }
 
   res.json(UpdateOrderResponse.parse(formatOrder(order)));

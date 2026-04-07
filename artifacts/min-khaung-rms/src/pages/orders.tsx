@@ -259,14 +259,8 @@ export default function OrdersPage() {
   const selectableTables = useMemo(
     () =>
       allTables
-        .filter(
-          (item) =>
-            item.status === "available" ||
-            item.status === "dirty" ||
-            item.status === "occupied" ||
-            item.status === "payment_pending",
-        )
-        .sort((a, b) => Number(a.tableNumber) - Number(b.tableNumber)),
+        .filter((item) => item.status === "Active")
+        .sort((a, b) => a.tableNumber.localeCompare(b.tableNumber, undefined, { numeric: true })),
     [allTables],
   );
 
@@ -336,7 +330,16 @@ export default function OrdersPage() {
   };
 
   const handleConfirmOrder = async () => {
-    if (!tableId || cart.length === 0) return;
+    if (!tableId || !table || cart.length === 0) return;
+
+    if (table.status !== "Active") {
+      toast({
+        title: "This table is currently unavailable.",
+        description: "Maintenance or archived tables cannot accept new orders.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (existingOpenOrder) {
       toast({ title: `Table has open order #${existingOpenOrder.id}. Opening it now.` });
@@ -391,6 +394,10 @@ export default function OrdersPage() {
               <p className="text-xs text-muted-foreground capitalize">
                 {item.zone === "aircon" ? "Air-con Room" : "Hall Zone"} · {item.capacity} seats
               </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {item.category}
+                {item.isBooked ? " · Reserved" : ""}
+              </p>
             </button>
           ))}
         </div>
@@ -429,7 +436,8 @@ export default function OrdersPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Orders · Table {table.tableNumber}</h1>
           <p className="text-sm text-muted-foreground">
-            {table.zone === "aircon" ? "Air-con Room" : "Hall Zone"} · {table.capacity} seats
+            {table.zone === "aircon" ? "Air-con Room" : "Hall Zone"} · {table.capacity} seats · {table.category}
+            {table.isBooked ? " · Reserved" : ""}
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -447,6 +455,13 @@ export default function OrdersPage() {
           <Button className="mt-3" size="sm" onClick={() => setLocation(`/orders/${existingOpenOrder.id}`)}>
             Open Existing Order
           </Button>
+        </div>
+      ) : null}
+
+      {table.status !== "Active" ? (
+        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-700">
+          <p className="font-semibold">This table is currently unavailable.</p>
+          <p className="text-sm">Only tables with Active service status can accept new orders.</p>
         </div>
       ) : null}
 
@@ -617,7 +632,7 @@ export default function OrdersPage() {
 
             <Button
               className="w-full"
-              disabled={cart.length === 0 || createOrder.isPending || !!existingOpenOrder}
+              disabled={table.status !== "Active" || cart.length === 0 || createOrder.isPending || !!existingOpenOrder}
               onClick={handleConfirmOrder}
             >
               {createOrder.isPending ? (

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { sql, eq, gte } from "drizzle-orm";
+import { sql, eq, and } from "drizzle-orm";
 import { db, ordersTable, tablesTable, inventoryTable, orderItemsTable, paymentsTable } from "@workspace/db";
 import {
   GetDashboardSummaryResponse,
@@ -15,27 +15,55 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
 
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-  // Today's payments
-  const todayPayments = await db.select().from(paymentsTable).where(
-    sql`${paymentsTable.createdAt} >= ${today.toISOString()} AND ${paymentsTable.status} = 'completed'`
-  );
+  // Today's revenue from completed payments.
+  // Maintenance tables are excluded from live billing unless the order has a confirmed paid status.
+  const todayPayments = await db
+    .select({
+      amount: paymentsTable.amount,
+    })
+    .from(paymentsTable)
+    .innerJoin(ordersTable, eq(paymentsTable.orderId, ordersTable.id))
+    .innerJoin(tablesTable, eq(ordersTable.tableId, tablesTable.id))
+    .where(
+      and(
+        sql`${paymentsTable.createdAt} >= ${today.toISOString()}`,
+        eq(paymentsTable.status, "completed"),
+        sql`(${tablesTable.status} <> 'Maintenance' OR ${ordersTable.status} = 'paid')`,
+      ),
+    );
   const todaySales = todayPayments.reduce((sum, p) => sum + parseFloat(p.amount.toString()), 0);
   const todayOrders = todayPayments.length;
 
   // Month sales
-  const monthPayments = await db.select().from(paymentsTable).where(
-    sql`${paymentsTable.createdAt} >= ${startOfMonth.toISOString()} AND ${paymentsTable.status} = 'completed'`
-  );
+  const monthPayments = await db
+    .select({
+      amount: paymentsTable.amount,
+    })
+    .from(paymentsTable)
+    .innerJoin(ordersTable, eq(paymentsTable.orderId, ordersTable.id))
+    .innerJoin(tablesTable, eq(ordersTable.tableId, tablesTable.id))
+    .where(
+      and(
+        sql`${paymentsTable.createdAt} >= ${startOfMonth.toISOString()}`,
+        eq(paymentsTable.status, "completed"),
+        sql`(${tablesTable.status} <> 'Maintenance' OR ${ordersTable.status} = 'paid')`,
+      ),
+    );
   const monthSales = monthPayments.reduce((sum, p) => sum + parseFloat(p.amount.toString()), 0);
 
-  // Active orders (open status)
-  const activeOrders = await db.select().from(ordersTable).where(eq(ordersTable.status, "open"));
+  // Active orders (open status) on active tables only
+  const activeOrders = await db
+    .select({ id: ordersTable.id })
+    .from(ordersTable)
+    .innerJoin(tablesTable, eq(ordersTable.tableId, tablesTable.id))
+    .where(and(eq(ordersTable.status, "open"), eq(tablesTable.status, "Active")));
 
-  // Table statuses
+  // Table occupancy in active service
   const tables = await db.select().from(tablesTable);
-  const availableTables = tables.filter(t => t.status === "available").length;
-  const occupiedTables = tables.filter(t => t.status === "occupied").length;
-  const pendingPaymentTables = tables.filter(t => t.status === "payment_pending").length;
+  const activeServiceTables = tables.filter(t => t.status === "Active");
+  const availableTables = activeServiceTables.filter(t => t.occupancyStatus === "available").length;
+  const occupiedTables = activeServiceTables.filter(t => t.occupancyStatus === "occupied").length;
+  const pendingPaymentTables = activeServiceTables.filter(t => t.occupancyStatus === "payment_pending").length;
 
   // Low stock
   const allInventory = await db.select().from(inventoryTable);
@@ -66,9 +94,21 @@ router.get("/dashboard/sales-chart", async (_req, res): Promise<void> => {
     const nextDay = new Date(day);
     nextDay.setDate(nextDay.getDate() + 1);
 
-    const dayPayments = await db.select().from(paymentsTable).where(
-      sql`${paymentsTable.createdAt} >= ${day.toISOString()} AND ${paymentsTable.createdAt} < ${nextDay.toISOString()} AND ${paymentsTable.status} = 'completed'`
-    );
+    const dayPayments = await db
+      .select({
+        amount: paymentsTable.amount,
+      })
+      .from(paymentsTable)
+      .innerJoin(ordersTable, eq(paymentsTable.orderId, ordersTable.id))
+      .innerJoin(tablesTable, eq(ordersTable.tableId, tablesTable.id))
+      .where(
+        and(
+          sql`${paymentsTable.createdAt} >= ${day.toISOString()}`,
+          sql`${paymentsTable.createdAt} < ${nextDay.toISOString()}`,
+          eq(paymentsTable.status, "completed"),
+          sql`(${tablesTable.status} <> 'Maintenance' OR ${ordersTable.status} = 'paid')`,
+        ),
+      );
 
     const sales = dayPayments.reduce((sum, p) => sum + parseFloat(p.amount.toString()), 0);
 

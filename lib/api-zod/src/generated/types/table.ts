@@ -5,6 +5,9 @@
  * Min Khaung Tea House & Restaurant Management System API
  * OpenAPI spec version: 0.1.0
  */
+import type { TableCategory } from "./tableCategory";
+import type { TableOccupancyStatus } from "./tableOccupancyStatus";
+import type { TableStatus } from "./tableStatus";
 
 export interface Table {
   id: number;
@@ -12,8 +15,12 @@ export interface Table {
   /** hall or aircon */
   zone: string;
   capacity: number;
-  /** available, occupied, payment_pending, dirty */
-  status: string;
+  category: TableCategory;
+  /** table service status */
+  status: TableStatus;
+  isBooked: boolean;
+  /** table occupancy status */
+  occupancyStatus: TableOccupancyStatus;
   qrCode?: string;
   posX: number;
   posY: number;

@@ -9,14 +9,31 @@ import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, DollarSign, ShoppingBag, Map as MapIcon, AlertTriangle, ArrowRight, Users, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+import {
+  Loader2,
+  DollarSign,
+  ShoppingBag,
+  Map as MapIcon,
+  AlertTriangle,
+  ArrowRight,
+  Users,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Crown,
+  BookmarkCheck,
+  Lock,
+} from "lucide-react";
 
 type TableData = {
   id: number;
   tableNumber: string;
   zone: string;
   capacity: number;
-  status: string;
+  category: "Standard" | "VIP" | "Buffer";
+  status: "Active" | "Maintenance" | "Archived";
+  isBooked: boolean;
+  occupancyStatus: "available" | "occupied" | "payment_pending" | "dirty";
   posX: number;
   posY: number;
   currentOrderId: number | null;
@@ -64,18 +81,26 @@ function FloorPreviewCard({
   table: TableData;
   onClick: () => void;
 }) {
-  const styleClass = TABLE_STATUS_STYLE[table.status] ?? TABLE_STATUS_STYLE.available;
+  const isMaintenance = table.status === "Maintenance";
+  const styleClass = isMaintenance
+    ? "bg-slate-300 text-slate-100 border-slate-500"
+    : (TABLE_STATUS_STYLE[table.occupancyStatus] ?? TABLE_STATUS_STYLE.available);
   return (
     <button
       onClick={onClick}
-      className={`absolute h-16 w-16 rounded-lg border-2 text-center shadow-md transition-all hover:scale-105 sm:h-20 sm:w-20 ${styleClass}`}
+      className={`absolute h-16 w-16 rounded-lg border-2 text-center shadow-md transition-all sm:h-20 sm:w-20 ${isMaintenance ? "cursor-not-allowed" : "hover:scale-105"} ${styleClass}`}
       style={{ left: table.posX, top: table.posY }}
+      disabled={isMaintenance}
     >
-      <div className="pt-1.5 text-base font-black leading-none">{table.tableNumber}</div>
-      <div className="mt-1 flex items-center justify-center gap-1 text-[10px] opacity-90">
+      {isMaintenance ? <Lock className="absolute left-1 top-1 h-3 w-3" /> : null}
+      {table.category === "VIP" ? <Crown className="absolute right-1 top-1 h-3 w-3" /> : null}
+      {table.isBooked ? <BookmarkCheck className="absolute right-1 bottom-1 h-3 w-3" /> : null}
+      <div className="pt-1 text-[11px] font-black leading-none">{table.tableNumber}</div>
+      <div className="mt-0.5 flex items-center justify-center gap-1 text-[9px] opacity-90">
         <Users className="h-3 w-3" />
         {table.capacity}
       </div>
+      <div className="text-[8px] font-bold leading-none">{isMaintenance ? "SUSPENDED" : table.occupancyStatus.toUpperCase()}</div>
     </button>
   );
 }
@@ -99,11 +124,19 @@ export default function Dashboard() {
     );
   }
 
-  const hallTables = (tables as TableData[]).filter((table) => table.zone === "hall");
-  const airconTables = (tables as TableData[]).filter((table) => table.zone === "aircon");
+  const visibleTables = (tables as TableData[]).filter((table) => table.status !== "Archived");
+  const hallTables = visibleTables.filter((table) => table.zone === "hall");
+  const airconTables = visibleTables.filter((table) => table.zone === "aircon");
 
   const openTableOrderFlow = (table: TableData) => {
-    if (table.currentOrderId && (table.status === "occupied" || table.status === "payment_pending")) {
+    if (table.status !== "Active") {
+      return;
+    }
+
+    if (
+      table.currentOrderId &&
+      (table.occupancyStatus === "occupied" || table.occupancyStatus === "payment_pending")
+    ) {
       setLocation(`/orders/${table.currentOrderId}`);
       return;
     }
@@ -174,7 +207,7 @@ export default function Dashboard() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-xl font-bold tracking-tight">Floor Plan Overview</h2>
           <div className="flex items-center gap-2">
-            <Badge variant="outline">{tables.length} tables</Badge>
+            <Badge variant="outline">{visibleTables.length} tables</Badge>
             <div className="flex items-center gap-1 rounded-md border bg-card px-1 py-1">
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomOut} title="Zoom out">
                 <ZoomOut className="h-3.5 w-3.5" />

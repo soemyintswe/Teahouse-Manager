@@ -4,12 +4,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarTrigger } from "@/components/ui/sidebar";
-import { LayoutDashboard, Map as MapIcon, ClipboardList, ChefHat, Wallet, Menu as MenuIcon, Package, Users, LineChart, Settings } from "lucide-react";
+import { LayoutDashboard, Map as MapIcon, ClipboardList, ChefHat, Wallet, Menu as MenuIcon, Package, Users, LineChart, Settings, Armchair } from "lucide-react";
 import Dashboard from "@/pages/dashboard";
 import FloorPlan from "@/pages/floor-plan";
 import Kitchen from "@/pages/kitchen";
 import MenuPage from "@/pages/menu";
 import OrdersPage from "@/pages/orders";
+import TableSettingsPage from "@/pages/table-settings";
 import NewOrderPage from "@/pages/new-order";
 import OrderDetailPage from "@/pages/order-detail";
 import NotFound from "@/pages/not-found";
@@ -23,6 +24,7 @@ const routerBase = baseUrl.startsWith("/") ? (baseUrl.replace(/\/$/, "") || "/")
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/floor-plan", label: "Floor Plan", icon: MapIcon },
+  { href: "/table-settings", label: "Table Settings", icon: Armchair },
   { href: "/orders", label: "Orders", icon: ClipboardList },
   { href: "/kds?station=kitchen", label: "KDS", icon: ChefHat },
   { href: "/cashier", label: "Cashier", icon: Wallet },
@@ -96,6 +98,7 @@ function Router() {
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/floor-plan" component={FloorPlan} />
+        <Route path="/table-settings" component={TableSettingsPage} />
         <Route path="/orders" component={OrdersPage} />
         <Route path="/orders/new" component={NewOrderPage} />
         <Route path="/orders/:id" component={OrderDetailPage} />

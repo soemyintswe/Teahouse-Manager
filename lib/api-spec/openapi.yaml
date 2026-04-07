@@ -880,9 +880,19 @@ components:
           description: "hall or aircon"
         capacity:
           type: integer
+        category:
+          type: string
+          enum: ["Standard", "VIP", "Buffer"]
         status:
           type: string
-          description: "available, occupied, payment_pending, dirty"
+          enum: ["Active", "Maintenance", "Archived"]
+          description: "table service status"
+        isBooked:
+          type: boolean
+        occupancyStatus:
+          type: string
+          enum: ["available", "occupied", "payment_pending", "dirty"]
+          description: "table occupancy status"
         qrCode:
           type: string
         posX:
@@ -900,7 +910,10 @@ components:
         - tableNumber
         - zone
         - capacity
+        - category
         - status
+        - isBooked
+        - occupancyStatus
         - posX
         - posY
         - createdAt
@@ -915,6 +928,17 @@ components:
           type: string
         capacity:
           type: integer
+        category:
+          type: string
+          enum: ["Standard", "VIP", "Buffer"]
+        status:
+          type: string
+          enum: ["Active", "Maintenance", "Archived"]
+        isBooked:
+          type: boolean
+        occupancyStatus:
+          type: string
+          enum: ["available", "occupied", "payment_pending", "dirty"]
         posX:
           type: integer
         posY:
@@ -923,6 +947,7 @@ components:
         - tableNumber
         - zone
         - capacity
+        - category
         - posX
         - posY
 
@@ -935,8 +960,17 @@ components:
           type: string
         capacity:
           type: integer
+        category:
+          type: string
+          enum: ["Standard", "VIP", "Buffer"]
         status:
           type: string
+          enum: ["Active", "Maintenance", "Archived"]
+        isBooked:
+          type: boolean
+        occupancyStatus:
+          type: string
+          enum: ["available", "occupied", "payment_pending", "dirty"]
         posX:
           type: integer
         posY:

@@ -5,11 +5,18 @@
  * Min Khaung Tea House & Restaurant Management System API
  * OpenAPI spec version: 0.1.0
  */
+import type { CreateTableBodyCategory } from "./createTableBodyCategory";
+import type { CreateTableBodyOccupancyStatus } from "./createTableBodyOccupancyStatus";
+import type { CreateTableBodyStatus } from "./createTableBodyStatus";
 
 export interface CreateTableBody {
   tableNumber: string;
   zone: string;
   capacity: number;
+  category: CreateTableBodyCategory;
+  status?: CreateTableBodyStatus;
+  isBooked?: boolean;
+  occupancyStatus?: CreateTableBodyOccupancyStatus;
   posX: number;
   posY: number;
 }

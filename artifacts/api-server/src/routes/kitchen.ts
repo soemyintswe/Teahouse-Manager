@@ -16,9 +16,16 @@ router.get("/kitchen/orders", async (req, res): Promise<void> => {
   if (!query.success) { res.status(400).json({ error: query.error.message }); return; }
 
   // Get open orders that have items not yet served
-  const activeOrders = await db.select().from(ordersTable).where(
-    inArray(ordersTable.status, ["open", "ready_to_pay"])
-  );
+  const activeOrders = await db
+    .select({
+      id: ordersTable.id,
+      tableId: ordersTable.tableId,
+      tableNumber: ordersTable.tableNumber,
+      createdAt: ordersTable.createdAt,
+    })
+    .from(ordersTable)
+    .innerJoin(tablesTable, eq(ordersTable.tableId, tablesTable.id))
+    .where(and(inArray(ordersTable.status, ["open", "ready_to_pay"]), eq(tablesTable.status, "Active")));
 
   if (activeOrders.length === 0) {
     res.json(ListKitchenOrdersResponse.parse([]));

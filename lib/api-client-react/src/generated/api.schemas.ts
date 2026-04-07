@@ -9,14 +9,50 @@ export interface HealthStatus {
   status: string;
 }
 
+export type TableCategory = (typeof TableCategory)[keyof typeof TableCategory];
+
+export const TableCategory = {
+  Standard: "Standard",
+  VIP: "VIP",
+  Buffer: "Buffer",
+} as const;
+
+/**
+ * table service status
+ */
+export type TableStatus = (typeof TableStatus)[keyof typeof TableStatus];
+
+export const TableStatus = {
+  Active: "Active",
+  Maintenance: "Maintenance",
+  Archived: "Archived",
+} as const;
+
+/**
+ * table occupancy status
+ */
+export type TableOccupancyStatus =
+  (typeof TableOccupancyStatus)[keyof typeof TableOccupancyStatus];
+
+export const TableOccupancyStatus = {
+  available: "available",
+  occupied: "occupied",
+  payment_pending: "payment_pending",
+  dirty: "dirty",
+} as const;
+
 export interface Table {
   id: number;
   tableNumber: string;
   /** hall or aircon */
   zone: string;
   capacity: number;
-  /** available, occupied, payment_pending, dirty */
-  status: string;
+  category: TableCategory;
+  /** table service status */
+  status: TableStatus;
+  isBooked: boolean;
+  /** table occupancy status */
+  occupancyStatus: TableOccupancyStatus;
   qrCode?: string;
   posX: number;
   posY: number;
@@ -26,19 +62,82 @@ export interface Table {
   updatedAt: string;
 }
 
+export type CreateTableBodyCategory =
+  (typeof CreateTableBodyCategory)[keyof typeof CreateTableBodyCategory];
+
+export const CreateTableBodyCategory = {
+  Standard: "Standard",
+  VIP: "VIP",
+  Buffer: "Buffer",
+} as const;
+
+export type CreateTableBodyStatus =
+  (typeof CreateTableBodyStatus)[keyof typeof CreateTableBodyStatus];
+
+export const CreateTableBodyStatus = {
+  Active: "Active",
+  Maintenance: "Maintenance",
+  Archived: "Archived",
+} as const;
+
+export type CreateTableBodyOccupancyStatus =
+  (typeof CreateTableBodyOccupancyStatus)[keyof typeof CreateTableBodyOccupancyStatus];
+
+export const CreateTableBodyOccupancyStatus = {
+  available: "available",
+  occupied: "occupied",
+  payment_pending: "payment_pending",
+  dirty: "dirty",
+} as const;
+
 export interface CreateTableBody {
   tableNumber: string;
   zone: string;
   capacity: number;
+  category: CreateTableBodyCategory;
+  status?: CreateTableBodyStatus;
+  isBooked?: boolean;
+  occupancyStatus?: CreateTableBodyOccupancyStatus;
   posX: number;
   posY: number;
 }
+
+export type UpdateTableBodyCategory =
+  (typeof UpdateTableBodyCategory)[keyof typeof UpdateTableBodyCategory];
+
+export const UpdateTableBodyCategory = {
+  Standard: "Standard",
+  VIP: "VIP",
+  Buffer: "Buffer",
+} as const;
+
+export type UpdateTableBodyStatus =
+  (typeof UpdateTableBodyStatus)[keyof typeof UpdateTableBodyStatus];
+
+export const UpdateTableBodyStatus = {
+  Active: "Active",
+  Maintenance: "Maintenance",
+  Archived: "Archived",
+} as const;
+
+export type UpdateTableBodyOccupancyStatus =
+  (typeof UpdateTableBodyOccupancyStatus)[keyof typeof UpdateTableBodyOccupancyStatus];
+
+export const UpdateTableBodyOccupancyStatus = {
+  available: "available",
+  occupied: "occupied",
+  payment_pending: "payment_pending",
+  dirty: "dirty",
+} as const;
 
 export interface UpdateTableBody {
   tableNumber?: string;
   zone?: string;
   capacity?: number;
-  status?: string;
+  category?: UpdateTableBodyCategory;
+  status?: UpdateTableBodyStatus;
+  isBooked?: boolean;
+  occupancyStatus?: UpdateTableBodyOccupancyStatus;
   posX?: number;
   posY?: number;
   /** @nullable */
