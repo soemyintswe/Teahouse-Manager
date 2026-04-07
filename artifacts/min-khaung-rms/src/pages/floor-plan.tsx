@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useCallback } from "react";
 import { useListTables, getListTablesQueryKey, useUpdateTable } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, RefreshCw, Users, Clock, Circle, X, ChefHat, CreditCard, Sparkles, PlusCircle } from "lucide-react";
+import { Loader2, RefreshCw, Users, Clock, Circle, X, ChefHat, CreditCard, Sparkles, PlusCircle, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,10 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; border: string;
   dirty:           { label: "Cleaning",         bg: "bg-slate-400",   border: "border-slate-600",  text: "text-white",      dot: "bg-slate-300"  },
 };
 
+const FLOOR_CANVAS_WIDTH = 620;
+const FLOOR_CANVAS_HEIGHT = 350;
+const DEFAULT_FLOOR_ZOOM = 0.85;
+
 function TableCard({
   table,
   selected,
@@ -43,7 +47,7 @@ function TableCard({
       data-testid={`table-card-${table.id}`}
       onClick={onClick}
       className={`
-        absolute w-24 h-24 sm:w-28 sm:h-28 rounded-xl border-2 shadow-md
+        absolute w-20 h-20 sm:w-24 sm:h-24 rounded-xl border-2 shadow-md
         flex flex-col items-center justify-center gap-1
         transition-all duration-150 select-none
         ${cfg.bg} ${cfg.border} ${cfg.text}
@@ -58,12 +62,12 @@ function TableCard({
           <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${cfg.dot}`} />
         </span>
       )}
-      <span className="font-extrabold text-lg sm:text-xl leading-none tracking-tight">{table.tableNumber}</span>
-      <span className="text-[11px] font-medium opacity-90 flex items-center gap-0.5">
+      <span className="font-extrabold text-base sm:text-lg leading-none tracking-tight">{table.tableNumber}</span>
+      <span className="text-[10px] font-medium opacity-90 flex items-center gap-0.5">
         <Users className="w-3 h-3" /> {table.capacity}
       </span>
       {table.status !== "available" && (
-        <span className="text-[10px] opacity-80 font-semibold uppercase tracking-wide leading-none">
+        <span className="text-[9px] opacity-80 font-semibold uppercase tracking-wide leading-none">
           {STATUS_CONFIG[table.status]?.label ?? table.status}
         </span>
       )}
@@ -231,6 +235,7 @@ export default function FloorPlan() {
   const updateTable = useUpdateTable();
   const [selectedTable, setSelectedTable] = useState<TableData | null>(null);
   const [statusFilter, setStatusFilter] = useState<keyof typeof STATUS_CONFIG | null>(null);
+  const [floorZoom, setFloorZoom] = useState(DEFAULT_FLOOR_ZOOM);
   const [lastRefreshed, setLastRefreshed] = useState(new Date());
 
   // Auto-refresh every 30 seconds
@@ -273,6 +278,18 @@ export default function FloorPlan() {
     }
     setLocation(`/orders?tableId=${table.id}`);
   }, [setLocation]);
+
+  const handleZoomIn = useCallback(() => {
+    setFloorZoom((prev) => Math.min(1.6, Number((prev + 0.1).toFixed(2))));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setFloorZoom((prev) => Math.max(0.5, Number((prev - 0.1).toFixed(2))));
+  }, []);
+
+  const handleZoomReset = useCallback(() => {
+    setFloorZoom(DEFAULT_FLOOR_ZOOM);
+  }, []);
 
   if (isLoading) {
     return (
@@ -331,6 +348,18 @@ export default function FloorPlan() {
               {lastRefreshed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </span>
           </Button>
+          <div className="flex items-center gap-1 rounded-md border bg-card px-1 py-1">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomOut} title="Zoom out">
+              <ZoomOut className="h-3.5 w-3.5" />
+            </Button>
+            <span className="w-12 text-center text-xs font-semibold">{Math.round(floorZoom * 100)}%</span>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomIn} title="Zoom in">
+              <ZoomIn className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomReset} title="Reset zoom">
+              <RotateCcw className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -415,28 +444,33 @@ export default function FloorPlan() {
             <div className="h-0.5 flex-1 bg-border" />
           </div>
           <div className="flex-1 rounded-xl border-2 border-dashed border-border bg-muted/30 overflow-auto" data-testid="zone-hall">
-            <div className="relative" style={{ minWidth: 620, minHeight: 350 }}>
-              {/* Grid pattern */}
+            <div className="relative" style={{ minWidth: FLOOR_CANVAS_WIDTH * floorZoom, minHeight: FLOOR_CANVAS_HEIGHT * floorZoom }}>
               <div
-                className="absolute inset-0 opacity-20"
-                style={{
-                  backgroundImage: "radial-gradient(circle, #94a3b8 1px, transparent 1px)",
-                  backgroundSize: "40px 40px",
-                }}
-              />
-              {hallTables.map(table => (
-                <TableCard
-                  key={table.id}
-                  table={table}
-                  selected={selectedTable?.id === table.id}
-                  onClick={() => handleTableClick(table)}
+                className="absolute left-0 top-0 origin-top-left"
+                style={{ width: FLOOR_CANVAS_WIDTH, height: FLOOR_CANVAS_HEIGHT, transform: `scale(${floorZoom})` }}
+              >
+                {/* Grid pattern */}
+                <div
+                  className="absolute inset-0 opacity-20"
+                  style={{
+                    backgroundImage: "radial-gradient(circle, #94a3b8 1px, transparent 1px)",
+                    backgroundSize: "40px 40px",
+                  }}
                 />
-              ))}
-              {hallTables.length === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
-                  No tables in Hall
-                </div>
-              )}
+                {hallTables.map(table => (
+                  <TableCard
+                    key={table.id}
+                    table={table}
+                    selected={selectedTable?.id === table.id}
+                    onClick={() => handleTableClick(table)}
+                  />
+                ))}
+                {hallTables.length === 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
+                    No tables in Hall
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -451,31 +485,36 @@ export default function FloorPlan() {
             <div className="h-0.5 flex-1 bg-blue-200" />
           </div>
           <div className="flex-1 rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 overflow-auto" data-testid="zone-aircon">
-            <div className="relative" style={{ minWidth: 620, minHeight: 350 }}>
+            <div className="relative" style={{ minWidth: FLOOR_CANVAS_WIDTH * floorZoom, minHeight: FLOOR_CANVAS_HEIGHT * floorZoom }}>
               <div
-                className="absolute inset-0 opacity-20"
-                style={{
-                  backgroundImage: "radial-gradient(circle, #93c5fd 1px, transparent 1px)",
-                  backgroundSize: "40px 40px",
-                }}
-              />
-              {/* Aircon icon */}
-              <div className="absolute top-3 right-3 text-blue-300">
-                <Clock className="w-5 h-5" />
-              </div>
-              {airconTables.map(table => (
-                <TableCard
-                  key={table.id}
-                  table={table}
-                  selected={selectedTable?.id === table.id}
-                  onClick={() => handleTableClick(table)}
+                className="absolute left-0 top-0 origin-top-left"
+                style={{ width: FLOOR_CANVAS_WIDTH, height: FLOOR_CANVAS_HEIGHT, transform: `scale(${floorZoom})` }}
+              >
+                <div
+                  className="absolute inset-0 opacity-20"
+                  style={{
+                    backgroundImage: "radial-gradient(circle, #93c5fd 1px, transparent 1px)",
+                    backgroundSize: "40px 40px",
+                  }}
                 />
-              ))}
-              {airconTables.length === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center text-blue-400 text-sm">
-                  No tables in Air-con Room
+                {/* Aircon icon */}
+                <div className="absolute top-3 right-3 text-blue-300">
+                  <Clock className="w-5 h-5" />
                 </div>
-              )}
+                {airconTables.map(table => (
+                  <TableCard
+                    key={table.id}
+                    table={table}
+                    selected={selectedTable?.id === table.id}
+                    onClick={() => handleTableClick(table)}
+                  />
+                ))}
+                {airconTables.length === 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center text-blue-400 text-sm">
+                    No tables in Air-con Room
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

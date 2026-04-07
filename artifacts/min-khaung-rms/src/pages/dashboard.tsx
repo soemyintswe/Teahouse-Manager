@@ -4,12 +4,12 @@ import {
   useListTables,
   getListTablesQueryKey,
 } from "@workspace/api-client-react";
-import type { ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, DollarSign, ShoppingBag, Map as MapIcon, AlertTriangle, ArrowRight, Users } from "lucide-react";
+import { Loader2, DollarSign, ShoppingBag, Map as MapIcon, AlertTriangle, ArrowRight, Users, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 
 type TableData = {
   id: number;
@@ -28,6 +28,10 @@ const TABLE_STATUS_STYLE: Record<string, string> = {
   payment_pending: "bg-red-500 text-white border-red-700",
   dirty: "bg-slate-400 text-white border-slate-600",
 };
+
+const DASHBOARD_CANVAS_WIDTH = 620;
+const DASHBOARD_CANVAS_HEIGHT = 320;
+const DEFAULT_DASHBOARD_ZOOM = 0.8;
 
 function SummaryCard({
   title,
@@ -64,11 +68,11 @@ function FloorPreviewCard({
   return (
     <button
       onClick={onClick}
-      className={`absolute h-20 w-20 rounded-lg border-2 text-center shadow-md transition-all hover:scale-105 sm:h-24 sm:w-24 ${styleClass}`}
+      className={`absolute h-16 w-16 rounded-lg border-2 text-center shadow-md transition-all hover:scale-105 sm:h-20 sm:w-20 ${styleClass}`}
       style={{ left: table.posX, top: table.posY }}
     >
-      <div className="pt-2 text-lg font-black leading-none">{table.tableNumber}</div>
-      <div className="mt-1 flex items-center justify-center gap-1 text-[11px] opacity-90">
+      <div className="pt-1.5 text-base font-black leading-none">{table.tableNumber}</div>
+      <div className="mt-1 flex items-center justify-center gap-1 text-[10px] opacity-90">
         <Users className="h-3 w-3" />
         {table.capacity}
       </div>
@@ -78,6 +82,7 @@ function FloorPreviewCard({
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
+  const [previewZoom, setPreviewZoom] = useState(DEFAULT_DASHBOARD_ZOOM);
 
   const { data: summary, isLoading: summaryLoading } = useGetDashboardSummary({
     query: { queryKey: getGetDashboardSummaryQueryKey() },
@@ -104,6 +109,18 @@ export default function Dashboard() {
     }
     setLocation(`/orders?tableId=${table.id}`);
   };
+
+  const handleZoomIn = useCallback(() => {
+    setPreviewZoom((prev) => Math.min(1.6, Number((prev + 0.1).toFixed(2))));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setPreviewZoom((prev) => Math.max(0.5, Number((prev - 0.1).toFixed(2))));
+  }, []);
+
+  const handleZoomReset = useCallback(() => {
+    setPreviewZoom(DEFAULT_DASHBOARD_ZOOM);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -156,7 +173,21 @@ export default function Dashboard() {
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-xl font-bold tracking-tight">Floor Plan Overview</h2>
-          <Badge variant="outline">{tables.length} tables</Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">{tables.length} tables</Badge>
+            <div className="flex items-center gap-1 rounded-md border bg-card px-1 py-1">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomOut} title="Zoom out">
+                <ZoomOut className="h-3.5 w-3.5" />
+              </Button>
+              <span className="w-12 text-center text-xs font-semibold">{Math.round(previewZoom * 100)}%</span>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomIn} title="Zoom in">
+                <ZoomIn className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomReset} title="Reset zoom">
+                <RotateCcw className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
@@ -166,22 +197,30 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="rounded-lg border border-dashed bg-muted/20 overflow-auto">
-                <div className="relative" style={{ minWidth: 620, minHeight: 320 }}>
+                <div
+                  className="relative"
+                  style={{ minWidth: DASHBOARD_CANVAS_WIDTH * previewZoom, minHeight: DASHBOARD_CANVAS_HEIGHT * previewZoom }}
+                >
                   <div
-                    className="absolute inset-0 opacity-20"
-                    style={{
-                      backgroundImage: "radial-gradient(circle, #94a3b8 1px, transparent 1px)",
-                      backgroundSize: "40px 40px",
-                    }}
-                  />
-                  {hallTables.map((table) => (
-                    <FloorPreviewCard key={table.id} table={table} onClick={() => openTableOrderFlow(table)} />
-                  ))}
-                  {hallTables.length === 0 && (
-                    <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-                      No tables in hall zone
-                    </div>
-                  )}
+                    className="absolute left-0 top-0 origin-top-left"
+                    style={{ width: DASHBOARD_CANVAS_WIDTH, height: DASHBOARD_CANVAS_HEIGHT, transform: `scale(${previewZoom})` }}
+                  >
+                    <div
+                      className="absolute inset-0 opacity-20"
+                      style={{
+                        backgroundImage: "radial-gradient(circle, #94a3b8 1px, transparent 1px)",
+                        backgroundSize: "40px 40px",
+                      }}
+                    />
+                    {hallTables.map((table) => (
+                      <FloorPreviewCard key={table.id} table={table} onClick={() => openTableOrderFlow(table)} />
+                    ))}
+                    {hallTables.length === 0 && (
+                      <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                        No tables in hall zone
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -193,22 +232,30 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="rounded-lg border border-dashed bg-blue-50/40 overflow-auto">
-                <div className="relative" style={{ minWidth: 620, minHeight: 320 }}>
+                <div
+                  className="relative"
+                  style={{ minWidth: DASHBOARD_CANVAS_WIDTH * previewZoom, minHeight: DASHBOARD_CANVAS_HEIGHT * previewZoom }}
+                >
                   <div
-                    className="absolute inset-0 opacity-20"
-                    style={{
-                      backgroundImage: "radial-gradient(circle, #93c5fd 1px, transparent 1px)",
-                      backgroundSize: "40px 40px",
-                    }}
-                  />
-                  {airconTables.map((table) => (
-                    <FloorPreviewCard key={table.id} table={table} onClick={() => openTableOrderFlow(table)} />
-                  ))}
-                  {airconTables.length === 0 && (
-                    <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-                      No tables in air-con room
-                    </div>
-                  )}
+                    className="absolute left-0 top-0 origin-top-left"
+                    style={{ width: DASHBOARD_CANVAS_WIDTH, height: DASHBOARD_CANVAS_HEIGHT, transform: `scale(${previewZoom})` }}
+                  >
+                    <div
+                      className="absolute inset-0 opacity-20"
+                      style={{
+                        backgroundImage: "radial-gradient(circle, #93c5fd 1px, transparent 1px)",
+                        backgroundSize: "40px 40px",
+                      }}
+                    />
+                    {airconTables.map((table) => (
+                      <FloorPreviewCard key={table.id} table={table} onClick={() => openTableOrderFlow(table)} />
+                    ))}
+                    {airconTables.length === 0 && (
+                      <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                        No tables in air-con room
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </CardContent>
