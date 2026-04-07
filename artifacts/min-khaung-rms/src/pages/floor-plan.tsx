@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useListTables, getListTablesQueryKey, useUpdateTable } from "@workspace/api-client-react";
+import { useListTables, getListTablesQueryKey, useUpdateTable, useCreateTable } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Loader2,
@@ -13,6 +13,8 @@ import {
   X,
   Sparkles,
   Receipt,
+  Copy,
+  Check,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
@@ -110,6 +112,28 @@ function formatRoomCodeLabel(code: string): string {
     .join(" ");
 }
 
+function getNextTableNumber(baseTableNumber: string, existingTableNumbers: Set<string>): string {
+  const base = baseTableNumber.trim();
+  const tailNumberMatch = /^(.*?)(\d+)$/.exec(base);
+
+  if (tailNumberMatch) {
+    const [, prefix, numberText] = tailNumberMatch;
+    let nextNumber = Number.parseInt(numberText, 10) + 1;
+    while (existingTableNumbers.has(`${prefix}${nextNumber}`)) {
+      nextNumber += 1;
+    }
+    return `${prefix}${nextNumber}`;
+  }
+
+  let candidate = `${base}-copy`;
+  let count = 2;
+  while (existingTableNumbers.has(candidate)) {
+    candidate = `${base}-copy-${count}`;
+    count += 1;
+  }
+  return candidate;
+}
+
 function getCategoryLabel(category: TableData["category"], t: (key: string, options?: Record<string, unknown>) => string) {
   return t(`category.${category}`);
 }
@@ -134,6 +158,7 @@ function TableCard({
   positionOverride,
   isLayoutEditMode,
   isDragging,
+  isSelected,
 }: {
   table: TableData;
   onClick: () => void;
@@ -141,6 +166,7 @@ function TableCard({
   positionOverride?: { x: number; y: number };
   isLayoutEditMode: boolean;
   isDragging: boolean;
+  isSelected: boolean;
 }) {
   const { t } = useTranslation();
   const occupancyConfig = OCCUPANCY_CONFIG[table.occupancyStatus] ?? OCCUPANCY_CONFIG.available;
@@ -162,11 +188,17 @@ function TableCard({
         flex flex-col items-center justify-center gap-1
         transition-all duration-150 select-none
         ${isLayoutEditMode ? "cursor-grab active:cursor-grabbing hover:scale-100 touch-none" : ""}
-        ${isDragging ? "ring-2 ring-primary ring-offset-2 z-10" : ""}
+        ${isDragging || isSelected ? "ring-2 ring-primary ring-offset-2 z-10" : ""}
         ${baseClass}
       `}
       style={{ left: positionOverride?.x ?? table.posX, top: positionOverride?.y ?? table.posY }}
     >
+      {isLayoutEditMode && isSelected ? (
+        <span className="absolute top-2 left-2 inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <Check className="h-3 w-3" />
+        </span>
+      ) : null}
+
       {!isMaintenance && (table.occupancyStatus === "occupied" || table.occupancyStatus === "payment_pending" || table.occupancyStatus === "paid") && (
         <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
           <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${occupancyConfig.dot}`} />
@@ -174,7 +206,9 @@ function TableCard({
         </span>
       )}
 
-      {isMaintenance ? <Lock className="absolute top-2 left-2 h-3.5 w-3.5" /> : null}
+      {isMaintenance ? (
+        <Lock className={`absolute top-2 h-3.5 w-3.5 ${isLayoutEditMode && isSelected ? "left-7" : "left-2"}`} />
+      ) : null}
 
       <span className="px-1 text-center text-[10px] sm:text-[11px] font-black leading-tight">
         {t("floorPlan.tableLabel", {
@@ -311,6 +345,7 @@ export default function FloorPlan() {
     refetchInterval: 30000,
   });
   const updateTable = useUpdateTable();
+  const createTable = useCreateTable();
 
   const [statusFilter, setStatusFilter] = useState<keyof typeof OCCUPANCY_CONFIG | null>(null);
   const [floorZoom, setFloorZoom] = useState(DEFAULT_FLOOR_ZOOM);
@@ -321,6 +356,8 @@ export default function FloorPlan() {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [draftPositions, setDraftPositions] = useState<Record<number, { x: number; y: number }>>({});
   const [savingLayoutTableId, setSavingLayoutTableId] = useState<number | null>(null);
+  const [selectedLayoutTableIds, setSelectedLayoutTableIds] = useState<number[]>([]);
+  const [suppressLayoutClickTableId, setSuppressLayoutClickTableId] = useState<number | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -337,9 +374,11 @@ export default function FloorPlan() {
     setLastRefreshed(new Date());
   }, [queryClient]);
 
+  const allTables = useMemo(() => (tables ?? []) as TableData[], [tables]);
+
   const visibleTables = useMemo(
-    () => ((tables ?? []) as TableData[]).filter((table) => table.status !== "Archived"),
-    [tables],
+    () => allTables.filter((table) => table.status !== "Archived"),
+    [allTables],
   );
 
   const clampPosition = useCallback((x: number, y: number) => {
@@ -361,6 +400,11 @@ export default function FloorPlan() {
       }
       return next;
     });
+  }, [visibleTables]);
+
+  useEffect(() => {
+    const validIds = new Set(visibleTables.map((table) => table.id));
+    setSelectedLayoutTableIds((prev) => prev.filter((id) => validIds.has(id)));
   }, [visibleTables]);
 
   const roomOptions = useMemo<RoomOption[]>(() => {
@@ -425,6 +469,11 @@ export default function FloorPlan() {
   const roomTables = useMemo(
     () => (selectedRoomCode ? visibleTables.filter((table) => table.zone === selectedRoomCode) : []),
     [visibleTables, selectedRoomCode],
+  );
+
+  const selectedLayoutCount = useMemo(
+    () => roomTables.filter((table) => selectedLayoutTableIds.includes(table.id)).length,
+    [roomTables, selectedLayoutTableIds],
   );
 
   const counts = {
@@ -542,6 +591,7 @@ export default function FloorPlan() {
         return;
       }
 
+      setSuppressLayoutClickTableId(tableId);
       void persistTablePosition(tableId, Math.round(current.x), Math.round(current.y));
     };
 
@@ -585,6 +635,13 @@ export default function FloorPlan() {
 
   const handleTableClick = useCallback((table: TableData) => {
     if (isLayoutEditMode) {
+      if (suppressLayoutClickTableId === table.id) {
+        setSuppressLayoutClickTableId(null);
+        return;
+      }
+      setSelectedLayoutTableIds((prev) =>
+        prev.includes(table.id) ? prev.filter((id) => id !== table.id) : [...prev, table.id],
+      );
       return;
     }
     if (table.status !== "Active") {
@@ -594,7 +651,60 @@ export default function FloorPlan() {
       return;
     }
     setSelectedTableId(table.id);
-  }, [isLayoutEditMode, roomActiveByCode]);
+  }, [isLayoutEditMode, roomActiveByCode, suppressLayoutClickTableId]);
+
+  const handleCopySelectedTables = useCallback(async () => {
+    if (!selectedRoomCode) return;
+
+    const selectedTables = roomTables.filter((table) => selectedLayoutTableIds.includes(table.id));
+    if (selectedTables.length === 0) return;
+
+    const existingNumbers = new Set(allTables.map((table) => table.tableNumber));
+
+    try {
+      for (const table of selectedTables) {
+        const nextTableNumber = getNextTableNumber(table.tableNumber, existingNumbers);
+        existingNumbers.add(nextTableNumber);
+        const nextPosition = clampPosition(table.posX + 28, table.posY + 28);
+
+        await createTable.mutateAsync({
+          data: {
+            tableNumber: nextTableNumber,
+            zone: table.zone,
+            capacity: table.capacity,
+            category: table.category,
+            status: table.status === "Archived" ? "Active" : table.status,
+            isBooked: false,
+            occupancyStatus: "available",
+            posX: Math.round(nextPosition.x),
+            posY: Math.round(nextPosition.y),
+          },
+        });
+      }
+
+      await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+      setSelectedLayoutTableIds([]);
+      toast({
+        title: t("floorPlan.copySelectedSuccess", { count: selectedTables.length }),
+      });
+    } catch (error) {
+      toast({
+        title: t("floorPlan.copySelectedFailedTitle"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    }
+  }, [
+    allTables,
+    clampPosition,
+    createTable,
+    queryClient,
+    roomTables,
+    selectedLayoutTableIds,
+    selectedRoomCode,
+    t,
+    toast,
+  ]);
 
   const handleStartOrder = useCallback((table: TableData) => {
     if (table.occupancyStatus === "payment_pending" && table.currentOrderId) {
@@ -656,12 +766,27 @@ export default function FloorPlan() {
               setSelectedTableId(null);
               setDragState(null);
               setDraftPositions({});
+              setSelectedLayoutTableIds([]);
+              setSuppressLayoutClickTableId(null);
               setIsLayoutEditMode((prev) => !prev);
             }}
-            disabled={savingLayoutTableId !== null}
+            disabled={savingLayoutTableId !== null || createTable.isPending}
           >
             {isLayoutEditMode ? t("floorPlan.exitLayoutEdit") : t("floorPlan.editLayout")}
           </Button>
+
+          {isLayoutEditMode ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { void handleCopySelectedTables(); }}
+              disabled={selectedLayoutCount === 0 || createTable.isPending}
+              className="gap-2"
+            >
+              {createTable.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
+              {t("floorPlan.copySelected", { count: selectedLayoutCount })}
+            </Button>
+          ) : null}
 
           <div className="flex items-center gap-1 rounded-md border bg-card px-1 py-1">
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomOut} title={t("floorPlan.zoomOut")}>
@@ -774,7 +899,7 @@ export default function FloorPlan() {
         <div className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
           {savingLayoutTableId !== null
             ? t("floorPlan.layoutSaving")
-            : t("floorPlan.layoutEditHint")}
+            : t("floorPlan.layoutEditHint", { count: selectedLayoutCount })}
         </div>
       ) : null}
 
@@ -809,6 +934,7 @@ export default function FloorPlan() {
                   positionOverride={draftPositions[table.id]}
                   isLayoutEditMode={isLayoutEditMode}
                   isDragging={dragState?.tableId === table.id}
+                  isSelected={selectedLayoutTableIds.includes(table.id)}
                 />
               ))}
               {roomTables.length === 0 && (
