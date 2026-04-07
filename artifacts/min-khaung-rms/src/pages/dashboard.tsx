@@ -116,6 +116,18 @@ export default function Dashboard() {
     query: { queryKey: getListTablesQueryKey() },
   });
 
+  const handleZoomIn = useCallback(() => {
+    setPreviewZoom((prev) => Math.min(1.6, Number((prev + 0.1).toFixed(2))));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setPreviewZoom((prev) => Math.max(0.5, Number((prev - 0.1).toFixed(2))));
+  }, []);
+
+  const handleZoomReset = useCallback(() => {
+    setPreviewZoom(DEFAULT_DASHBOARD_ZOOM);
+  }, []);
+
   if (summaryLoading || tablesLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -142,18 +154,6 @@ export default function Dashboard() {
     }
     setLocation(`/orders?tableId=${table.id}`);
   };
-
-  const handleZoomIn = useCallback(() => {
-    setPreviewZoom((prev) => Math.min(1.6, Number((prev + 0.1).toFixed(2))));
-  }, []);
-
-  const handleZoomOut = useCallback(() => {
-    setPreviewZoom((prev) => Math.max(0.5, Number((prev - 0.1).toFixed(2))));
-  }, []);
-
-  const handleZoomReset = useCallback(() => {
-    setPreviewZoom(DEFAULT_DASHBOARD_ZOOM);
-  }, []);
 
   return (
     <div className="space-y-6">
