@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useListTables, getListTablesQueryKey, useUpdateTable } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Loader2,
   RefreshCw,
-  Clock,
   ZoomIn,
   ZoomOut,
   RotateCcw,
@@ -21,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { listRooms, ROOMS_QUERY_KEY, type RoomRecord } from "@/lib/rooms-api";
 
 type TableData = {
   id: number;
@@ -84,15 +84,37 @@ const FLOOR_CANVAS_WIDTH = 620;
 const FLOOR_CANVAS_HEIGHT = 350;
 const DEFAULT_FLOOR_ZOOM = 0.8;
 
+type RoomOption = {
+  code: string;
+  name: string;
+  isActive: boolean;
+  sortOrder: number;
+};
+
+function formatRoomCodeLabel(code: string): string {
+  const normalized = code.trim();
+  if (!normalized) return "Room";
+  return normalized
+    .split("-")
+    .map((part) => (part.length > 0 ? `${part[0].toUpperCase()}${part.slice(1)}` : part))
+    .join(" ");
+}
+
 function getCategoryLabel(category: TableData["category"], t: (key: string, options?: Record<string, unknown>) => string) {
   return t(`category.${category}`);
 }
 
-function getZoneLabel(zone: TableData["zone"], t: (key: string) => string, short = false): string {
-  if (zone === "aircon") {
-    return t(short ? "zones.airconShort" : "zones.aircon");
-  }
-  return t(short ? "zones.hallShort" : "zones.hall");
+function getRoomLabel(
+  roomCode: string,
+  t: (key: string, options?: Record<string, unknown>) => string,
+  roomNameByCode: Map<string, string>,
+  short = false,
+): string {
+  const mapped = roomNameByCode.get(roomCode);
+  if (mapped) return mapped;
+  if (roomCode === "aircon") return t(short ? "zones.airconShort" : "zones.aircon");
+  if (roomCode === "hall") return t(short ? "zones.hallShort" : "zones.hall");
+  return formatRoomCodeLabel(roomCode);
 }
 
 function TableCard({ table, onClick }: { table: TableData; onClick: () => void }) {
@@ -169,12 +191,14 @@ function TableCard({ table, onClick }: { table: TableData; onClick: () => void }
 
 function QuickActionMenu({
   table,
+  roomNameByCode,
   onClose,
   onStartOrder,
   onCheckout,
   onMarkClean,
 }: {
   table: TableData;
+  roomNameByCode: Map<string, string>;
   onClose: () => void;
   onStartOrder: () => void;
   onCheckout: () => void;
@@ -195,7 +219,7 @@ function QuickActionMenu({
               {t("floorPlan.tableMeta", {
                 category: getCategoryLabel(table.category, t),
                 capacity: table.capacity,
-                zone: getZoneLabel(table.zone, t, true),
+                zone: getRoomLabel(table.zone, t, roomNameByCode, true),
               })}
             </p>
           </div>
@@ -253,16 +277,24 @@ export default function FloorPlan() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: tables, isLoading } = useListTables({ query: { queryKey: getListTablesQueryKey() } });
+  const { data: rooms = [], isLoading: roomsLoading } = useQuery({
+    queryKey: ROOMS_QUERY_KEY,
+    queryFn: listRooms,
+    staleTime: 15000,
+    refetchInterval: 30000,
+  });
   const updateTable = useUpdateTable();
 
   const [statusFilter, setStatusFilter] = useState<keyof typeof OCCUPANCY_CONFIG | null>(null);
   const [floorZoom, setFloorZoom] = useState(DEFAULT_FLOOR_ZOOM);
   const [lastRefreshed, setLastRefreshed] = useState(new Date());
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
+  const [selectedRoomCode, setSelectedRoomCode] = useState<string | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
       queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+      queryClient.invalidateQueries({ queryKey: ROOMS_QUERY_KEY });
       setLastRefreshed(new Date());
     }, 30000);
     return () => clearInterval(interval);
@@ -270,6 +302,7 @@ export default function FloorPlan() {
 
   const handleManualRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+    queryClient.invalidateQueries({ queryKey: ROOMS_QUERY_KEY });
     setLastRefreshed(new Date());
   }, [queryClient]);
 
@@ -277,6 +310,55 @@ export default function FloorPlan() {
     () => ((tables ?? []) as TableData[]).filter((table) => table.status !== "Archived"),
     [tables],
   );
+
+  const roomOptions = useMemo<RoomOption[]>(() => {
+    const map = new Map<string, RoomOption>();
+
+    for (const room of rooms) {
+      map.set(room.code, {
+        code: room.code,
+        name: room.name,
+        isActive: room.isActive,
+        sortOrder: room.sortOrder,
+      });
+    }
+
+    for (const table of visibleTables) {
+      if (!map.has(table.zone)) {
+        map.set(table.zone, {
+          code: table.zone,
+          name: formatRoomCodeLabel(table.zone),
+          isActive: true,
+          sortOrder: 999,
+        });
+      }
+    }
+
+    return [...map.values()].sort((a, b) => {
+      const orderDiff = a.sortOrder - b.sortOrder;
+      if (orderDiff !== 0) return orderDiff;
+      return a.name.localeCompare(b.name);
+    });
+  }, [rooms, visibleTables]);
+
+  const roomNameByCode = useMemo(
+    () => new Map(roomOptions.map((room) => [room.code, room.name])),
+    [roomOptions],
+  );
+  const roomActiveByCode = useMemo(
+    () => new Map(roomOptions.map((room) => [room.code, room.isActive])),
+    [roomOptions],
+  );
+
+  useEffect(() => {
+    if (roomOptions.length === 0) {
+      setSelectedRoomCode(null);
+      return;
+    }
+    if (!selectedRoomCode || !roomOptions.some((room) => room.code === selectedRoomCode)) {
+      setSelectedRoomCode(roomOptions[0].code);
+    }
+  }, [roomOptions, selectedRoomCode]);
 
   const selectedTable = useMemo(
     () => visibleTables.find((table) => table.id === selectedTableId) ?? null,
@@ -288,14 +370,9 @@ export default function FloorPlan() {
     [visibleTables],
   );
 
-  const hallTables = useMemo(
-    () => visibleTables.filter((table) => table.zone === "hall"),
-    [visibleTables],
-  );
-
-  const airconTables = useMemo(
-    () => visibleTables.filter((table) => table.zone === "aircon"),
-    [visibleTables],
+  const roomTables = useMemo(
+    () => (selectedRoomCode ? visibleTables.filter((table) => table.zone === selectedRoomCode) : []),
+    [visibleTables, selectedRoomCode],
   );
 
   const counts = {
@@ -308,9 +385,20 @@ export default function FloorPlan() {
 
   const maintenanceCount = visibleTables.filter((table) => table.status === "Maintenance").length;
 
-  const filteredTables = statusFilter
-    ? activeServiceTables.filter((table) => table.occupancyStatus === statusFilter)
-    : [];
+  const filteredTables = useMemo(
+    () =>
+      statusFilter && selectedRoomCode
+        ? activeServiceTables.filter(
+            (table) => table.occupancyStatus === statusFilter && table.zone === selectedRoomCode,
+          )
+        : [],
+    [statusFilter, selectedRoomCode, activeServiceTables],
+  );
+
+  const selectedRoom = useMemo(
+    () => roomOptions.find((room) => room.code === selectedRoomCode) ?? null,
+    [roomOptions, selectedRoomCode],
+  );
 
   const handleZoomIn = useCallback(() => {
     setFloorZoom((prev) => Math.min(1.6, Number((prev + 0.1).toFixed(2))));
@@ -357,8 +445,11 @@ export default function FloorPlan() {
     if (table.status !== "Active") {
       return;
     }
+    if (roomActiveByCode.get(table.zone) === false) {
+      return;
+    }
     setSelectedTableId(table.id);
-  }, []);
+  }, [roomActiveByCode]);
 
   const handleStartOrder = useCallback((table: TableData) => {
     if (table.occupancyStatus === "payment_pending" && table.currentOrderId) {
@@ -377,7 +468,7 @@ export default function FloorPlan() {
     setSelectedTableId(null);
   }, [setLocation]);
 
-  if (isLoading) {
+  if (isLoading || roomsLoading) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -389,7 +480,7 @@ export default function FloorPlan() {
     <div className="flex h-full flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t("floorPlan.title")}</h1>
+          <h1 className="page-title">{t("floorPlan.title")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{t("floorPlan.subtitle")}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -484,7 +575,7 @@ export default function FloorPlan() {
                       {t("floorPlan.capacity", { capacity: table.capacity })}
                     </p>
                     <Badge variant="outline" className="text-xs">
-                      {getZoneLabel(table.zone, t, true)}
+                      {getRoomLabel(table.zone, t, roomNameByCode, true)}
                     </Badge>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -502,70 +593,54 @@ export default function FloorPlan() {
         </div>
       )}
 
-      <div className="flex-1 grid grid-cols-1 gap-5 lg:grid-cols-2 min-h-0">
-        <div className="flex flex-col min-h-0">
-          <div className="flex items-center gap-2 mb-2 flex-shrink-0">
-            <div className="h-0.5 flex-1 bg-border" />
-            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground px-2">{t("zones.hall")}</span>
-            <div className="h-0.5 flex-1 bg-border" />
-          </div>
-          <div className="flex-1 rounded-xl border-2 border-dashed border-border bg-muted/30 overflow-auto" data-testid="zone-hall">
-            <div className="relative" style={{ minWidth: FLOOR_CANVAS_WIDTH * floorZoom, minHeight: FLOOR_CANVAS_HEIGHT * floorZoom }}>
-              <div
-                className="absolute left-0 top-0 origin-top-left"
-                style={{ width: FLOOR_CANVAS_WIDTH, height: FLOOR_CANVAS_HEIGHT, transform: `scale(${floorZoom})` }}
-              >
-                <div
-                  className="absolute inset-0 opacity-20"
-                  style={{
-                    backgroundImage: "radial-gradient(circle, #94a3b8 1px, transparent 1px)",
-                    backgroundSize: "40px 40px",
-                  }}
-                />
-                {hallTables.map((table) => (
-                  <TableCard key={table.id} table={table} onClick={() => handleTableClick(table)} />
-                ))}
-                {hallTables.length === 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
-                    {t("floorPlan.noTablesInHall")}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {roomOptions.map((room) => {
+          const selected = room.code === selectedRoomCode;
+          return (
+            <button
+              key={room.code}
+              onClick={() => setSelectedRoomCode(room.code)}
+              className={`rounded-full border px-4 py-2 text-sm font-semibold transition-all ${
+                selected ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:border-primary/40"
+              }`}
+            >
+              <span>{room.name}</span>
+              {!room.isActive ? <span className="ml-2 text-[11px] opacity-80">({t("floorPlan.roomClosed")})</span> : null}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex-1 min-h-0">
+        <div className="flex items-center gap-2 mb-2 flex-shrink-0">
+          <div className="h-0.5 flex-1 bg-border" />
+          <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground px-2">
+            {selectedRoom ? selectedRoom.name : t("floorPlan.noRoomSelected")}
+          </span>
+          <div className="h-0.5 flex-1 bg-border" />
         </div>
 
-        <div className="flex flex-col min-h-0">
-          <div className="flex items-center gap-2 mb-2 flex-shrink-0">
-            <div className="h-0.5 flex-1 bg-blue-200" />
-            <span className="text-xs font-bold uppercase tracking-widest text-blue-600 px-2">{t("zones.aircon")}</span>
-            <div className="h-0.5 flex-1 bg-blue-200" />
-          </div>
-          <div className="flex-1 rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 overflow-auto" data-testid="zone-aircon">
-            <div className="relative" style={{ minWidth: FLOOR_CANVAS_WIDTH * floorZoom, minHeight: FLOOR_CANVAS_HEIGHT * floorZoom }}>
+        <div className="h-full rounded-xl border-2 border-dashed border-border bg-muted/30 overflow-auto" data-testid="zone-selected-room">
+          <div className="relative" style={{ minWidth: FLOOR_CANVAS_WIDTH * floorZoom, minHeight: FLOOR_CANVAS_HEIGHT * floorZoom }}>
+            <div
+              className="absolute left-0 top-0 origin-top-left"
+              style={{ width: FLOOR_CANVAS_WIDTH, height: FLOOR_CANVAS_HEIGHT, transform: `scale(${floorZoom})` }}
+            >
               <div
-                className="absolute left-0 top-0 origin-top-left"
-                style={{ width: FLOOR_CANVAS_WIDTH, height: FLOOR_CANVAS_HEIGHT, transform: `scale(${floorZoom})` }}
-              >
-                <div
-                  className="absolute inset-0 opacity-20"
-                  style={{
-                    backgroundImage: "radial-gradient(circle, #93c5fd 1px, transparent 1px)",
-                    backgroundSize: "40px 40px",
-                  }}
-                />
-                <div className="absolute top-3 right-3 text-blue-300">
-                  <Clock className="w-5 h-5" />
+                className="absolute inset-0 opacity-20"
+                style={{
+                  backgroundImage: "radial-gradient(circle, #94a3b8 1px, transparent 1px)",
+                  backgroundSize: "40px 40px",
+                }}
+              />
+              {roomTables.map((table) => (
+                <TableCard key={table.id} table={table} onClick={() => handleTableClick(table)} />
+              ))}
+              {roomTables.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
+                  {t("floorPlan.noTablesInSelectedRoom")}
                 </div>
-                {airconTables.map((table) => (
-                  <TableCard key={table.id} table={table} onClick={() => handleTableClick(table)} />
-                ))}
-                {airconTables.length === 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center text-blue-400 text-sm">
-                    {t("floorPlan.noTablesInAircon")}
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -574,6 +649,7 @@ export default function FloorPlan() {
       {selectedTable ? (
         <QuickActionMenu
           table={selectedTable}
+          roomNameByCode={roomNameByCode}
           onClose={() => setSelectedTableId(null)}
           onStartOrder={() => handleStartOrder(selectedTable)}
           onCheckout={() => updateOccupancy(selectedTable, "dirty", true)}

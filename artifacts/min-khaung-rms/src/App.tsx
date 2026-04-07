@@ -120,7 +120,7 @@ function StubPage({ title }: { title: string }) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-3xl font-bold tracking-tight text-foreground">{title}</h1>
+      <h1 className="page-title text-foreground">{title}</h1>
       <div className="p-8 border rounded-lg bg-card text-card-foreground text-center">
         <p className="text-muted-foreground">{t("stub.underConstruction", { title })}</p>
       </div>

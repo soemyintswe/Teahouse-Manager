@@ -7,8 +7,8 @@ import {
   getListTablesQueryKey,
 } from "@workspace/api-client-react";
 import type { CreateTableBody, Table, UpdateTableBody } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Pencil, Trash2, Settings2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Plus, Pencil, Trash2, Settings2, Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,8 +48,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-
-const ZONE_OPTIONS = ["hall", "aircon"] as const;
+import {
+  createRoom,
+  deleteRoom,
+  listRooms,
+  ROOMS_QUERY_KEY,
+  updateRoom,
+  type CreateRoomInput,
+  type RoomRecord,
+} from "@/lib/rooms-api";
 
 const CATEGORY_OPTIONS = ["Standard", "VIP", "Buffer"] as const;
 const SERVICE_STATUS_OPTIONS = ["Active", "Maintenance", "Archived"] as const;
@@ -57,7 +64,7 @@ const OCCUPANCY_OPTIONS = ["available", "occupied", "payment_pending", "paid", "
 
 type FormState = {
   tableNumber: string;
-  zone: "hall" | "aircon";
+  zone: string;
   capacity: string;
   category: "Standard" | "VIP" | "Buffer";
   status: "Active" | "Maintenance" | "Archived";
@@ -67,10 +74,16 @@ type FormState = {
   posY: string;
 };
 
-function getInitialForm(table?: Table): FormState {
+type RoomFormState = {
+  code: string;
+  name: string;
+  sortOrder: string;
+};
+
+function getInitialForm(defaultZone: string, table?: Table): FormState {
   return {
     tableNumber: table?.tableNumber ?? "",
-    zone: (table?.zone as "hall" | "aircon") ?? "hall",
+    zone: table?.zone ?? defaultZone,
     capacity: table ? String(table.capacity) : "4",
     category: table?.category ?? "Standard",
     status: table?.status ?? "Active",
@@ -78,6 +91,14 @@ function getInitialForm(table?: Table): FormState {
     occupancyStatus: table?.occupancyStatus ?? "available",
     posX: table ? String(table.posX) : "0",
     posY: table ? String(table.posY) : "0",
+  };
+}
+
+function getInitialRoomForm(room?: RoomRecord): RoomFormState {
+  return {
+    code: room?.code ?? "",
+    name: room?.name ?? "",
+    sortOrder: room ? String(room.sortOrder) : "0",
   };
 }
 
@@ -95,33 +116,43 @@ function getOccupancyBadgeClass(status: Table["occupancyStatus"]): string {
   return "bg-slate-100 text-slate-700 border-slate-300";
 }
 
-function getZoneLabel(zone: "hall" | "aircon", t: (key: string) => string, short = false): string {
+function getZoneLabel(
+  zone: string,
+  t: (key: string) => string,
+  roomNameByCode?: Map<string, string>,
+  short = false,
+): string {
+  if (roomNameByCode?.has(zone)) return roomNameByCode.get(zone) ?? zone;
   if (zone === "aircon") {
     return t(short ? "zones.airconShort" : "zones.aircon");
   }
-  return t(short ? "zones.hallShort" : "zones.hall");
+  if (zone === "hall") return t(short ? "zones.hallShort" : "zones.hall");
+  return zone;
 }
 
 function TableDialog({
   open,
   table,
+  rooms,
   saving,
   onOpenChange,
   onSubmit,
 }: {
   open: boolean;
   table?: Table;
+  rooms: RoomRecord[];
   saving: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (payload: CreateTableBody | UpdateTableBody) => void;
 }) {
   const { t } = useTranslation();
-  const [form, setForm] = useState<FormState>(() => getInitialForm(table));
+  const defaultZone = rooms[0]?.code ?? "hall";
+  const [form, setForm] = useState<FormState>(() => getInitialForm(defaultZone, table));
 
   useEffect(() => {
     if (!open) return;
-    setForm(getInitialForm(table));
-  }, [open, table]);
+    setForm(getInitialForm(defaultZone, table));
+  }, [open, table, defaultZone]);
 
   const valid =
     form.tableNumber.trim().length > 0 &&
@@ -166,15 +197,15 @@ function TableDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label>{t("tableSettings.zone")}</Label>
-              <Select value={form.zone} onValueChange={(value) => setForm((prev) => ({ ...prev, zone: value as FormState["zone"] }))}>
+              <Label>{t("tableSettings.room")}</Label>
+              <Select value={form.zone} onValueChange={(value) => setForm((prev) => ({ ...prev, zone: value }))}>
                 <SelectTrigger>
-                  <SelectValue placeholder={t("tableSettings.selectZone")} />
+                  <SelectValue placeholder={t("tableSettings.selectRoom")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {ZONE_OPTIONS.map((zone) => (
-                    <SelectItem key={zone} value={zone}>
-                      {getZoneLabel(zone, t)}
+                  {rooms.map((room) => (
+                    <SelectItem key={room.code} value={room.code}>
+                      {room.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -284,7 +315,7 @@ function TableDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             {t("common.cancel")}
           </Button>
-          <Button onClick={submit} disabled={!valid || saving}>
+          <Button onClick={submit} disabled={!valid || saving || rooms.length === 0}>
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {table ? t("common.saveChanges") : t("tableSettings.addTable")}
           </Button>
@@ -299,31 +330,63 @@ export default function TableSettingsPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: tables = [], isLoading } = useListTables({
+  const { data: tables = [], isLoading: isTablesLoading } = useListTables({
     query: { queryKey: getListTablesQueryKey() },
+  });
+  const { data: rooms = [], isLoading: isRoomsLoading } = useQuery({
+    queryKey: ROOMS_QUERY_KEY,
+    queryFn: listRooms,
+    staleTime: 15000,
   });
 
   const createTable = useCreateTable();
   const updateTable = useUpdateTable();
   const deleteTable = useDeleteTable();
+  const createRoomMutation = useMutation({ mutationFn: createRoom });
+  const updateRoomMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<CreateRoomInput> }) => updateRoom(id, data),
+  });
+  const deleteRoomMutation = useMutation({ mutationFn: deleteRoom });
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTable, setEditingTable] = useState<Table | undefined>(undefined);
   const [deletingTable, setDeletingTable] = useState<Table | undefined>(undefined);
+  const [roomForm, setRoomForm] = useState<RoomFormState>(() => getInitialRoomForm());
+  const [editingRoomId, setEditingRoomId] = useState<number | null>(null);
+  const [deletingRoom, setDeletingRoom] = useState<RoomRecord | undefined>(undefined);
 
   const sortedTables = useMemo(
     () => [...tables].sort((a, b) => a.tableNumber.localeCompare(b.tableNumber, undefined, { numeric: true })),
     [tables],
   );
+  const sortedRooms = useMemo(
+    () => [...rooms].sort((a, b) => (a.sortOrder - b.sortOrder) || a.name.localeCompare(b.name)),
+    [rooms],
+  );
+  const roomNameByCode = useMemo(
+    () => new Map(sortedRooms.map((room) => [room.code, room.name])),
+    [sortedRooms],
+  );
+  const roomFormValid = roomForm.code.trim().length > 0 && roomForm.name.trim().length > 0;
+  const isRoomMutationPending =
+    createRoomMutation.isPending || updateRoomMutation.isPending || deleteRoomMutation.isPending;
 
-  const refreshTables = async () => {
-    await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+  const refreshAll = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() }),
+      queryClient.invalidateQueries({ queryKey: ROOMS_QUERY_KEY }),
+    ]);
+  };
+
+  const resetRoomForm = () => {
+    setEditingRoomId(null);
+    setRoomForm(getInitialRoomForm());
   };
 
   const handleCreate = async (payload: CreateTableBody | UpdateTableBody) => {
     try {
       await createTable.mutateAsync({ data: payload as CreateTableBody });
-      await refreshTables();
+      await refreshAll();
       setDialogOpen(false);
       toast({ title: t("tableSettings.tableCreated") });
     } catch (error) {
@@ -339,7 +402,7 @@ export default function TableSettingsPage() {
     if (!editingTable) return;
     try {
       await updateTable.mutateAsync({ id: editingTable.id, data: payload as UpdateTableBody });
-      await refreshTables();
+      await refreshAll();
       setDialogOpen(false);
       setEditingTable(undefined);
       toast({ title: t("tableSettings.tableUpdated", { tableNumber: editingTable.tableNumber }) });
@@ -356,7 +419,7 @@ export default function TableSettingsPage() {
     if (!deletingTable) return;
     try {
       await deleteTable.mutateAsync({ id: deletingTable.id });
-      await refreshTables();
+      await refreshAll();
       toast({ title: t("tableSettings.tableRemoved", { tableNumber: deletingTable.tableNumber }) });
     } catch (error) {
       toast({
@@ -386,7 +449,7 @@ export default function TableSettingsPage() {
           currentOrderId: nextStatus === "Active" ? table.currentOrderId : null,
         },
       });
-      await refreshTables();
+      await refreshAll();
       toast({
         title: t("tableSettings.setStatus", {
           tableNumber: table.tableNumber,
@@ -402,7 +465,76 @@ export default function TableSettingsPage() {
     }
   };
 
-  if (isLoading) {
+  const handleRoomSubmit = async () => {
+    if (!roomFormValid) return;
+
+    const payload = {
+      code: roomForm.code.trim().toLowerCase(),
+      name: roomForm.name.trim(),
+      sortOrder: Number.isFinite(Number(roomForm.sortOrder)) ? Number(roomForm.sortOrder) : 0,
+    };
+
+    try {
+      if (editingRoomId == null) {
+        await createRoomMutation.mutateAsync({ ...payload, isActive: true });
+        toast({ title: t("tableSettings.rooms.created") });
+      } else {
+        await updateRoomMutation.mutateAsync({ id: editingRoomId, data: payload });
+        toast({
+          title: t("tableSettings.rooms.updated", {
+            room: payload.name,
+            status: t("common.saveChanges"),
+          }),
+        });
+      }
+      await refreshAll();
+      resetRoomForm();
+    } catch (error) {
+      toast({
+        title: editingRoomId == null ? t("tableSettings.rooms.failedCreate") : t("tableSettings.rooms.failedUpdate"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const toggleRoomActive = async (room: RoomRecord) => {
+    try {
+      await updateRoomMutation.mutateAsync({ id: room.id, data: { isActive: !room.isActive } });
+      await refreshAll();
+      toast({
+        title: t("tableSettings.rooms.updated", {
+          room: room.name,
+          status: !room.isActive ? t("tableSettings.rooms.active") : t("tableSettings.rooms.closed"),
+        }),
+      });
+    } catch (error) {
+      toast({
+        title: t("tableSettings.rooms.failedUpdate"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteRoom = async () => {
+    if (!deletingRoom) return;
+    try {
+      await deleteRoomMutation.mutateAsync(deletingRoom.id);
+      await refreshAll();
+      toast({ title: t("tableSettings.rooms.deleted", { room: deletingRoom.name }) });
+    } catch (error) {
+      toast({
+        title: t("tableSettings.rooms.failedDelete"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingRoom(undefined);
+    }
+  };
+
+  if (isTablesLoading || isRoomsLoading) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -412,10 +544,100 @@ export default function TableSettingsPage() {
 
   return (
     <div className="space-y-4">
+      <div>
+        <h1 className="page-title">{t("tableSettings.title")}</h1>
+        <p className="text-sm text-muted-foreground">{t("tableSettings.subtitle")}</p>
+      </div>
+
+      <div className="rounded-lg border bg-card p-4">
+        <div className="mb-3">
+          <h2 className="text-lg font-bold">{t("tableSettings.rooms.title")}</h2>
+          <p className="text-sm text-muted-foreground">{t("tableSettings.rooms.subtitle")}</p>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-4">
+          <Input
+            value={roomForm.code}
+            onChange={(event) => setRoomForm((prev) => ({ ...prev, code: event.target.value }))}
+            placeholder={t("tableSettings.rooms.codePlaceholder")}
+          />
+          <Input
+            value={roomForm.name}
+            onChange={(event) => setRoomForm((prev) => ({ ...prev, name: event.target.value }))}
+            placeholder={t("tableSettings.rooms.namePlaceholder")}
+          />
+          <Input
+            type="number"
+            value={roomForm.sortOrder}
+            onChange={(event) => setRoomForm((prev) => ({ ...prev, sortOrder: event.target.value }))}
+            placeholder={t("tableSettings.rooms.sortOrder")}
+          />
+          <div className="flex gap-2">
+            <Button className="flex-1 gap-2" onClick={handleRoomSubmit} disabled={!roomFormValid || isRoomMutationPending}>
+              {isRoomMutationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              {editingRoomId == null ? t("tableSettings.rooms.addRoom") : t("common.saveChanges")}
+            </Button>
+            {editingRoomId != null ? (
+              <Button variant="outline" onClick={resetRoomForm}>
+                {t("common.cancel")}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {sortedRooms.map((room) => (
+            <div key={room.id} className="rounded-md border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="font-semibold">{room.name}</p>
+                  <p className="text-xs text-muted-foreground">{room.code}</p>
+                </div>
+                <Badge variant="outline" className={room.isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-700"}>
+                  {room.isActive ? t("tableSettings.rooms.active") : t("tableSettings.rooms.closed")}
+                </Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{t("tableSettings.rooms.sortLabel", { value: room.sortOrder })}</p>
+              <div className="mt-3 flex items-center justify-end gap-1.5">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title={t("tableSettings.rooms.toggleRoom")}
+                  onClick={() => toggleRoomActive(room)}
+                >
+                  <Settings2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title={t("tableSettings.rooms.editRoom")}
+                  onClick={() => {
+                    setEditingRoomId(room.id);
+                    setRoomForm(getInitialRoomForm(room));
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" title={t("tableSettings.rooms.deleteRoom")} onClick={() => setDeletingRoom(room)}>
+                  <Trash2 className="h-4 w-4 text-red-600" />
+                </Button>
+              </div>
+            </div>
+          ))}
+          {sortedRooms.length === 0 ? (
+            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground md:col-span-2 xl:col-span-3">
+              {t("tableSettings.rooms.empty")}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t("tableSettings.title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("tableSettings.subtitle")}</p>
+          <h2 className="text-lg font-bold">{t("tableSettings.tablesTitle")}</h2>
+          {sortedRooms.length === 0 ? (
+            <p className="text-sm text-red-600">{t("tableSettings.rooms.requiredHint")}</p>
+          ) : null}
         </div>
 
         <Button
@@ -424,6 +646,7 @@ export default function TableSettingsPage() {
             setDialogOpen(true);
           }}
           className="gap-2"
+          disabled={sortedRooms.length === 0}
         >
           <Plus className="h-4 w-4" />
           {t("tableSettings.addNewTable")}
@@ -451,7 +674,7 @@ export default function TableSettingsPage() {
               <TableRow key={table.id}>
                 <TableCell className="font-semibold">#{table.id}</TableCell>
                 <TableCell className="font-semibold">{table.tableNumber}</TableCell>
-                <TableCell>{getZoneLabel(table.zone as "hall" | "aircon", t, true)}</TableCell>
+                <TableCell>{getZoneLabel(table.zone, t, roomNameByCode, true)}</TableCell>
                 <TableCell>{table.capacity}</TableCell>
                 <TableCell>{t(`category.${table.category}`)}</TableCell>
                 <TableCell>
@@ -507,6 +730,7 @@ export default function TableSettingsPage() {
       <TableDialog
         open={dialogOpen}
         table={editingTable}
+        rooms={sortedRooms}
         saving={createTable.isPending || updateTable.isPending}
         onOpenChange={(open) => {
           setDialogOpen(open);
@@ -532,6 +756,28 @@ export default function TableSettingsPage() {
             >
               {deleteTable.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {t("tableSettings.deleteTable")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={Boolean(deletingRoom)} onOpenChange={(open) => !open && setDeletingRoom(undefined)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("tableSettings.rooms.removeDialogTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("tableSettings.rooms.removeDialogDescription", { room: deletingRoom?.name ?? "" })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteRoom}
+              className="bg-red-600 text-white hover:bg-red-700"
+              disabled={deleteRoomMutation.isPending}
+            >
+              {deleteRoomMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {t("tableSettings.rooms.deleteRoom")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

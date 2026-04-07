@@ -176,7 +176,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-3xl font-bold tracking-tight">{t("dashboard.title")}</h1>
+        <h1 className="page-title">{t("dashboard.title")}</h1>
         <Button onClick={() => setLocation("/floor-plan")} className="gap-2">
           {t("dashboard.openFloorPlan")}
           <ArrowRight className="h-4 w-4" />

@@ -95,7 +95,7 @@ export default function Kitchen() {
         <div className="flex items-center gap-3">
           <ChefHat className="h-8 w-8" />
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">{t("kitchen.title")}</h1>
+            <h1 className="page-title">{t("kitchen.title")}</h1>
             <p className="text-sm opacity-90">{t("kitchen.station", { station: getStationLabel(station, t) })}</p>
           </div>
         </div>

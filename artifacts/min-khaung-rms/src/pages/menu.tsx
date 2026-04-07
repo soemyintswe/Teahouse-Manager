@@ -316,7 +316,7 @@ export default function MenuPage() {
     <div className="flex h-full flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t("menu.pageTitle")}</h1>
+          <h1 className="page-title">{t("menu.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground">
             {t("menu.itemsCount", { count: menuItems.length })}
           </p>

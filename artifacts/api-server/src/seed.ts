@@ -4,12 +4,13 @@ import {
   menuCategoriesTable,
   menuItemsTable,
   pool,
+  roomsTable,
   tablesTable,
 } from "@workspace/db";
 
 type TableSeed = {
   tableNumber: string;
-  zone: "hall" | "aircon";
+  zone: string;
   capacity: number;
   category: "Standard" | "VIP" | "Buffer";
   status: "Active" | "Maintenance" | "Archived";
@@ -19,6 +20,13 @@ type TableSeed = {
   posY: number;
   currentOrderId: number | null;
   qrCode: string;
+};
+
+type RoomSeed = {
+  code: string;
+  name: string;
+  isActive: boolean;
+  sortOrder: number;
 };
 
 type MenuCategorySeed = {
@@ -55,6 +63,11 @@ const TABLE_SEEDS: TableSeed[] = [
   { tableNumber: "A4", zone: "aircon", capacity: 6, category: "VIP", status: "Active", isBooked: false, occupancyStatus: "available", currentOrderId: null, posX: 540, posY: 110, qrCode: "table-a4" },
   { tableNumber: "A5", zone: "aircon", capacity: 2, category: "Standard", status: "Active", isBooked: false, occupancyStatus: "paid", currentOrderId: null, posX: 165, posY: 260, qrCode: "table-a5" },
   { tableNumber: "A6", zone: "aircon", capacity: 4, category: "Buffer", status: "Active", isBooked: false, occupancyStatus: "available", currentOrderId: null, posX: 465, posY: 260, qrCode: "table-a6" },
+];
+
+const ROOM_SEEDS: RoomSeed[] = [
+  { code: "hall", name: "Hall Zone", isActive: true, sortOrder: 1 },
+  { code: "aircon", name: "Air-con Room", isActive: true, sortOrder: 2 },
 ];
 
 const MENU_CATEGORY_SEEDS: MenuCategorySeed[] = [
@@ -204,6 +217,34 @@ async function main() {
   console.log("Seeding tables and menu data...");
 
   const result = await db.transaction(async (tx) => {
+    const roomCodes = ROOM_SEEDS.map((room) => room.code);
+    const existingRooms = await tx
+      .select({ id: roomsTable.id, code: roomsTable.code })
+      .from(roomsTable)
+      .where(inArray(roomsTable.code, roomCodes));
+    const roomIdByCode = new Map(existingRooms.map((room) => [room.code, room.id]));
+
+    let roomsInserted = 0;
+    let roomsUpdated = 0;
+
+    for (const room of ROOM_SEEDS) {
+      const existingId = roomIdByCode.get(room.code);
+      if (existingId != null) {
+        await tx
+          .update(roomsTable)
+          .set({
+            name: room.name,
+            isActive: room.isActive,
+            sortOrder: room.sortOrder,
+          })
+          .where(eq(roomsTable.id, existingId));
+        roomsUpdated += 1;
+      } else {
+        await tx.insert(roomsTable).values(room);
+        roomsInserted += 1;
+      }
+    }
+
     const tableNumbers = TABLE_SEEDS.map((row) => row.tableNumber);
     const existingTables = await tx
       .select({ id: tablesTable.id, tableNumber: tablesTable.tableNumber })
@@ -306,6 +347,8 @@ async function main() {
     }
 
     return {
+      roomsInserted,
+      roomsUpdated,
       tablesInserted,
       tablesUpdated,
       categoriesInserted,

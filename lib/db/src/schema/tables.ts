@@ -9,7 +9,7 @@ export const tableOccupancyStatusEnum = pgEnum("table_occupancy_status", ["avail
 export const tablesTable = pgTable("tables", {
   id: serial("id").primaryKey(),
   tableNumber: text("table_number").notNull(),
-  zone: text("zone").notNull().default("hall"), // hall or aircon
+  zone: text("zone").notNull().default("hall"), // room code, e.g. hall or aircon
   capacity: integer("capacity").notNull().default(4),
   category: tableCategoryEnum("category").notNull().default("Standard"),
   status: tableStatusEnum("status").notNull().default("Active"),

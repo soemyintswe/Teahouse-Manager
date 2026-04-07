@@ -247,6 +247,15 @@
  * need to be distinguished from eachother visually.
  */
 @layer utilities {
+  .page-title {
+    @apply text-2xl sm:text-3xl font-bold tracking-tight;
+  }
+
+  html.lang-mm .page-title {
+    font-size: clamp(1.35rem, 4.8vw, 1.95rem);
+    letter-spacing: 0;
+    line-height: 1.25;
+  }
 
   /* Hide ugly search cancel button in Chrome until we can style it properly */
   input[type="search"]::-webkit-search-cancel-button {

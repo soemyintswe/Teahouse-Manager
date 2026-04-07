@@ -1,4 +1,5 @@
 export * from "./tables";
+export * from "./rooms";
 export * from "./menu";
 export * from "./orders";
 export * from "./payments";

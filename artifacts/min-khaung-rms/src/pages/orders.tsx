@@ -385,7 +385,7 @@ export default function OrdersPage() {
   if (!tableId) {
     return (
       <div className="space-y-4">
-        <h1 className="text-3xl font-bold tracking-tight">{t("orders.pageTitle")}</h1>
+        <h1 className="page-title">{t("orders.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">{t("orders.selectTablePrompt")}</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {selectableTables.map((item) => (
