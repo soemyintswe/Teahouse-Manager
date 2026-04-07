@@ -71,18 +71,18 @@ const ROOM_SEEDS: RoomSeed[] = [
 ];
 
 const MENU_CATEGORY_SEEDS: MenuCategorySeed[] = [
-  { name: "Tea & Coffee", nameMyanmar: "Lahpet yay hnint coffee", sortOrder: 1 },
-  { name: "Noodles", nameMyanmar: "Noodle myar", sortOrder: 2 },
-  { name: "Rice Dishes", nameMyanmar: "Htamin hnaik myar", sortOrder: 3 },
-  { name: "Snacks", nameMyanmar: "Akyaw snacks", sortOrder: 4 },
-  { name: "Desserts", nameMyanmar: "Ahtote desserts", sortOrder: 5 },
+  { name: "Tea & Coffee", nameMyanmar: "လက်ဖက်ရည်နှင့်ကော်ဖီ", sortOrder: 1 },
+  { name: "Noodles", nameMyanmar: "ခေါက်ဆွဲမျိုးစုံ", sortOrder: 2 },
+  { name: "Rice Dishes", nameMyanmar: "ထမင်းပွဲများ", sortOrder: 3 },
+  { name: "Snacks", nameMyanmar: "အဆာပြေ", sortOrder: 4 },
+  { name: "Desserts", nameMyanmar: "အချိုပွဲများ", sortOrder: 5 },
 ];
 
 const MENU_ITEM_SEEDS: MenuItemSeed[] = [
   {
     categoryName: "Tea & Coffee",
     name: "Myanmar Milk Tea",
-    nameMyanmar: "Lahpet yay si",
+    nameMyanmar: "မြန်မာလက်ဖက်ရည်ဆိမ့်",
     station: "tea-coffee",
     description: "Traditional strong tea with condensed milk",
     price: "1800",
@@ -93,7 +93,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
   {
     categoryName: "Tea & Coffee",
     name: "Black Coffee",
-    nameMyanmar: "Coffee amae",
+    nameMyanmar: "ကော်ဖီအမည်း",
     station: "tea-coffee",
     description: "Freshly brewed black coffee",
     price: "2200",
@@ -104,7 +104,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
   {
     categoryName: "Tea & Coffee",
     name: "Iced Lemon Tea",
-    nameMyanmar: "Shauk chin lahpet yay aye",
+    nameMyanmar: "သံပုရာလက်ဖက်ရည်အေး",
     station: "juice",
     description: "Refreshing lemon tea over ice",
     price: "2500",
@@ -114,7 +114,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
   {
     categoryName: "Noodles",
     name: "Shan Noodle",
-    nameMyanmar: "Shan khao swe",
+    nameMyanmar: "ရှမ်းခေါက်ဆွဲ",
     station: "kitchen",
     description: "Classic Shan-style rice noodle",
     price: "3800",
@@ -125,7 +125,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
   {
     categoryName: "Noodles",
     name: "Mohinga",
-    nameMyanmar: "Mohinga",
+    nameMyanmar: "မုန့်ဟင်းခါး",
     station: "kitchen",
     description: "Rice noodle in fish broth",
     price: "3200",
@@ -135,7 +135,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
   {
     categoryName: "Noodles",
     name: "Nan Gyi Thoke",
-    nameMyanmar: "Nan gyi thoke",
+    nameMyanmar: "နန်းကြီးသုပ်",
     station: "salad",
     description: "Thick rice noodle salad with chicken curry",
     price: "4200",
@@ -145,7 +145,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
   {
     categoryName: "Rice Dishes",
     name: "Fried Rice (Chicken)",
-    nameMyanmar: "Kyet thar htamin kyaw",
+    nameMyanmar: "ကြက်သားထမင်းကြော်",
     station: "kitchen",
     description: "Wok-fried rice with chicken and vegetables",
     price: "5500",
@@ -156,7 +156,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
   {
     categoryName: "Rice Dishes",
     name: "Steamed Rice + Pork Curry",
-    nameMyanmar: "Wet thar hin hnint htamin",
+    nameMyanmar: "ဝက်သားဟင်းနှင့် ထမင်း",
     station: "kitchen",
     description: "Warm steamed rice served with pork curry",
     price: "6200",
@@ -166,7 +166,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
   {
     categoryName: "Snacks",
     name: "Samosa",
-    nameMyanmar: "Samosa",
+    nameMyanmar: "ဆမူဆာ",
     station: "kitchen",
     description: "Crispy pastry filled with potato",
     price: "1200",
@@ -176,7 +176,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
   {
     categoryName: "Snacks",
     name: "Spring Roll",
-    nameMyanmar: "Spring roll",
+    nameMyanmar: "စပရင်းရိုး",
     station: "kitchen",
     description: "Deep-fried vegetable spring roll",
     price: "1500",
@@ -186,7 +186,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
   {
     categoryName: "Desserts",
     name: "Coconut Jelly",
-    nameMyanmar: "Ohn no kyauk kyaw",
+    nameMyanmar: "အုန်းနို့ကျောက်ကျော",
     station: "juice",
     description: "Chilled coconut jelly dessert",
     price: "2000",
@@ -196,7 +196,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
   {
     categoryName: "Desserts",
     name: "Sticky Rice with Mango",
-    nameMyanmar: "Thamin ne ma ngo",
+    nameMyanmar: "သရက်သီးကောက်ညှင်း",
     station: "kitchen",
     description: "Sweet sticky rice served with ripe mango",
     price: "4500",

@@ -61,6 +61,42 @@ const STATION_OPTIONS = ["salad", "tea-coffee", "juice", "kitchen"] as const;
 type StationCode = (typeof STATION_OPTIONS)[number];
 type StationFilter = "all" | StationCode;
 
+const MYANMAR_TEXT_REGEX = /[\u1000-\u109f]/;
+
+const CATEGORY_MM_FALLBACK: Record<string, string> = {
+  "Tea & Coffee": "လက်ဖက်ရည်နှင့်ကော်ဖီ",
+  Noodles: "ခေါက်ဆွဲမျိုးစုံ",
+  "Rice Dishes": "ထမင်းပွဲများ",
+  Snacks: "အဆာပြေ",
+  Desserts: "အချိုပွဲများ",
+};
+
+const ITEM_MM_FALLBACK: Record<string, string> = {
+  "Myanmar Milk Tea": "မြန်မာလက်ဖက်ရည်ဆိမ့်",
+  "Black Coffee": "ကော်ဖီအမည်း",
+  "Iced Lemon Tea": "သံပုရာလက်ဖက်ရည်အေး",
+  "Shan Noodle": "ရှမ်းခေါက်ဆွဲ",
+  Mohinga: "မုန့်ဟင်းခါး",
+  "Nan Gyi Thoke": "နန်းကြီးသုပ်",
+  "Fried Rice (Chicken)": "ကြက်သားထမင်းကြော်",
+  "Steamed Rice + Pork Curry": "ဝက်သားဟင်းနှင့် ထမင်း",
+  Samosa: "ဆမူဆာ",
+  "Spring Roll": "စပရင်းရိုး",
+  "Coconut Jelly": "အုန်းနို့ကျောက်ကျော",
+  "Sticky Rice with Mango": "သရက်သီးကောက်ညှင်း",
+};
+
+function hasMyanmarText(value?: string | null): boolean {
+  return Boolean(value && MYANMAR_TEXT_REGEX.test(value));
+}
+
+function resolveMyanmarLabel(englishName: string, myanmarValue: string | undefined, fallbackMap: Record<string, string>): string {
+  if (hasMyanmarText(myanmarValue)) return myanmarValue as string;
+  if (fallbackMap[englishName]) return fallbackMap[englishName];
+  if (myanmarValue && myanmarValue.trim().length > 0) return myanmarValue;
+  return englishName;
+}
+
 type ItemFormState = {
   name: string;
   nameMyanmar: string;
@@ -102,7 +138,8 @@ function ItemDialog({
   onOpenChange: (open: boolean) => void;
   onSubmit: (payload: CreateMenuItemBody | UpdateMenuItemBody) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isMyanmar = i18n.resolvedLanguage === "mm";
   const [form, setForm] = useState<ItemFormState>(() => buildInitialItemForm(item, categories));
 
   useEffect(() => {
@@ -198,7 +235,9 @@ function ItemDialog({
                 <SelectContent>
                   {categories.map((category) => (
                     <SelectItem key={category.id} value={String(category.id)}>
-                      {category.name}
+                      {isMyanmar
+                        ? resolveMyanmarLabel(category.name, category.nameMyanmar, CATEGORY_MM_FALLBACK)
+                        : category.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -240,7 +279,8 @@ function ItemDialog({
 }
 
 export default function MenuPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isMyanmar = i18n.resolvedLanguage === "mm";
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -260,8 +300,8 @@ export default function MenuPage() {
   const [itemDialog, setItemDialog] = useState<{ open: boolean; item?: MenuItem }>({ open: false });
   const [deleteTarget, setDeleteTarget] = useState<MenuItem | null>(null);
 
-  const categoryNameById = useMemo(() => {
-    return new Map(categories.map((category) => [category.id, category.name]));
+  const categoryById = useMemo(() => {
+    return new Map(categories.map((category) => [category.id, category]));
   }, [categories]);
 
   const filteredItems = useMemo(() => {
@@ -376,19 +416,31 @@ export default function MenuPage() {
               ) : (
                 filteredItems.map((item) => {
                   const available = item.available !== "false" && item.available !== "0";
+                  const category = categoryById.get(item.categoryId);
+                  const itemPrimaryName = isMyanmar
+                    ? resolveMyanmarLabel(item.name, item.nameMyanmar, ITEM_MM_FALLBACK)
+                    : item.name;
+                  const itemSecondaryName = isMyanmar
+                    ? item.name
+                    : resolveMyanmarLabel(item.name, item.nameMyanmar, ITEM_MM_FALLBACK);
+                  const categoryLabel = category
+                    ? (isMyanmar
+                      ? resolveMyanmarLabel(category.name, category.nameMyanmar, CATEGORY_MM_FALLBACK)
+                      : category.name)
+                    : t("menu.unknownCategory", { id: item.categoryId });
                   return (
                     <TableRow key={item.id}>
                       <TableCell className="font-medium">#{item.id}</TableCell>
                       <TableCell>
-                        <div className="font-semibold">{item.name}</div>
-                        <div className="text-xs text-muted-foreground">{item.nameMyanmar}</div>
+                        <div className="font-semibold">{itemPrimaryName}</div>
+                        <div className="text-xs text-muted-foreground">{itemSecondaryName}</div>
                       </TableCell>
-                      <TableCell>{categoryNameById.get(item.categoryId) ?? `Category #${item.categoryId}`}</TableCell>
+                      <TableCell>{categoryLabel}</TableCell>
                       <TableCell>
                         <Badge variant="secondary">{getStationLabel(item.station, t)}</Badge>
                       </TableCell>
                       <TableCell className="text-right font-semibold">
-                        {Number(item.price).toLocaleString()} ks
+                        {Number(item.price).toLocaleString()} {t("menu.currencySuffix")}
                       </TableCell>
                       <TableCell>
                         <Badge variant={available ? "secondary" : "outline"}>
