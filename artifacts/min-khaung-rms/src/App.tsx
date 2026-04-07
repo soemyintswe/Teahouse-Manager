@@ -3,12 +3,13 @@ import { Switch, Route, Router as WouterRouter, Link } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
+import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarTrigger } from "@/components/ui/sidebar";
 import { LayoutDashboard, Map as MapIcon, ClipboardList, ChefHat, Wallet, Menu as MenuIcon, Package, Users, LineChart, Settings } from "lucide-react";
 import Dashboard from "@/pages/dashboard";
 import FloorPlan from "@/pages/floor-plan";
 import Kitchen from "@/pages/kitchen";
 import MenuPage from "@/pages/menu";
+import OrdersPage from "@/pages/orders";
 import NewOrderPage from "@/pages/new-order";
 import OrderDetailPage from "@/pages/order-detail";
 import NotFound from "@/pages/not-found";
@@ -18,6 +19,19 @@ import logoPath from "@assets/viber_image_2026-04-06_15-22-24-661.jpg";
 const queryClient = new QueryClient();
 const baseUrl = import.meta.env.BASE_URL ?? "/";
 const routerBase = baseUrl.startsWith("/") ? (baseUrl.replace(/\/$/, "") || "/") : "/";
+
+const NAV_ITEMS = [
+  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/floor-plan", label: "Floor Plan", icon: MapIcon },
+  { href: "/orders", label: "Orders", icon: ClipboardList },
+  { href: "/kds?station=kitchen", label: "KDS", icon: ChefHat },
+  { href: "/cashier", label: "Cashier", icon: Wallet },
+  { href: "/menu", label: "Menu", icon: MenuIcon },
+  { href: "/inventory", label: "Inventory", icon: Package },
+  { href: "/staff", label: "Staff", icon: Users },
+  { href: "/finance", label: "Finance", icon: LineChart },
+  { href: "/settings", label: "Settings", icon: Settings },
+] as const;
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -33,22 +47,32 @@ function Layout({ children }: { children: React.ReactNode }) {
           <SidebarContent className="bg-sidebar">
             <SidebarGroup>
               <SidebarMenu>
-                <SidebarMenuItem><SidebarMenuButton asChild><Link href="/" className="text-sidebar-foreground hover:bg-sidebar-accent"><LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard</Link></SidebarMenuButton></SidebarMenuItem>
-                <SidebarMenuItem><SidebarMenuButton asChild><Link href="/floor-plan" className="text-sidebar-foreground hover:bg-sidebar-accent"><MapIcon className="mr-2 h-4 w-4" /> Floor Plan</Link></SidebarMenuButton></SidebarMenuItem>
-                <SidebarMenuItem><SidebarMenuButton asChild><Link href="/orders" className="text-sidebar-foreground hover:bg-sidebar-accent"><ClipboardList className="mr-2 h-4 w-4" /> Orders</Link></SidebarMenuButton></SidebarMenuItem>
-                <SidebarMenuItem><SidebarMenuButton asChild><Link href="/kds?station=kitchen" className="text-sidebar-foreground hover:bg-sidebar-accent"><ChefHat className="mr-2 h-4 w-4" /> KDS</Link></SidebarMenuButton></SidebarMenuItem>
-                <SidebarMenuItem><SidebarMenuButton asChild><Link href="/cashier" className="text-sidebar-foreground hover:bg-sidebar-accent"><Wallet className="mr-2 h-4 w-4" /> Cashier</Link></SidebarMenuButton></SidebarMenuItem>
-                <SidebarMenuItem><SidebarMenuButton asChild><Link href="/menu" className="text-sidebar-foreground hover:bg-sidebar-accent"><MenuIcon className="mr-2 h-4 w-4" /> Menu</Link></SidebarMenuButton></SidebarMenuItem>
-                <SidebarMenuItem><SidebarMenuButton asChild><Link href="/inventory" className="text-sidebar-foreground hover:bg-sidebar-accent"><Package className="mr-2 h-4 w-4" /> Inventory</Link></SidebarMenuButton></SidebarMenuItem>
-                <SidebarMenuItem><SidebarMenuButton asChild><Link href="/staff" className="text-sidebar-foreground hover:bg-sidebar-accent"><Users className="mr-2 h-4 w-4" /> Staff</Link></SidebarMenuButton></SidebarMenuItem>
-                <SidebarMenuItem><SidebarMenuButton asChild><Link href="/finance" className="text-sidebar-foreground hover:bg-sidebar-accent"><LineChart className="mr-2 h-4 w-4" /> Finance</Link></SidebarMenuButton></SidebarMenuItem>
-                <SidebarMenuItem><SidebarMenuButton asChild><Link href="/settings" className="text-sidebar-foreground hover:bg-sidebar-accent"><Settings className="mr-2 h-4 w-4" /> Settings</Link></SidebarMenuButton></SidebarMenuItem>
+                {NAV_ITEMS.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton asChild>
+                        <Link href={item.href} className="text-sidebar-foreground hover:bg-sidebar-accent">
+                          <Icon className="mr-2 h-4 w-4" /> {item.label}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
               </SidebarMenu>
             </SidebarGroup>
           </SidebarContent>
         </Sidebar>
-        <main className="flex-1 overflow-auto p-8">
-          {children}
+        <main className="flex-1 overflow-auto">
+          <div className="md:hidden sticky top-0 z-30 border-b bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 [padding-top:calc(env(safe-area-inset-top)+0.5rem)]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold">Teahouse Manager</span>
+              <SidebarTrigger className="h-9 w-9" />
+            </div>
+          </div>
+          <div className="p-4 md:p-8" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}>
+            {children}
+          </div>
         </main>
       </div>
     </SidebarProvider>
@@ -72,7 +96,7 @@ function Router() {
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/floor-plan" component={FloorPlan} />
-        <Route path="/orders" component={() => <StubPage title="Orders" />} />
+        <Route path="/orders" component={OrdersPage} />
         <Route path="/orders/new" component={NewOrderPage} />
         <Route path="/orders/:id" component={OrderDetailPage} />
         <Route path="/kds" component={Kitchen} />

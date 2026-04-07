@@ -57,3 +57,6 @@ artifacts/min-khaung-rms/android/build/
 artifacts/min-khaung-rms/android/app/build/
 artifacts/min-khaung-rms/android/local.properties
 artifacts/min-khaung-rms/android/capacitor-cordova-android-plugins/
+
+# Build artifacts
+artifacts/releases/*.apk

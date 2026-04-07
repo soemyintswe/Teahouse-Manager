@@ -40,22 +40,26 @@ function formatOrderItem(item: typeof orderItemsTable.$inferSelect) {
   };
 }
 
-async function recalcOrder(orderId: number): Promise<void> {
-  const items = await db.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, orderId));
-  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId));
+async function recalcOrder(orderId: number, executor: any = db): Promise<void> {
+  const items = await executor.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, orderId));
+  const [order] = await executor.select().from(ordersTable).where(eq(ordersTable.id, orderId));
   if (!order) return;
 
-  const [settings] = await db.select().from(settingsTable).limit(1);
+  const [settings] = await executor.select().from(settingsTable).limit(1);
   const taxRate = settings ? parseFloat(settings.taxRate.toString()) / 100 : 0.05;
   const airconFeeBase = settings ? parseFloat(settings.airconFee.toString()) : 500;
 
-  const subtotal = items.reduce((sum, item) => sum + parseFloat(item.unitPrice.toString()) * item.quantity, 0);
-  const [table] = await db.select().from(tablesTable).where(eq(tablesTable.id, order.tableId));
+  const subtotal = items.reduce(
+    (sum: number, item: typeof orderItemsTable.$inferSelect) =>
+      sum + parseFloat(item.unitPrice.toString()) * item.quantity,
+    0,
+  );
+  const [table] = await executor.select().from(tablesTable).where(eq(tablesTable.id, order.tableId));
   const airconFee = (table?.zone === "aircon") ? airconFeeBase : 0;
   const taxAmount = (subtotal + airconFee) * taxRate;
   const totalAmount = subtotal + airconFee + taxAmount;
 
-  await db.update(ordersTable).set({
+  await executor.update(ordersTable).set({
     subtotal: subtotal.toFixed(2),
     airconFee: airconFee.toFixed(2),
     taxAmount: taxAmount.toFixed(2),
@@ -65,9 +69,12 @@ async function recalcOrder(orderId: number): Promise<void> {
 
 router.get("/orders", async (req, res): Promise<void> => {
   const qp = ListOrdersQueryParams.safeParse(req.query);
-  const conditions = [];
+  const conditions: any[] = [];
   if (qp.success && qp.data.status) conditions.push(eq(ordersTable.status, qp.data.status));
   if (qp.success && qp.data.tableId != null) conditions.push(eq(ordersTable.tableId, qp.data.tableId));
+  if (qp.success && qp.data.date) {
+    conditions.push(sql`DATE(${ordersTable.createdAt}) = ${qp.data.date}`);
+  }
 
   let orders;
   if (conditions.length > 0) {
@@ -82,40 +89,68 @@ router.post("/orders", async (req, res): Promise<void> => {
   const parsed = CreateOrderBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const [table] = await db.select().from(tablesTable).where(eq(tablesTable.id, parsed.data.tableId));
-  if (!table) { res.status(404).json({ error: "Table not found" }); return; }
-
-  const [order] = await db.insert(ordersTable).values({
-    tableId: parsed.data.tableId,
-    tableNumber: table.tableNumber,
-    notes: parsed.data.notes ?? null,
-    staffId: parsed.data.staffId ?? null,
-  }).returning();
-
-  // Update table status to occupied
-  await db.update(tablesTable).set({ status: "occupied", currentOrderId: order.id }).where(eq(tablesTable.id, parsed.data.tableId));
-
-  // Add initial items if provided
-  if (parsed.data.items && parsed.data.items.length > 0) {
-    for (const item of parsed.data.items) {
-      const [menuItem] = await db.select().from(menuItemsTable).where(eq(menuItemsTable.id, item.menuItemId));
-      if (menuItem) {
-        await db.insert(orderItemsTable).values({
-          orderId: order.id,
-          menuItemId: item.menuItemId,
-          menuItemName: menuItem.name,
-          quantity: item.quantity,
-          unitPrice: menuItem.price,
-          customizations: item.customizations ?? null,
-          notes: item.notes ?? null,
-        });
+  try {
+    const createdOrderId = await db.transaction(async (tx) => {
+      const [table] = await tx.select().from(tablesTable).where(eq(tablesTable.id, parsed.data.tableId));
+      if (!table) {
+        const error = new Error("Table not found") as Error & { statusCode?: number };
+        error.statusCode = 404;
+        throw error;
       }
-    }
-    await recalcOrder(order.id);
-  }
 
-  const [updatedOrder] = await db.select().from(ordersTable).where(eq(ordersTable.id, order.id));
-  res.status(201).json(formatOrder(updatedOrder!));
+      if (table.currentOrderId) {
+        const [activeOrder] = await tx.select().from(ordersTable).where(eq(ordersTable.id, table.currentOrderId));
+        if (activeOrder && (activeOrder.status === "open" || activeOrder.status === "ready_to_pay")) {
+          const error = new Error(`Table already has active order #${activeOrder.id}`) as Error & { statusCode?: number };
+          error.statusCode = 409;
+          throw error;
+        }
+      }
+
+      const [order] = await tx.insert(ordersTable).values({
+        tableId: parsed.data.tableId,
+        tableNumber: table.tableNumber,
+        notes: parsed.data.notes ?? null,
+        staffId: parsed.data.staffId ?? null,
+      }).returning();
+
+      await tx.update(tablesTable)
+        .set({ status: "occupied", currentOrderId: order.id })
+        .where(eq(tablesTable.id, parsed.data.tableId));
+
+      if (parsed.data.items && parsed.data.items.length > 0) {
+        for (const item of parsed.data.items) {
+          const [menuItem] = await tx.select().from(menuItemsTable).where(eq(menuItemsTable.id, item.menuItemId));
+          if (menuItem) {
+            await tx.insert(orderItemsTable).values({
+              orderId: order.id,
+              menuItemId: item.menuItemId,
+              menuItemName: menuItem.name,
+              quantity: item.quantity,
+              unitPrice: menuItem.price,
+              customizations: item.customizations ?? null,
+              notes: item.notes ?? null,
+            });
+          }
+        }
+        await recalcOrder(order.id, tx);
+      }
+
+      return order.id;
+    });
+
+    const [updatedOrder] = await db.select().from(ordersTable).where(eq(ordersTable.id, createdOrderId));
+    if (!updatedOrder) {
+      res.status(500).json({ error: "Failed to load created order" });
+      return;
+    }
+
+    res.status(201).json(formatOrder(updatedOrder));
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number })?.statusCode ?? 500;
+    const message = error instanceof Error ? error.message : "Failed to create order";
+    res.status(statusCode).json({ error: message });
+  }
 });
 
 router.get("/orders/:id", async (req, res): Promise<void> => {

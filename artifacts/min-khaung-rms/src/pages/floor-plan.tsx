@@ -43,7 +43,7 @@ function TableCard({
       data-testid={`table-card-${table.id}`}
       onClick={onClick}
       className={`
-        absolute w-28 h-28 rounded-xl border-2 shadow-md
+        absolute w-24 h-24 sm:w-28 sm:h-28 rounded-xl border-2 shadow-md
         flex flex-col items-center justify-center gap-1
         transition-all duration-150 select-none
         ${cfg.bg} ${cfg.border} ${cfg.text}
@@ -58,7 +58,7 @@ function TableCard({
           <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${cfg.dot}`} />
         </span>
       )}
-      <span className="font-extrabold text-xl leading-none tracking-tight">{table.tableNumber}</span>
+      <span className="font-extrabold text-lg sm:text-xl leading-none tracking-tight">{table.tableNumber}</span>
       <span className="text-[11px] font-medium opacity-90 flex items-center gap-0.5">
         <Users className="w-3 h-3" /> {table.capacity}
       </span>
@@ -144,7 +144,7 @@ function TablePanel({
             {table.status === "available" && (
               <Button
                 className="w-full justify-start gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-                onClick={() => { setLocation(`/orders/new?tableId=${table.id}`); onClose(); }}
+                onClick={() => { setLocation(`/orders?tableId=${table.id}`); onClose(); }}
                 data-testid="btn-new-order"
               >
                 <PlusCircle className="w-4 h-4" />
@@ -224,11 +224,13 @@ function TablePanel({
 }
 
 export default function FloorPlan() {
+  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: tables, isLoading, dataUpdatedAt } = useListTables({ query: { queryKey: getListTablesQueryKey() } });
   const updateTable = useUpdateTable();
   const [selectedTable, setSelectedTable] = useState<TableData | null>(null);
+  const [statusFilter, setStatusFilter] = useState<keyof typeof STATUS_CONFIG | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState(new Date());
 
   // Auto-refresh every 30 seconds
@@ -264,6 +266,14 @@ export default function FloorPlan() {
     }
   }, [updateTable, queryClient, toast]);
 
+  const handleTableClick = useCallback((table: TableData) => {
+    if (table.currentOrderId && (table.status === "occupied" || table.status === "payment_pending")) {
+      setLocation(`/orders/${table.currentOrderId}`);
+      return;
+    }
+    setLocation(`/orders?tableId=${table.id}`);
+  }, [setLocation]);
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -281,16 +291,19 @@ export default function FloorPlan() {
     payment_pending: (tables ?? []).filter(t => t.status === "payment_pending").length,
     dirty:           (tables ?? []).filter(t => t.status === "dirty").length,
   };
+  const filteredTables = statusFilter
+    ? ((tables ?? []).filter((table) => table.status === statusFilter) as TableData[])
+    : [];
 
   return (
     <div className="flex flex-col h-full gap-4">
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-shrink-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between flex-shrink-0">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Floor Plan</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Click a table to view options
+            Tap a table to open ordering flow
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -322,12 +335,17 @@ export default function FloorPlan() {
       </div>
 
       {/* Summary bar */}
-      <div className="grid grid-cols-4 gap-3 flex-shrink-0">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 flex-shrink-0">
         {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
-          <div
+          <button
             key={key}
-            className="flex items-center gap-3 bg-card border rounded-lg px-4 py-3"
+            className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all hover:border-primary/40 hover:bg-primary/5 ${
+              statusFilter === key ? "border-primary bg-primary/10" : "bg-card"
+            }`}
             data-testid={`summary-${key}`}
+            onClick={() =>
+              setStatusFilter((prev) => (prev === key ? null : (key as keyof typeof STATUS_CONFIG)))
+            }
           >
             <div className={`w-3 h-3 rounded-full flex-shrink-0 ${cfg.bg}`} />
             <div className="min-w-0">
@@ -336,12 +354,56 @@ export default function FloorPlan() {
               </p>
               <p className="text-xs text-muted-foreground truncate mt-0.5">{cfg.label}</p>
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
+      {statusFilter && (
+        <div className="rounded-lg border bg-card p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-bold">
+                {STATUS_CONFIG[statusFilter].label} Tables ({filteredTables.length})
+              </h2>
+              <p className="text-sm text-muted-foreground">Tap a row to open related order flow.</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setStatusFilter(null)}>
+              Clear Filter
+            </Button>
+          </div>
+          {filteredTables.length === 0 ? (
+            <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+              No tables found for this status.
+            </div>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {filteredTables.map((table) => (
+                <button
+                  key={table.id}
+                  className="rounded-md border p-3 text-left transition-colors hover:bg-muted/30"
+                  onClick={() => handleTableClick(table)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-bold">Table {table.tableNumber}</p>
+                    <Badge variant="outline" className="text-xs">
+                      {table.zone === "aircon" ? "Air-con" : "Hall"}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{table.capacity} seats</p>
+                  {table.currentOrderId ? (
+                    <p className="mt-1 text-xs font-medium text-primary">Order #{table.currentOrderId}</p>
+                  ) : (
+                    <p className="mt-1 text-xs text-muted-foreground">No active order</p>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Floor map */}
-      <div className="flex-1 grid grid-cols-2 gap-5 min-h-0">
+      <div className="flex-1 grid grid-cols-1 gap-5 lg:grid-cols-2 min-h-0">
 
         {/* Hall Zone */}
         <div className="flex flex-col min-h-0">
@@ -352,32 +414,30 @@ export default function FloorPlan() {
             </span>
             <div className="h-0.5 flex-1 bg-border" />
           </div>
-          <div
-            className="flex-1 relative bg-muted/30 rounded-xl border-2 border-dashed border-border overflow-hidden"
-            style={{ minHeight: 350 }}
-            data-testid="zone-hall"
-          >
-            {/* Grid pattern */}
-            <div
-              className="absolute inset-0 opacity-20"
-              style={{
-                backgroundImage: "radial-gradient(circle, #94a3b8 1px, transparent 1px)",
-                backgroundSize: "40px 40px",
-              }}
-            />
-            {hallTables.map(table => (
-              <TableCard
-                key={table.id}
-                table={table}
-                selected={selectedTable?.id === table.id}
-                onClick={() => setSelectedTable(prev => prev?.id === table.id ? null : table)}
+          <div className="flex-1 rounded-xl border-2 border-dashed border-border bg-muted/30 overflow-auto" data-testid="zone-hall">
+            <div className="relative" style={{ minWidth: 620, minHeight: 350 }}>
+              {/* Grid pattern */}
+              <div
+                className="absolute inset-0 opacity-20"
+                style={{
+                  backgroundImage: "radial-gradient(circle, #94a3b8 1px, transparent 1px)",
+                  backgroundSize: "40px 40px",
+                }}
               />
-            ))}
-            {hallTables.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
-                No tables in Hall
-              </div>
-            )}
+              {hallTables.map(table => (
+                <TableCard
+                  key={table.id}
+                  table={table}
+                  selected={selectedTable?.id === table.id}
+                  onClick={() => handleTableClick(table)}
+                />
+              ))}
+              {hallTables.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
+                  No tables in Hall
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -390,35 +450,33 @@ export default function FloorPlan() {
             </span>
             <div className="h-0.5 flex-1 bg-blue-200" />
           </div>
-          <div
-            className="flex-1 relative bg-blue-50/50 rounded-xl border-2 border-dashed border-blue-200 overflow-hidden"
-            style={{ minHeight: 350 }}
-            data-testid="zone-aircon"
-          >
-            <div
-              className="absolute inset-0 opacity-20"
-              style={{
-                backgroundImage: "radial-gradient(circle, #93c5fd 1px, transparent 1px)",
-                backgroundSize: "40px 40px",
-              }}
-            />
-            {/* Aircon icon */}
-            <div className="absolute top-3 right-3 text-blue-300">
-              <Clock className="w-5 h-5" />
-            </div>
-            {airconTables.map(table => (
-              <TableCard
-                key={table.id}
-                table={table}
-                selected={selectedTable?.id === table.id}
-                onClick={() => setSelectedTable(prev => prev?.id === table.id ? null : table)}
+          <div className="flex-1 rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 overflow-auto" data-testid="zone-aircon">
+            <div className="relative" style={{ minWidth: 620, minHeight: 350 }}>
+              <div
+                className="absolute inset-0 opacity-20"
+                style={{
+                  backgroundImage: "radial-gradient(circle, #93c5fd 1px, transparent 1px)",
+                  backgroundSize: "40px 40px",
+                }}
               />
-            ))}
-            {airconTables.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center text-blue-400 text-sm">
-                No tables in Air-con Room
+              {/* Aircon icon */}
+              <div className="absolute top-3 right-3 text-blue-300">
+                <Clock className="w-5 h-5" />
               </div>
-            )}
+              {airconTables.map(table => (
+                <TableCard
+                  key={table.id}
+                  table={table}
+                  selected={selectedTable?.id === table.id}
+                  onClick={() => handleTableClick(table)}
+                />
+              ))}
+              {airconTables.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center text-blue-400 text-sm">
+                  No tables in Air-con Room
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
