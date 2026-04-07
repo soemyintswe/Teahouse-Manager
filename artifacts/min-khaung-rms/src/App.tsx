@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { Switch, Route, Router as WouterRouter, Link } from "wouter";
+import { useEffect, useRef } from "react";
+import { Switch, Route, Router as WouterRouter, Link, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Toaster } from "@/components/ui/toaster";
@@ -39,6 +39,8 @@ const NAV_ITEMS = [
 
 function Layout({ children }: { children: React.ReactNode }) {
   const { t, i18n } = useTranslation();
+  const [, setLocation] = useLocation();
+  const mainRef = useRef<HTMLElement | null>(null);
   const isMyanmar = i18n.resolvedLanguage === "mm";
 
   const toggleLanguage = () => {
@@ -47,15 +49,25 @@ function Layout({ children }: { children: React.ReactNode }) {
 
   const nextLanguageLabel = isMyanmar ? t("language.english") : t("language.myanmar");
 
+  const handleLogoClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    setLocation("/");
+    requestAnimationFrame(() => {
+      mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  };
+
   return (
     <SidebarProvider>
       <div className="flex h-screen w-full bg-background overflow-hidden">
         <Sidebar>
           <SidebarHeader className="p-4 flex flex-col items-center justify-center bg-sidebar">
-            <img src={logoPath} alt={t("app.name")} className="w-16 h-16 rounded-full object-cover border-2 border-primary-foreground" />
-            <div className="mt-2 text-sidebar-foreground font-bold text-center leading-tight text-sm">
-              {t("app.name")}
-            </div>
+            <Link href="/" onClick={handleLogoClick} className="flex flex-col items-center">
+              <img src={logoPath} alt={t("app.name")} className="w-16 h-16 rounded-full object-cover border-2 border-primary-foreground" />
+              <div className="mt-2 text-sidebar-foreground font-bold text-center leading-tight text-sm">
+                {t("app.name")}
+              </div>
+            </Link>
             <Button
               type="button"
               variant="secondary"
@@ -87,7 +99,7 @@ function Layout({ children }: { children: React.ReactNode }) {
             </SidebarGroup>
           </SidebarContent>
         </Sidebar>
-        <main className="flex-1 overflow-auto">
+        <main ref={mainRef} className="flex-1 overflow-auto">
           <div className="md:hidden sticky top-0 z-30 border-b bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 [padding-top:calc(env(safe-area-inset-top)+0.5rem)]">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-semibold">{t("app.shortName")}</span>

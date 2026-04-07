@@ -80,6 +80,8 @@ type RoomFormState = {
   sortOrder: string;
 };
 
+const ROOM_CODE_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 function getInitialForm(defaultZone: string, table?: Table): FormState {
   return {
     tableNumber: table?.tableNumber ?? "",
@@ -468,8 +470,18 @@ export default function TableSettingsPage() {
   const handleRoomSubmit = async () => {
     if (!roomFormValid) return;
 
+    const normalizedCode = roomForm.code.trim().toLowerCase();
+    if (!ROOM_CODE_REGEX.test(normalizedCode)) {
+      toast({
+        title: t("tableSettings.rooms.invalidCodeTitle"),
+        description: t("tableSettings.rooms.invalidCodeDescription"),
+        variant: "destructive",
+      });
+      return;
+    }
+
     const payload = {
-      code: roomForm.code.trim().toLowerCase(),
+      code: normalizedCode,
       name: roomForm.name.trim(),
       sortOrder: Number.isFinite(Number(roomForm.sortOrder)) ? Number(roomForm.sortOrder) : 0,
     };

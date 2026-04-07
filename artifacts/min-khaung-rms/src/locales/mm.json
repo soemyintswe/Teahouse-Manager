@@ -313,7 +313,9 @@
       "deleted": "အခန်း {{room}} ကို ဖျက်ပြီးပါပြီ။",
       "failedCreate": "အခန်းဖန်တီးမရပါ",
       "failedUpdate": "အခန်း update မလုပ်နိုင်ပါ",
-      "failedDelete": "အခန်းဖျက်မရပါ"
+      "failedDelete": "အခန်းဖျက်မရပါ",
+      "invalidCodeTitle": "အခန်းကုဒ် မမှန်ပါ",
+      "invalidCodeDescription": "အခန်းကုဒ်တွင် အင်္ဂလိပ်စာလုံးအသေး၊ နံပါတ်နှင့် dash (-) သာသုံးနိုင်သည် (ဥပမာ: vip-lounge)။"
     },
     "columns": {
       "id": "ID",

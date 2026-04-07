@@ -313,7 +313,9 @@
       "deleted": "Room {{room}} deleted.",
       "failedCreate": "Failed to create room",
       "failedUpdate": "Failed to update room",
-      "failedDelete": "Failed to delete room"
+      "failedDelete": "Failed to delete room",
+      "invalidCodeTitle": "Invalid room code",
+      "invalidCodeDescription": "Room code can only use lowercase letters, numbers, and dashes (example: vip-lounge)."
     },
     "columns": {
       "id": "ID",
