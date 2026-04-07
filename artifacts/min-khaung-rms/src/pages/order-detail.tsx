@@ -1,4 +1,4 @@
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, useSearch } from "wouter";
 import {
   useGetOrder,
   useAddOrderItem,
@@ -6,14 +6,16 @@ import {
   useUpdateOrder,
   useListMenuCategories,
   useListMenuItems,
+  useGetMenuItem,
   getGetOrderQueryKey,
   getListTablesQueryKey,
   getListMenuCategoriesQueryKey,
   getListMenuItemsQueryKey,
+  getGetMenuItemQueryKey,
 } from "@workspace/api-client-react";
 import type { MenuItem, MenuCategory } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Loader2, ArrowLeft, Plus, Minus, Trash2,
@@ -43,6 +45,7 @@ function getKitchenStatusLabel(status: string, t: (key: string) => string): stri
 export default function OrderDetailPage() {
   const { t } = useTranslation();
   const params = useParams<{ id: string }>();
+  const search = useSearch();
   const orderId = parseInt(params.id ?? "0", 10);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -62,6 +65,14 @@ export default function OrderDetailPage() {
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [activeCatId, setActiveCatId] = useState<number | null>(null);
   const [searchQ, setSearchQ] = useState("");
+  const [autoAddedFromQr, setAutoAddedFromQr] = useState<Record<number, true>>({});
+
+  const addMenuItemIdFromQuery = useMemo(() => {
+    const value = new URLSearchParams(search).get("addMenuItemId");
+    if (!value) return null;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }, [search]);
 
   const { data: categories = [] } = useListMenuCategories({ query: { queryKey: getListMenuCategoriesQueryKey() } });
   const resolvedCatId = activeCatId ?? (categories as MenuCategory[])[0]?.id ?? null;
@@ -75,6 +86,13 @@ export default function OrderDetailPage() {
       },
     },
   );
+
+  const { data: qrMenuItem } = useGetMenuItem(addMenuItemIdFromQuery ?? 0, {
+    query: {
+      enabled: addMenuItemIdFromQuery != null,
+      queryKey: getGetMenuItemQueryKey(addMenuItemIdFromQuery ?? 0),
+    },
+  });
 
   const filteredMenuItems = useMemo(() => {
     const q = searchQ.trim().toLowerCase();
@@ -120,6 +138,16 @@ export default function OrderDetailPage() {
   const handleGoToCashier = () => {
     setLocation(`/cashier?orderId=${orderId}`);
   };
+
+  useEffect(() => {
+    if (!order || order.status !== "open") return;
+    if (addMenuItemIdFromQuery == null || !qrMenuItem) return;
+    if (autoAddedFromQr[addMenuItemIdFromQuery]) return;
+
+    setAutoAddedFromQr((prev) => ({ ...prev, [addMenuItemIdFromQuery]: true }));
+    void handleAddItem(qrMenuItem);
+    setShowAddPanel(true);
+  }, [addMenuItemIdFromQuery, autoAddedFromQr, order, qrMenuItem]);
 
   if (isLoading) {
     return <div className="flex h-full items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;

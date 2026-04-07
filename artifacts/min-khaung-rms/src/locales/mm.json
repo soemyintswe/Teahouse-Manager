@@ -133,6 +133,12 @@
     "selectCategory": "အမျိုးအစားရွေးပါ",
     "descriptionOptional": "ဖော်ပြချက် (optional)",
     "descriptionPlaceholder": "အတိုချုံးဖော်ပြချက်",
+    "imageUrlOptional": "ပုံ URL (optional)",
+    "discountPriceOptional": "လျှော့ဈေး (optional)",
+    "weightGramsOptional": "အလေးချိန် ဂရမ် (optional)",
+    "caloriesOptional": "ကယ်လိုရီ (optional)",
+    "ingredientsOptional": "ပါဝင်ပစ္စည်းများ (optional)",
+    "ingredientsPlaceholder": "ဥပမာ လက်ဖက်ခြောက်၊ နို့၊ သကြား",
     "available": "ရနိုင်သည်",
     "unavailable": "မရနိုင်ပါ",
     "price": "စျေး",
@@ -151,7 +157,16 @@
     "toastAdded": "မီနူး item ထည့်ပြီးပါပြီ",
     "toastSaveFailed": "မီနူး item သိမ်းမရပါ",
     "toastDeleted": "မီနူး item ဖျက်ပြီးပါပြီ",
-    "toastDeleteFailed": "မီနူး item ဖျက်မရပါ"
+    "toastDeleteFailed": "မီနူး item ဖျက်မရပါ",
+    "qr": {
+      "title": "မီနူး QR · {{name}}",
+      "subtitle": "ဤ QR ကို scan လုပ်၍ Orders မှာ item ကို cart ထဲ မြန်မြန်ထည့်နိုင်ပါသည်။",
+      "openQr": "မီနူး QR ဖွင့်မည်",
+      "copyLink": "လင့်ခ်ကူးမည်",
+      "openLink": "ဖွင့်မည်",
+      "print": "ပုံနှိပ်မည်",
+      "copied": "မီနူး QR လင့်ခ်ကူးပြီး"
+    }
   },
   "orders": {
     "pageTitle": "မှာယူမှုများ",
@@ -181,6 +196,13 @@
     "openOrderToast": "ဤစားပွဲတွင် order #{{id}} ရှိနေပါသည်။ အဲဒီအော်ဒါကို ဖွင့်နေသည်။",
     "createdToast": "စားပွဲ {{table}} အတွက် order #{{id}} ဖန်တီးပြီးပါပြီ",
     "createFailed": "အော်ဒါဖန်တီးမရပါ",
+    "qrConnectedTitle": "Table QR ချိတ်ဆက်ပြီး",
+    "qrConnectedDesc": "စားပွဲ {{table}} နှင့် ချိတ်ဆက်ထားပါသည်။",
+    "qrConnectFailed": "Table QR ချိတ်ဆက်မရပါ",
+    "scanTableFirstTitle": "Table QR ကို အရင် scan လုပ်ပါ",
+    "scanTableFirstDesc": "Menu QR မ scan ခင် စားပွဲ stand QR ကို အရင် scan လုပ်ပါ။",
+    "qrMenuAddedTitle": "Menu QR မှ ထည့်ပြီး",
+    "qrMenuAddedDesc": "{{item}} ကို cart ထဲ ထည့်ပြီးပါပြီ။",
     "status": {
       "open": "ဖွင့်ထားသည်",
       "readyToPay": "ငွေရှင်းရန်အသင့်",
@@ -353,10 +375,43 @@
       "tableUpdated": "Table {{tableNumber}} ကို update လုပ်ပြီးပါပြီ။",
       "tableRemoved": "Table {{tableNumber}} ကို ဖယ်ရှားပြီးပါပြီ။",
       "setStatus": "Table {{tableNumber}} ကို {{status}} သို့ ပြောင်းပြီးပါပြီ။",
-      "failedCreate": "စားပွဲ ဖန်တီးမရပါ",
-      "failedDuplicate": "စားပွဲပွားမရပါ",
-      "failedUpdate": "စားပွဲ update မလုပ်နိုင်ပါ",
+    "failedCreate": "စားပွဲ ဖန်တီးမရပါ",
+    "failedDuplicate": "စားပွဲပွားမရပါ",
+    "failedUpdate": "စားပွဲ update မလုပ်နိုင်ပါ",
     "failedDelete": "စားပွဲဖျက်မရပါ",
-    "failedUpdateStatus": "အခြေအနေ update မလုပ်နိုင်ပါ"
+    "failedUpdateStatus": "အခြေအနေ update မလုပ်နိုင်ပါ",
+    "qr": {
+      "title": "စားပွဲ QR · {{tableNumber}}",
+      "subtitle": "ဤ QR ကို scan လုပ်လျှင် သက်ဆိုင်ရာ စားပွဲနှင့် ချိတ်ပြီး Orders ကိုဖွင့်ပါမည်။",
+      "openQr": "စားပွဲ QR ဖွင့်မည်",
+      "copyLink": "လင့်ခ်ကူးမည်",
+      "openLink": "ဖွင့်မည်",
+      "print": "ပုံနှိပ်မည်",
+      "copied": "စားပွဲ QR လင့်ခ်ကူးပြီး"
+    }
+  },
+  "cashier": {
+    "title": "ငွေကောင်တာ",
+    "subtitle": "Order #{{id}} · Table {{table}}",
+    "orderRequired": "orderId မပါရှိပါ။ Cashier ကို ?orderId= ဖြင့်ဖွင့်ပါ။",
+    "goOrders": "Orders သို့သွားမည်",
+    "walletSelect": "Mobile Wallet ရွေးချယ်ပါ",
+    "qrTitle": "ငွေပေးချေမှု QR",
+    "notPayable": "လက်ရှိအခြေအနေအရ ဤအော်ဒါကို ငွေရှင်းမရနိုင်ပါ။",
+    "noQrYet": "ငွေပေးချေမှု QR မရသေးပါ။",
+    "openPayLink": "ငွေပေးချေ လင့်ခ်ဖွင့်မည်",
+    "copyPayload": "QR payload ကူးမည်",
+    "payloadCopied": "ငွေပေးချေ payload ကူးပြီး",
+    "backOrder": "Order သို့ပြန်မည်",
+    "confirmPaid": "ငွေလက်ခံပြီး အတည်ပြုမည်",
+    "alreadyPaid": "ငွေရှင်းပြီး",
+    "paymentSuccess": "ငွေရှင်းမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီ",
+    "paymentFailed": "ငွေရှင်းမှု အတည်ပြုမရပါ",
+    "wallet": {
+      "wave_pay": "Wave Pay",
+      "kbz_pay": "KBZ Pay",
+      "aya_pay": "AYA Pay",
+      "cb_pay": "CB Pay"
+    }
   }
 }

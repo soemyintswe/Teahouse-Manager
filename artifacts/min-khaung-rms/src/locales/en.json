@@ -133,6 +133,12 @@
     "selectCategory": "Select category",
     "descriptionOptional": "Description (optional)",
     "descriptionPlaceholder": "Short description",
+    "imageUrlOptional": "Image URL (optional)",
+    "discountPriceOptional": "Discount Price (optional)",
+    "weightGramsOptional": "Weight (g, optional)",
+    "caloriesOptional": "Calories (optional)",
+    "ingredientsOptional": "Ingredients (optional)",
+    "ingredientsPlaceholder": "e.g. tea leaves, milk, sugar",
     "available": "Available",
     "unavailable": "Unavailable",
     "price": "Price",
@@ -151,7 +157,16 @@
     "toastAdded": "Menu item added",
     "toastSaveFailed": "Failed to save menu item",
     "toastDeleted": "Menu item deleted",
-    "toastDeleteFailed": "Failed to delete menu item"
+    "toastDeleteFailed": "Failed to delete menu item",
+    "qr": {
+      "title": "Menu QR · {{name}}",
+      "subtitle": "Scan this QR to open the item in Orders and quickly add to cart.",
+      "openQr": "Open item QR",
+      "copyLink": "Copy Link",
+      "openLink": "Open",
+      "print": "Print",
+      "copied": "Menu QR link copied"
+    }
   },
   "orders": {
     "pageTitle": "Orders",
@@ -181,6 +196,13 @@
     "openOrderToast": "Table has open order #{{id}}. Opening it now.",
     "createdToast": "Order #{{id}} created for Table {{table}}",
     "createFailed": "Unable to create order",
+    "qrConnectedTitle": "Table connected by QR",
+    "qrConnectedDesc": "You are now connected to Table {{table}}.",
+    "qrConnectFailed": "Unable to connect table QR",
+    "scanTableFirstTitle": "Scan table QR first",
+    "scanTableFirstDesc": "Please scan the table stand QR before scanning a menu QR.",
+    "qrMenuAddedTitle": "Added from menu QR",
+    "qrMenuAddedDesc": "{{item}} has been added to cart.",
     "status": {
       "open": "Open",
       "readyToPay": "Ready to Pay",
@@ -353,10 +375,43 @@
       "tableUpdated": "Table {{tableNumber}} updated.",
       "tableRemoved": "Table {{tableNumber}} removed.",
       "setStatus": "Table {{tableNumber}} set to {{status}}.",
-      "failedCreate": "Failed to create table",
-      "failedDuplicate": "Failed to duplicate table",
-      "failedUpdate": "Failed to update table",
+    "failedCreate": "Failed to create table",
+    "failedDuplicate": "Failed to duplicate table",
+    "failedUpdate": "Failed to update table",
     "failedDelete": "Failed to delete table",
-    "failedUpdateStatus": "Failed to update status"
+    "failedUpdateStatus": "Failed to update status",
+    "qr": {
+      "title": "Table QR · {{tableNumber}}",
+      "subtitle": "Scan to open Orders already connected to this table.",
+      "openQr": "Open table QR",
+      "copyLink": "Copy Link",
+      "openLink": "Open",
+      "print": "Print",
+      "copied": "Table QR link copied"
+    }
+  },
+  "cashier": {
+    "title": "Cashier",
+    "subtitle": "Order #{{id}} · Table {{table}}",
+    "orderRequired": "Order is required. Open cashier with ?orderId=",
+    "goOrders": "Go to Orders",
+    "walletSelect": "Select mobile wallet",
+    "qrTitle": "Payment QR",
+    "notPayable": "This order is not payable in current status.",
+    "noQrYet": "Payment QR is not available yet.",
+    "openPayLink": "Open Payment Link",
+    "copyPayload": "Copy QR Payload",
+    "payloadCopied": "Payment payload copied",
+    "backOrder": "Back to Order",
+    "confirmPaid": "Confirm Payment Received",
+    "alreadyPaid": "Already Paid",
+    "paymentSuccess": "Payment confirmed successfully",
+    "paymentFailed": "Failed to confirm payment",
+    "wallet": {
+      "wave_pay": "Wave Pay",
+      "kbz_pay": "KBZ Pay",
+      "aya_pay": "AYA Pay",
+      "cb_pay": "CB Pay"
+    }
   }
 }

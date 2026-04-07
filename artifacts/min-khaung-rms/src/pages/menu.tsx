@@ -16,7 +16,7 @@ import type {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Plus, Pencil, Trash2, Loader2, UtensilsCrossed } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, UtensilsCrossed, QrCode, Printer, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -55,6 +55,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { buildMenuItemScanLink, buildQrImageUrl, openQrPrintWindow } from "@/lib/qr-links";
 
 const STATION_OPTIONS = ["salad", "tea-coffee", "juice", "kitchen"] as const;
 
@@ -97,13 +98,51 @@ function resolveMyanmarLabel(englishName: string, myanmarValue: string | undefin
   return englishName;
 }
 
+type MenuItemMetadata = {
+  weightGrams?: number;
+  calories?: number;
+  ingredients?: string;
+  discountPrice?: string;
+};
+
+type CustomizationPayload = {
+  meta?: MenuItemMetadata;
+  [key: string]: unknown;
+};
+
+function parseCustomizationPayload(raw: string | null | undefined): CustomizationPayload {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as CustomizationPayload;
+    }
+  } catch {
+    // Ignore malformed JSON and return empty payload.
+  }
+  return {};
+}
+
+function getItemMetadata(item: Pick<MenuItem, "customizationOptions">): MenuItemMetadata {
+  const payload = parseCustomizationPayload(item.customizationOptions);
+  if (payload.meta && typeof payload.meta === "object") {
+    return payload.meta;
+  }
+  return {};
+}
+
 type ItemFormState = {
   name: string;
   nameMyanmar: string;
   categoryId: string;
   station: StationCode;
   price: string;
+  discountPrice: string;
   description: string;
+  imageUrl: string;
+  weightGrams: string;
+  calories: string;
+  ingredients: string;
   available: boolean;
 };
 
@@ -112,13 +151,19 @@ function getStationLabel(station: StationCode, t: (key: string) => string): stri
 }
 
 function buildInitialItemForm(item: MenuItem | undefined, categories: MenuCategory[]): ItemFormState {
+  const meta = item ? getItemMetadata(item) : {};
   return {
     name: item?.name ?? "",
     nameMyanmar: item?.nameMyanmar ?? "",
     categoryId: String(item?.categoryId ?? categories[0]?.id ?? ""),
     station: item?.station ?? "kitchen",
     price: item?.price ?? "",
+    discountPrice: meta.discountPrice ?? "",
     description: item?.description ?? "",
+    imageUrl: item?.imageUrl ?? "",
+    weightGrams: meta.weightGrams != null ? String(meta.weightGrams) : "",
+    calories: meta.calories != null ? String(meta.calories) : "",
+    ingredients: meta.ingredients ?? "",
     available: item ? item.available !== "false" && item.available !== "0" : true,
   };
 }
@@ -154,6 +199,32 @@ function ItemDialog({
     form.station.trim().length > 0;
 
   const handleSubmit = () => {
+    const currentPayload = item ? parseCustomizationPayload(item.customizationOptions) : {};
+    const nextMeta: MenuItemMetadata = {};
+
+    if (form.weightGrams.trim().length > 0) {
+      const parsedWeight = Number(form.weightGrams);
+      if (Number.isFinite(parsedWeight)) nextMeta.weightGrams = parsedWeight;
+    }
+    if (form.calories.trim().length > 0) {
+      const parsedCalories = Number(form.calories);
+      if (Number.isFinite(parsedCalories)) nextMeta.calories = parsedCalories;
+    }
+    if (form.ingredients.trim().length > 0) nextMeta.ingredients = form.ingredients.trim();
+    if (form.discountPrice.trim().length > 0) nextMeta.discountPrice = form.discountPrice.trim();
+
+    const mergedPayload: CustomizationPayload = {
+      ...currentPayload,
+      meta: Object.keys(nextMeta).length > 0 ? nextMeta : undefined,
+    };
+
+    if (mergedPayload.meta == null) {
+      delete mergedPayload.meta;
+    }
+
+    const customizationOptions =
+      Object.keys(mergedPayload).length > 0 ? JSON.stringify(mergedPayload) : undefined;
+
     const payload = {
       name: form.name.trim(),
       nameMyanmar: form.nameMyanmar.trim() || form.name.trim(),
@@ -161,6 +232,8 @@ function ItemDialog({
       station: form.station,
       price: form.price.trim(),
       description: form.description.trim() || undefined,
+      imageUrl: form.imageUrl.trim() || undefined,
+      customizationOptions,
       available: form.available ? "true" : "false",
     };
     onSubmit(payload);
@@ -254,6 +327,56 @@ function ItemDialog({
             />
           </div>
 
+          <div className="space-y-1.5">
+            <Label>{t("menu.imageUrlOptional")}</Label>
+            <Input
+              value={form.imageUrl}
+              onChange={(e) => setForm((prev) => ({ ...prev, imageUrl: e.target.value }))}
+              placeholder="https://..."
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div className="space-y-1.5">
+              <Label>{t("menu.discountPriceOptional")}</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.discountPrice}
+                onChange={(e) => setForm((prev) => ({ ...prev, discountPrice: e.target.value }))}
+                placeholder="2000"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("menu.weightGramsOptional")}</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.weightGrams}
+                onChange={(e) => setForm((prev) => ({ ...prev, weightGrams: e.target.value }))}
+                placeholder="250"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("menu.caloriesOptional")}</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.calories}
+                onChange={(e) => setForm((prev) => ({ ...prev, calories: e.target.value }))}
+                placeholder="320"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("menu.ingredientsOptional")}</Label>
+              <Input
+                value={form.ingredients}
+                onChange={(e) => setForm((prev) => ({ ...prev, ingredients: e.target.value }))}
+                placeholder={t("menu.ingredientsPlaceholder")}
+              />
+            </div>
+          </div>
+
           <div className="flex items-center gap-3 rounded-md border px-3 py-2">
             <Switch
               id="item-available"
@@ -299,6 +422,7 @@ export default function MenuPage() {
   const [stationFilter, setStationFilter] = useState<StationFilter>("all");
   const [itemDialog, setItemDialog] = useState<{ open: boolean; item?: MenuItem }>({ open: false });
   const [deleteTarget, setDeleteTarget] = useState<MenuItem | null>(null);
+  const [qrTarget, setQrTarget] = useState<MenuItem | null>(null);
 
   const categoryById = useMemo(() => {
     return new Map(categories.map((category) => [category.id, category]));
@@ -308,6 +432,9 @@ export default function MenuPage() {
     if (stationFilter === "all") return menuItems;
     return menuItems.filter((item) => item.station === stationFilter);
   }, [menuItems, stationFilter]);
+
+  const menuQrLink = qrTarget ? buildMenuItemScanLink(qrTarget.id) : "";
+  const menuQrImage = menuQrLink ? buildQrImageUrl(menuQrLink, 320) : "";
 
   const invalidateItems = () => {
     queryClient.invalidateQueries({ queryKey: getListMenuItemsQueryKey() });
@@ -428,19 +555,44 @@ export default function MenuPage() {
                       ? resolveMyanmarLabel(category.name, category.nameMyanmar, CATEGORY_MM_FALLBACK)
                       : category.name)
                     : t("menu.unknownCategory", { id: item.categoryId });
+                  const metadata = getItemMetadata(item);
+                  const discountPriceValue = metadata.discountPrice ? Number(metadata.discountPrice) : null;
+                  const hasValidDiscount =
+                    discountPriceValue != null &&
+                    Number.isFinite(discountPriceValue) &&
+                    discountPriceValue > 0 &&
+                    discountPriceValue < Number(item.price);
                   return (
                     <TableRow key={item.id}>
                       <TableCell className="font-medium">#{item.id}</TableCell>
                       <TableCell>
                         <div className="font-semibold">{itemPrimaryName}</div>
                         <div className="text-xs text-muted-foreground">{itemSecondaryName}</div>
+                        <div className="mt-1 text-[11px] text-muted-foreground">
+                          {metadata.weightGrams ? `${metadata.weightGrams}g` : ""}
+                          {metadata.calories ? `${metadata.weightGrams ? " · " : ""}${metadata.calories} kcal` : ""}
+                          {metadata.ingredients ? `${metadata.weightGrams || metadata.calories ? " · " : ""}${metadata.ingredients}` : ""}
+                        </div>
                       </TableCell>
                       <TableCell>{categoryLabel}</TableCell>
                       <TableCell>
                         <Badge variant="secondary">{getStationLabel(item.station, t)}</Badge>
                       </TableCell>
                       <TableCell className="text-right font-semibold">
-                        {Number(item.price).toLocaleString()} {t("menu.currencySuffix")}
+                        {hasValidDiscount ? (
+                          <div className="space-y-0.5">
+                            <div className="text-xs text-muted-foreground line-through">
+                              {Number(item.price).toLocaleString()} {t("menu.currencySuffix")}
+                            </div>
+                            <div className="text-emerald-700">
+                              {discountPriceValue.toLocaleString()} {t("menu.currencySuffix")}
+                            </div>
+                          </div>
+                        ) : (
+                          <span>
+                            {Number(item.price).toLocaleString()} {t("menu.currencySuffix")}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant={available ? "secondary" : "outline"}>
@@ -449,6 +601,14 @@ export default function MenuPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setQrTarget(item)}
+                            title={t("menu.qr.openQr")}
+                          >
+                            <QrCode className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -484,6 +644,61 @@ export default function MenuPage() {
         onOpenChange={(open) => setItemDialog((prev) => ({ ...prev, open, item: open ? prev.item : undefined }))}
         onSubmit={handleSaveItem}
       />
+
+      <Dialog open={Boolean(qrTarget)} onOpenChange={(open) => !open && setQrTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("menu.qr.title", { name: qrTarget?.name ?? "" })}</DialogTitle>
+          </DialogHeader>
+
+          {qrTarget ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">{t("menu.qr.subtitle")}</p>
+              <div className="flex items-center justify-center rounded-lg border bg-white p-3">
+                <img src={menuQrImage} alt={`QR for menu item ${qrTarget.name}`} className="h-64 w-64 rounded-md" />
+              </div>
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs break-all">{menuQrLink}</div>
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      void window.navigator.clipboard.writeText(menuQrLink);
+                    }
+                    toast({ title: t("menu.qr.copied") });
+                  }}
+                >
+                  {t("menu.qr.copyLink")}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      window.open(menuQrLink, "_blank", "noopener,noreferrer");
+                    }
+                  }}
+                >
+                  <ExternalLink className="mr-1.5 h-4 w-4" />
+                  {t("menu.qr.openLink")}
+                </Button>
+                <Button
+                  onClick={() =>
+                    openQrPrintWindow({
+                      title: qrTarget.name,
+                      subtitle: t("menu.qr.subtitle"),
+                      qrImageUrl: menuQrImage,
+                      qrValue: menuQrLink,
+                    })
+                  }
+                >
+                  <Printer className="mr-1.5 h-4 w-4" />
+                  {t("menu.qr.print")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>

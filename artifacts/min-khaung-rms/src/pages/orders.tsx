@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import {
   useGetTable,
@@ -6,12 +6,15 @@ import {
   useListOrders,
   useListMenuCategories,
   useListMenuItems,
+  useGetMenuItem,
   useCreateOrder,
+  useScanTableQr,
   getGetTableQueryKey,
   getListTablesQueryKey,
   getListOrdersQueryKey,
   getListMenuCategoriesQueryKey,
   getListMenuItemsQueryKey,
+  getGetMenuItemQueryKey,
 } from "@workspace/api-client-react";
 import type { MenuCategory, MenuItem, Order } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -32,6 +35,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+
+const ACTIVE_TABLE_ID_STORAGE_KEY = "teahouse_active_table_id";
 
 type CartItem = {
   menuItemId: number;
@@ -54,6 +59,18 @@ function parseTableIdFromSearch(search: string): number | null {
   if (!value) return null;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseMenuItemIdFromSearch(search: string): number | null {
+  const value = new URLSearchParams(search).get("menuItemId");
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseScanFlagFromSearch(search: string): boolean {
+  const value = new URLSearchParams(search).get("scan");
+  return value === "1" || value === "true" || value === "yes";
 }
 
 function formatMoney(amount: string | number): string {
@@ -190,9 +207,33 @@ export default function OrdersPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const tableId = useMemo(() => parseTableIdFromSearch(search), [search]);
+  const tableIdFromQuery = useMemo(() => parseTableIdFromSearch(search), [search]);
+  const menuItemIdFromQuery = useMemo(() => parseMenuItemIdFromSearch(search), [search]);
+  const scanRequested = useMemo(() => parseScanFlagFromSearch(search), [search]);
+  const [storedTableId, setStoredTableId] = useState<number | null>(null);
+  const tableId =
+    tableIdFromQuery ?? ((scanRequested || menuItemIdFromQuery != null) ? storedTableId : null);
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("today");
   const todayDate = useMemo(() => toLocalDateString(new Date()), []);
+
+  const scanTable = useScanTableQr();
+  const [scannedTableIds, setScannedTableIds] = useState<Record<number, true>>({});
+  const [autoAddedMenuItemIds, setAutoAddedMenuItemIds] = useState<Record<number, true>>({});
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (tableIdFromQuery != null) {
+      setStoredTableId(tableIdFromQuery);
+      window.localStorage.setItem(ACTIVE_TABLE_ID_STORAGE_KEY, String(tableIdFromQuery));
+      return;
+    }
+    const raw = window.localStorage.getItem(ACTIVE_TABLE_ID_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      setStoredTableId(parsed);
+    }
+  }, [tableIdFromQuery]);
 
   const historyQueryParams = useMemo(() => {
     if (historyFilter === "today") return { date: todayDate };
@@ -255,6 +296,13 @@ export default function OrdersPage() {
     query: {
       enabled: resolvedCategoryId != null && tableId != null,
       queryKey: getListMenuItemsQueryKey(menuParams),
+    },
+  });
+
+  const { data: scannedMenuItem } = useGetMenuItem(menuItemIdFromQuery ?? 0, {
+    query: {
+      enabled: menuItemIdFromQuery != null,
+      queryKey: getGetMenuItemQueryKey(menuItemIdFromQuery ?? 0),
     },
   });
 
@@ -325,11 +373,78 @@ export default function OrdersPage() {
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const estimatedTotal = subtotal + (table?.zone === "aircon" ? 500 : 0);
 
+  useEffect(() => {
+    if (!scanRequested || tableId == null) return;
+    if (scannedTableIds[tableId]) return;
+    if (!table || table.status !== "Active") return;
+
+    setScannedTableIds((prev) => ({ ...prev, [tableId]: true }));
+    void scanTable
+      .mutateAsync({ id: tableId })
+      .then(async () => {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(ACTIVE_TABLE_ID_STORAGE_KEY, String(tableId));
+        }
+        await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+        toast({
+          title: t("orders.qrConnectedTitle"),
+          description: t("orders.qrConnectedDesc", { table: table.tableNumber }),
+        });
+      })
+      .catch((error) => {
+        toast({
+          title: t("orders.qrConnectFailed"),
+          description: error instanceof Error ? error.message : t("common.unknownError"),
+          variant: "destructive",
+        });
+      });
+  }, [queryClient, scanRequested, scanTable, scannedTableIds, table, tableId, t, toast]);
+
+  useEffect(() => {
+    if (menuItemIdFromQuery == null || !scannedMenuItem) return;
+    if (autoAddedMenuItemIds[menuItemIdFromQuery]) return;
+
+    if (existingOpenOrder) {
+      setAutoAddedMenuItemIds((prev) => ({ ...prev, [menuItemIdFromQuery]: true }));
+      setLocation(`/orders/${existingOpenOrder.id}?addMenuItemId=${menuItemIdFromQuery}`);
+      return;
+    }
+
+    if (tableId == null) {
+      toast({
+        title: t("orders.scanTableFirstTitle"),
+        description: t("orders.scanTableFirstDesc"),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    addToCart(scannedMenuItem);
+    setAutoAddedMenuItemIds((prev) => ({ ...prev, [menuItemIdFromQuery]: true }));
+    toast({
+      title: t("orders.qrMenuAddedTitle"),
+      description: t("orders.qrMenuAddedDesc", { item: scannedMenuItem.name }),
+    });
+  }, [
+    autoAddedMenuItemIds,
+    existingOpenOrder,
+    menuItemIdFromQuery,
+    scannedMenuItem,
+    setLocation,
+    tableId,
+    t,
+    toast,
+  ]);
+
   const handleSelectTable = (nextTableId: number) => {
     setCart([]);
     setOrderNotes("");
     setSearchText("");
     setActiveCategoryId(null);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(ACTIVE_TABLE_ID_STORAGE_KEY, String(nextTableId));
+    }
+    setStoredTableId(nextTableId);
     setLocation(`/orders?tableId=${nextTableId}`);
   };
 

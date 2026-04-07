@@ -8,7 +8,7 @@ import {
 } from "@workspace/api-client-react";
 import type { CreateTableBody, Table, UpdateTableBody } from "@workspace/api-client-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Pencil, Trash2, Settings2, Check, Copy } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, Settings2, Check, Copy, QrCode, Printer, ExternalLink } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +48,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { buildQrImageUrl, buildTableScanLink, openQrPrintWindow } from "@/lib/qr-links";
 import {
   createRoom,
   deleteRoom,
@@ -375,6 +376,7 @@ export default function TableSettingsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTable, setEditingTable] = useState<Table | undefined>(undefined);
   const [deletingTable, setDeletingTable] = useState<Table | undefined>(undefined);
+  const [qrTable, setQrTable] = useState<Table | undefined>(undefined);
   const [roomForm, setRoomForm] = useState<RoomFormState>(() => getInitialRoomForm());
   const [editingRoomId, setEditingRoomId] = useState<number | null>(null);
   const [deletingRoom, setDeletingRoom] = useState<RoomRecord | undefined>(undefined);
@@ -604,6 +606,9 @@ export default function TableSettingsPage() {
     }
   };
 
+  const qrTargetLink = qrTable ? buildTableScanLink(qrTable.id) : "";
+  const qrTargetImage = qrTargetLink ? buildQrImageUrl(qrTargetLink, 320) : "";
+
   if (isTablesLoading || isRoomsLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -768,6 +773,14 @@ export default function TableSettingsPage() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      onClick={() => setQrTable(table)}
+                      title={t("tableSettings.qr.openQr")}
+                    >
+                      <QrCode className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => handleDuplicateTable(table)}
                       title={t("tableSettings.duplicateTableAction")}
                       disabled={createTable.isPending}
@@ -817,6 +830,63 @@ export default function TableSettingsPage() {
         }}
         onSubmit={(payload) => (editingTable ? handleUpdate(payload) : handleCreate(payload))}
       />
+
+      <Dialog open={Boolean(qrTable)} onOpenChange={(open) => !open && setQrTable(undefined)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {t("tableSettings.qr.title", { tableNumber: qrTable?.tableNumber ?? "" })}
+            </DialogTitle>
+          </DialogHeader>
+
+          {qrTable ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">{t("tableSettings.qr.subtitle")}</p>
+              <div className="flex items-center justify-center rounded-lg border bg-white p-3">
+                <img src={qrTargetImage} alt={`QR for table ${qrTable.tableNumber}`} className="h-64 w-64 rounded-md" />
+              </div>
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs break-all">{qrTargetLink}</div>
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      void window.navigator.clipboard.writeText(qrTargetLink);
+                    }
+                    toast({ title: t("tableSettings.qr.copied") });
+                  }}
+                >
+                  {t("tableSettings.qr.copyLink")}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      window.open(qrTargetLink, "_blank", "noopener,noreferrer");
+                    }
+                  }}
+                >
+                  <ExternalLink className="mr-1.5 h-4 w-4" />
+                  {t("tableSettings.qr.openLink")}
+                </Button>
+                <Button
+                  onClick={() =>
+                    openQrPrintWindow({
+                      title: `${t("floorPlan.table", { tableNumber: qrTable.tableNumber })}`,
+                      subtitle: t("tableSettings.qr.subtitle"),
+                      qrImageUrl: qrTargetImage,
+                      qrValue: qrTargetLink,
+                    })
+                  }
+                >
+                  <Printer className="mr-1.5 h-4 w-4" />
+                  {t("tableSettings.qr.print")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={Boolean(deletingTable)} onOpenChange={(open) => !open && setDeletingTable(undefined)}>
         <AlertDialogContent>

@@ -10,6 +10,44 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+const SUPPORTED_WALLETS = ["wave_pay", "kbz_pay", "aya_pay", "cb_pay"] as const;
+type SupportedWallet = (typeof SUPPORTED_WALLETS)[number];
+
+function parseOrderId(input: string | undefined): number | null {
+  if (!input) return null;
+  const id = Number.parseInt(input, 10);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  return id;
+}
+
+function parseWallet(input: unknown): SupportedWallet | null {
+  if (typeof input !== "string") return null;
+  return (SUPPORTED_WALLETS as readonly string[]).includes(input) ? (input as SupportedWallet) : null;
+}
+
+function getWebBaseUrl(reqProtocol: string, reqHost: string | undefined): string {
+  const configured = process.env.WEB_BASE_URL?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
+  if (reqHost) return `${reqProtocol}://${reqHost}`.replace(/\/+$/, "");
+  return "https://teahouse-web.onrender.com";
+}
+
+function buildPaymentPayload(input: {
+  orderId: number;
+  tableNumber: string;
+  amount: string;
+  wallet: SupportedWallet;
+  issuedAt: string;
+}): string {
+  return [
+    "TEAHOUSE_PAY",
+    `order=${input.orderId}`,
+    `table=${encodeURIComponent(input.tableNumber)}`,
+    `amount=${encodeURIComponent(input.amount)}`,
+    `wallet=${input.wallet}`,
+    `issuedAt=${encodeURIComponent(input.issuedAt)}`,
+  ].join("|");
+}
 
 function formatPayment(p: typeof paymentsTable.$inferSelect) {
   return { ...p, amount: p.amount.toString(), createdAt: p.createdAt.toISOString() };
@@ -27,6 +65,55 @@ router.get("/payments", async (req, res): Promise<void> => {
     payments = await db.select().from(paymentsTable).orderBy(sql`${paymentsTable.createdAt} desc`);
   }
   res.json(ListPaymentsResponse.parse(payments.map(formatPayment)));
+});
+
+router.get("/payments/orders/:orderId/qr", async (req, res): Promise<void> => {
+  const orderId = parseOrderId(req.params.orderId);
+  if (!orderId) {
+    res.status(400).json({ error: "Invalid order id." });
+    return;
+  }
+
+  const wallet = parseWallet(req.query.wallet);
+  if (!wallet) {
+    res.status(400).json({ error: "wallet query is required (wave_pay, kbz_pay, aya_pay, cb_pay)." });
+    return;
+  }
+
+  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId));
+  if (!order) {
+    res.status(404).json({ error: "Order not found" });
+    return;
+  }
+
+  if (order.status === "cancelled") {
+    res.status(409).json({ error: "Cancelled order cannot be paid." });
+    return;
+  }
+
+  const amount = order.totalAmount.toString();
+  const nowIso = new Date().toISOString();
+  const webBaseUrl = getWebBaseUrl(req.protocol, req.get("host"));
+  const paymentUrl = `${webBaseUrl}/cashier?orderId=${order.id}&wallet=${wallet}`;
+  const payload = buildPaymentPayload({
+    orderId: order.id,
+    tableNumber: order.tableNumber,
+    amount,
+    wallet,
+    issuedAt: nowIso,
+  });
+  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(payload)}`;
+
+  res.json({
+    orderId: order.id,
+    tableNumber: order.tableNumber,
+    amount,
+    wallet,
+    payload,
+    paymentUrl,
+    qrImageUrl,
+    issuedAt: nowIso,
+  });
 });
 
 router.post("/payments", async (req, res): Promise<void> => {

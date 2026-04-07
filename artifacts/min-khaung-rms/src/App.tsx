@@ -15,6 +15,7 @@ import OrdersPage from "@/pages/orders";
 import TableSettingsPage from "@/pages/table-settings";
 import NewOrderPage from "@/pages/new-order";
 import OrderDetailPage from "@/pages/order-detail";
+import CashierPage from "@/pages/cashier";
 import NotFound from "@/pages/not-found";
 import { setupAutoUpdate } from "@/lib/mobile-updater";
 import logoPath from "@assets/viber_image_2026-04-06_15-22-24-661.jpg";
@@ -154,7 +155,7 @@ function Router() {
         <Route path="/orders/:id" component={OrderDetailPage} />
         <Route path="/kds" component={Kitchen} />
         <Route path="/kitchen" component={Kitchen} />
-        <Route path="/cashier" component={() => <StubPage title={t("stub.cashierPos")} />} />
+        <Route path="/cashier" component={CashierPage} />
         <Route path="/menu" component={MenuPage} />
         <Route path="/inventory" component={() => <StubPage title={t("nav.inventory")} />} />
         <Route path="/staff" component={() => <StubPage title={t("nav.staff")} />} />
