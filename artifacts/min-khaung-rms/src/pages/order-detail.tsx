@@ -14,6 +14,7 @@ import {
 import type { MenuItem, MenuCategory } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Loader2, ArrowLeft, Plus, Minus, Trash2,
   CreditCard, ChefHat, Clock, CheckCircle2, Circle,
@@ -24,16 +25,25 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
-const KITCHEN_STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  new:     { label: "New",     color: "bg-slate-100 text-slate-600 border-slate-200",      icon: <Circle className="w-3 h-3" /> },
-  cooking: { label: "Cooking", color: "bg-amber-100 text-amber-700 border-amber-200",      icon: <Clock className="w-3 h-3" /> },
-  ready:   { label: "Ready",   color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: <CheckCircle2 className="w-3 h-3" /> },
-  served:  { label: "Served",  color: "bg-blue-100 text-blue-700 border-blue-200",          icon: <ChefHat className="w-3 h-3" /> },
+const KITCHEN_STATUS_STYLE: Record<string, { color: string; icon: React.ReactNode }> = {
+  new: { color: "bg-slate-100 text-slate-600 border-slate-200", icon: <Circle className="w-3 h-3" /> },
+  cooking: { color: "bg-amber-100 text-amber-700 border-amber-200", icon: <Clock className="w-3 h-3" /> },
+  ready: { color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: <CheckCircle2 className="w-3 h-3" /> },
+  served: { color: "bg-blue-100 text-blue-700 border-blue-200", icon: <ChefHat className="w-3 h-3" /> },
 };
 
+function getKitchenStatusLabel(status: string, t: (key: string) => string): string {
+  if (status === "new") return t("orderDetail.kitchen.new");
+  if (status === "cooking") return t("orderDetail.kitchen.cooking");
+  if (status === "ready") return t("orderDetail.kitchen.ready");
+  if (status === "served") return t("orderDetail.kitchen.served");
+  return status;
+}
+
 export default function OrderDetailPage() {
+  const { t } = useTranslation();
   const params = useParams<{ id: string }>();
-  const orderId = parseInt(params.id ?? "0");
+  const orderId = parseInt(params.id ?? "0", 10);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -42,14 +52,13 @@ export default function OrderDetailPage() {
     query: {
       queryKey: getGetOrderQueryKey(orderId),
       refetchInterval: 15000,
-    }
+    },
   });
 
   const addItem = useAddOrderItem();
   const removeItem = useRemoveOrderItem();
   const updateOrder = useUpdateOrder();
 
-  // Add-more-items panel state
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [activeCatId, setActiveCatId] = useState<number | null>(null);
   const [searchQ, setSearchQ] = useState("");
@@ -63,15 +72,15 @@ export default function OrderDetailPage() {
       query: {
         enabled: showAddPanel && resolvedCatId != null,
         queryKey: getListMenuItemsQueryKey(resolvedCatId != null ? { categoryId: resolvedCatId } : undefined),
-      }
-    }
+      },
+    },
   );
 
   const filteredMenuItems = useMemo(() => {
     const q = searchQ.trim().toLowerCase();
-    const avail = menuItems.filter(i => i.available !== "false" && i.available !== "0");
+    const avail = menuItems.filter((i) => i.available !== "false" && i.available !== "0");
     if (!q) return avail;
-    return avail.filter(i => i.name.toLowerCase().includes(q) || i.nameMyanmar.includes(q));
+    return avail.filter((i) => i.name.toLowerCase().includes(q) || i.nameMyanmar.toLowerCase().includes(q));
   }, [menuItems, searchQ]);
 
   const handleAddItem = async (item: MenuItem) => {
@@ -80,9 +89,9 @@ export default function OrderDetailPage() {
       await addItem.mutateAsync({ id: orderId, data: { menuItemId: item.id, quantity: 1 } });
       await refetch();
       qc.invalidateQueries({ queryKey: getListTablesQueryKey() });
-      toast({ title: `${item.name} added` });
+      toast({ title: t("orderDetail.toastAdded", { name: item.name }) });
     } catch {
-      toast({ title: "Failed to add item", variant: "destructive" });
+      toast({ title: t("orderDetail.toastAddFailed"), variant: "destructive" });
     }
   };
 
@@ -91,9 +100,9 @@ export default function OrderDetailPage() {
       await removeItem.mutateAsync({ id: orderId, itemId });
       await refetch();
       qc.invalidateQueries({ queryKey: getListTablesQueryKey() });
-      toast({ title: `${itemName} removed` });
+      toast({ title: t("orderDetail.toastRemoved", { name: itemName }) });
     } catch {
-      toast({ title: "Failed to remove item", variant: "destructive" });
+      toast({ title: t("orderDetail.toastRemoveFailed"), variant: "destructive" });
     }
   };
 
@@ -102,9 +111,9 @@ export default function OrderDetailPage() {
       await updateOrder.mutateAsync({ id: orderId, data: { status: "ready_to_pay" } });
       await refetch();
       qc.invalidateQueries({ queryKey: getListTablesQueryKey() });
-      toast({ title: "Order marked as ready to pay" });
+      toast({ title: t("orderDetail.toastReadyToPay") });
     } catch {
-      toast({ title: "Failed to update order", variant: "destructive" });
+      toast({ title: t("orderDetail.toastUpdateFailed"), variant: "destructive" });
     }
   };
 
@@ -120,25 +129,24 @@ export default function OrderDetailPage() {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
         <div className="text-center">
-          <p className="text-lg font-semibold">Order not found</p>
-          <Button variant="link" onClick={() => setLocation("/floor-plan")}>← Back to Floor Plan</Button>
+          <p className="text-lg font-semibold">{t("orderDetail.notFound")}</p>
+          <Button variant="link" onClick={() => setLocation("/floor-plan")}>{t("orderDetail.backToFloor")}</Button>
         </div>
       </div>
     );
   }
 
   const statusBadge = {
-    open:            { label: "Open",            className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
-    ready_to_pay:    { label: "Ready to Pay",    className: "bg-red-100 text-red-700 border-red-300" },
-    paid:            { label: "Paid",             className: "bg-blue-100 text-blue-700 border-blue-300" },
-    cancelled:       { label: "Cancelled",        className: "bg-slate-100 text-slate-600 border-slate-300" },
+    open: { label: t("orders.status.open"), className: "bg-emerald-100 text-emerald-700 border-emerald-300" },
+    ready_to_pay: { label: t("orders.status.readyToPay"), className: "bg-red-100 text-red-700 border-red-300" },
+    paid: { label: t("orders.status.paid"), className: "bg-blue-100 text-blue-700 border-blue-300" },
+    cancelled: { label: t("orders.status.cancelled"), className: "bg-slate-100 text-slate-600 border-slate-300" },
   }[order.status] ?? { label: order.status, className: "" };
 
   const isActive = order.status === "open";
 
   return (
     <div className="flex flex-col h-full gap-4">
-      {/* Header */}
       <div className="flex items-center gap-3 flex-shrink-0 flex-wrap">
         <button
           onClick={() => setLocation("/floor-plan")}
@@ -148,10 +156,10 @@ export default function OrderDetailPage() {
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">
-            Order #{order.id}
+            {t("orderDetail.orderTitle", { id: order.id })}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Table <span className="font-bold text-foreground">{order.tableNumber}</span>
+            {t("orderDetail.tableMeta", { table: order.tableNumber })}
             {" · "}
             {new Date(order.createdAt).toLocaleString()}
           </p>
@@ -163,10 +171,10 @@ export default function OrderDetailPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowAddPanel(p => !p)}
+            onClick={() => setShowAddPanel((p) => !p)}
           >
             <Plus className="w-4 h-4 mr-1" />
-            {showAddPanel ? "Close Menu" : "Add Items"}
+            {showAddPanel ? t("orderDetail.closeMenu") : t("orderDetail.addItems")}
           </Button>
         )}
         {order.status === "open" && (
@@ -177,29 +185,27 @@ export default function OrderDetailPage() {
             onClick={handleMarkReadyToPay}
             disabled={updateOrder.isPending}
           >
-            <CreditCard className="w-4 h-4 mr-1" /> Ready to Pay
+            <CreditCard className="w-4 h-4 mr-1" /> {t("orderDetail.readyToPay")}
           </Button>
         )}
         {(order.status === "open" || order.status === "ready_to_pay") && (
           <Button size="sm" className="bg-red-500 hover:bg-red-600" onClick={handleGoToCashier}>
-            <CreditCard className="w-4 h-4 mr-1" /> Process Payment
+            <CreditCard className="w-4 h-4 mr-1" /> {t("orderDetail.processPayment")}
           </Button>
         )}
       </div>
 
       <div className="flex-1 flex gap-5 min-h-0">
-        {/* ── Left: Order items ── */}
         <div className="flex-1 flex flex-col min-w-0 gap-4">
-          {/* Items table */}
           <div className="flex-1 overflow-y-auto">
             {order.items.length === 0 ? (
               <div className="h-full flex items-center justify-center text-muted-foreground">
                 <div className="text-center">
                   <ShoppingBag className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                  <p>No items yet</p>
+                  <p>{t("orderDetail.noItems")}</p>
                   {isActive && (
                     <Button variant="link" onClick={() => setShowAddPanel(true)}>
-                      + Add items
+                      {t("orderDetail.quickAddItems")}
                     </Button>
                   )}
                 </div>
@@ -209,16 +215,16 @@ export default function OrderDetailPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 border-b">
                     <tr>
-                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Item</th>
-                      <th className="text-center px-3 py-3 font-semibold text-muted-foreground">Qty</th>
-                      <th className="text-right px-3 py-3 font-semibold text-muted-foreground">Price</th>
-                      <th className="text-center px-3 py-3 font-semibold text-muted-foreground">Kitchen</th>
-                      {isActive && <th className="px-3 py-3"></th>}
+                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">{t("orderDetail.colItem")}</th>
+                      <th className="text-center px-3 py-3 font-semibold text-muted-foreground">{t("orderDetail.colQty")}</th>
+                      <th className="text-right px-3 py-3 font-semibold text-muted-foreground">{t("orderDetail.colPrice")}</th>
+                      <th className="text-center px-3 py-3 font-semibold text-muted-foreground">{t("orderDetail.colKitchen")}</th>
+                      {isActive && <th className="px-3 py-3" />}
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {order.items.map(item => {
-                      const kCfg = KITCHEN_STATUS_CONFIG[item.kitchenStatus] ?? KITCHEN_STATUS_CONFIG.new;
+                    {order.items.map((item) => {
+                      const kCfg = KITCHEN_STATUS_STYLE[item.kitchenStatus] ?? KITCHEN_STATUS_STYLE.new;
                       return (
                         <tr key={item.id} className="hover:bg-muted/20 transition-colors">
                           <td className="px-4 py-3">
@@ -235,7 +241,7 @@ export default function OrderDetailPage() {
                               className={`text-xs font-semibold gap-1 ${kCfg.color}`}
                             >
                               {kCfg.icon}
-                              {kCfg.label}
+                              {getKitchenStatusLabel(item.kitchenStatus, t)}
                             </Badge>
                           </td>
                           {isActive && (
@@ -243,7 +249,7 @@ export default function OrderDetailPage() {
                               <button
                                 onClick={() => handleRemoveItem(item.id, item.menuItemName)}
                                 className="p-1.5 rounded hover:bg-red-100 hover:text-red-600 text-muted-foreground transition-colors"
-                                title="Remove item"
+                                title={t("orderDetail.removeItem")}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -258,46 +264,43 @@ export default function OrderDetailPage() {
             )}
           </div>
 
-          {/* Totals */}
           <div className="bg-card border rounded-xl p-4 flex-shrink-0">
             <div className="space-y-2 text-sm max-w-xs ml-auto">
               <div className="flex justify-between text-muted-foreground">
-                <span>Subtotal</span>
+                <span>{t("orders.subtotal")}</span>
                 <span>{Number(order.subtotal).toLocaleString()} ks</span>
               </div>
               {Number(order.airconFee) > 0 && (
                 <div className="flex justify-between text-blue-600">
-                  <span>Aircon Fee</span>
+                  <span>{t("orders.airconFee")}</span>
                   <span>+ {Number(order.airconFee).toLocaleString()} ks</span>
                 </div>
               )}
               <div className="flex justify-between text-muted-foreground">
-                <span>Tax (5%)</span>
+                <span>{t("orderDetail.tax")}</span>
                 <span>{Number(order.taxAmount).toLocaleString()} ks</span>
               </div>
               <div className="flex justify-between font-black text-base border-t pt-2">
-                <span>Total</span>
+                <span>{t("orders.total")}</span>
                 <span className="text-primary">{Number(order.totalAmount).toLocaleString()} ks</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── Right: Add items panel ── */}
         {showAddPanel && isActive && (
           <div className="w-72 flex-shrink-0 flex flex-col bg-card border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2.5 border-b bg-muted/30 flex-shrink-0">
               <span className="font-bold text-sm flex items-center gap-1.5">
-                <UtensilsCrossed className="w-4 h-4 text-muted-foreground" /> Add Items
+                <UtensilsCrossed className="w-4 h-4 text-muted-foreground" /> {t("orderDetail.addItems")}
               </span>
               <button onClick={() => setShowAddPanel(false)} className="text-muted-foreground hover:text-foreground p-1">
                 <Minus className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Category tabs */}
             <div className="flex gap-1.5 px-2 py-2 overflow-x-auto flex-shrink-0 border-b">
-              {(categories as MenuCategory[]).map(cat => (
+              {(categories as MenuCategory[]).map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => setActiveCatId(cat.id)}
@@ -312,24 +315,22 @@ export default function OrderDetailPage() {
               ))}
             </div>
 
-            {/* Search */}
             <div className="relative px-2 py-2 flex-shrink-0 border-b">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
-                placeholder="Search..."
+                placeholder={t("orderDetail.searchPlaceholder")}
                 value={searchQ}
-                onChange={e => setSearchQ(e.target.value)}
+                onChange={(e) => setSearchQ(e.target.value)}
                 className="pl-8 h-8 text-xs"
               />
             </div>
 
-            {/* Items list */}
             <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
               {menuLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                 </div>
-              ) : filteredMenuItems.map(item => (
+              ) : filteredMenuItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => handleAddItem(item)}

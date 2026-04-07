@@ -11,25 +11,22 @@ import { Loader2, CheckCircle, Clock, ChefHat } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useSearch } from "wouter";
+import { useTranslation } from "react-i18next";
 
-const STATIONS = [
-  { value: "salad", label: "Salad" },
-  { value: "tea-coffee", label: "Tea & Coffee" },
-  { value: "juice", label: "Juice" },
-  { value: "kitchen", label: "Kitchen" },
-] as const;
+const STATIONS = ["salad", "tea-coffee", "juice", "kitchen"] as const;
 
-type StationCode = (typeof STATIONS)[number]["value"];
+type StationCode = (typeof STATIONS)[number];
 
 function isStationCode(value: string | null): value is StationCode {
-  return STATIONS.some((station) => station.value === value);
+  return STATIONS.some((station) => station === value);
 }
 
-function getStationLabel(station: StationCode): string {
-  return STATIONS.find((item) => item.value === station)?.label ?? station;
+function getStationLabel(station: StationCode, t: (key: string) => string): string {
+  return t(`station.${station}`);
 }
 
 export default function Kitchen() {
+  const { t } = useTranslation();
   const search = useSearch();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -98,19 +95,19 @@ export default function Kitchen() {
         <div className="flex items-center gap-3">
           <ChefHat className="h-8 w-8" />
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Kitchen Display System</h1>
-            <p className="text-sm opacity-90">Station: {getStationLabel(station)}</p>
+            <h1 className="text-3xl font-bold tracking-tight">{t("kitchen.title")}</h1>
+            <p className="text-sm opacity-90">{t("kitchen.station", { station: getStationLabel(station, t) })}</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
           {STATIONS.map((item) => (
             <Button
-              key={item.value}
-              variant={station === item.value ? "secondary" : "outline"}
-              className={station === item.value ? "text-foreground" : "text-primary-foreground border-primary-foreground/60"}
-              onClick={() => handleStationChange(item.value)}
+              key={item}
+              variant={station === item ? "secondary" : "outline"}
+              className={station === item ? "text-foreground" : "text-primary-foreground border-primary-foreground/60"}
+              onClick={() => handleStationChange(item)}
             >
-              {item.label}
+              {getStationLabel(item, t)}
             </Button>
           ))}
         </div>
@@ -122,8 +119,10 @@ export default function Kitchen() {
             <CardHeader className="bg-muted pb-3">
               <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="text-2xl font-black">Table {order.tableNumber}</CardTitle>
-                  <span className="text-sm font-semibold uppercase text-muted-foreground">{order.zone}</span>
+                  <CardTitle className="text-2xl font-black">{t("kitchen.table", { table: order.tableNumber })}</CardTitle>
+                  <span className="text-sm font-semibold uppercase text-muted-foreground">
+                    {order.zone === "aircon" ? t("zones.airconShort") : t("zones.hallShort")}
+                  </span>
                 </div>
                 <div className="flex items-center text-red-600 font-bold bg-red-100 px-2 py-1 rounded">
                   <Clock className="w-4 h-4 mr-1" />
@@ -146,7 +145,7 @@ export default function Kitchen() {
                     {(item.customizations || item.notes) && (
                       <div className="mt-2 text-sm opacity-90 pl-10 border-l-2 border-current ml-2">
                         {item.customizations && <p className="italic">{item.customizations}</p>}
-                        {item.notes && <p className="font-semibold text-red-700">Note: {item.notes}</p>}
+                        {item.notes && <p className="font-semibold text-red-700">{t("kitchen.note")} {item.notes}</p>}
                       </div>
                     )}
                     <div className="mt-3 flex justify-end">
@@ -156,7 +155,7 @@ export default function Kitchen() {
                         disabled={ready || updateStatus.isPending}
                         className={ready ? "opacity-75" : ""}
                       >
-                        {ready ? "Ready" : "Done"}
+                        {ready ? t("kitchen.ready") : t("kitchen.done")}
                       </Button>
                     </div>
                   </div>
@@ -168,8 +167,8 @@ export default function Kitchen() {
         {(!orders || orders.length === 0) && (
           <div className="col-span-full flex flex-col items-center justify-center text-muted-foreground h-[400px]">
             <CheckCircle className="h-16 w-16 mb-4 text-green-500 opacity-50" />
-            <h2 className="text-2xl font-bold">All clear for {getStationLabel(station)}!</h2>
-            <p>No active items in this station right now.</p>
+            <h2 className="text-2xl font-bold">{t("kitchen.allClear", { station: getStationLabel(station, t) })}</h2>
+            <p>{t("kitchen.noActiveItems")}</p>
           </div>
         )}
       </div>

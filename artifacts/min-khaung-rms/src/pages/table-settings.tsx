@@ -9,6 +9,7 @@ import {
 import type { CreateTableBody, Table, UpdateTableBody } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Pencil, Trash2, Settings2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -48,10 +49,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 
-const ZONE_OPTIONS = [
-  { value: "hall", label: "Hall Zone" },
-  { value: "aircon", label: "Air-con Room" },
-] as const;
+const ZONE_OPTIONS = ["hall", "aircon"] as const;
 
 const CATEGORY_OPTIONS = ["Standard", "VIP", "Buffer"] as const;
 const SERVICE_STATUS_OPTIONS = ["Active", "Maintenance", "Archived"] as const;
@@ -97,6 +95,13 @@ function getOccupancyBadgeClass(status: Table["occupancyStatus"]): string {
   return "bg-slate-100 text-slate-700 border-slate-300";
 }
 
+function getZoneLabel(zone: "hall" | "aircon", t: (key: string) => string, short = false): string {
+  if (zone === "aircon") {
+    return t(short ? "zones.airconShort" : "zones.aircon");
+  }
+  return t(short ? "zones.hallShort" : "zones.hall");
+}
+
 function TableDialog({
   open,
   table,
@@ -110,6 +115,7 @@ function TableDialog({
   onOpenChange: (open: boolean) => void;
   onSubmit: (payload: CreateTableBody | UpdateTableBody) => void;
 }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<FormState>(() => getInitialForm(table));
 
   useEffect(() => {
@@ -142,31 +148,33 @@ function TableDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{table ? `Edit Table ${table.tableNumber}` : "Add New Table"}</DialogTitle>
+          <DialogTitle>
+            {table ? t("tableSettings.editTable", { tableNumber: table.tableNumber }) : t("tableSettings.addTable")}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>Table Number</Label>
+              <Label>{t("tableSettings.tableNumber")}</Label>
               <Input
                 value={form.tableNumber}
                 onChange={(event) => setForm((prev) => ({ ...prev, tableNumber: event.target.value }))}
-                placeholder="e.g. H9"
+                placeholder={t("tableSettings.tableNumberPlaceholder")}
                 autoFocus
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label>Zone</Label>
+              <Label>{t("tableSettings.zone")}</Label>
               <Select value={form.zone} onValueChange={(value) => setForm((prev) => ({ ...prev, zone: value as FormState["zone"] }))}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select zone" />
+                  <SelectValue placeholder={t("tableSettings.selectZone")} />
                 </SelectTrigger>
                 <SelectContent>
                   {ZONE_OPTIONS.map((zone) => (
-                    <SelectItem key={zone.value} value={zone.value}>
-                      {zone.label}
+                    <SelectItem key={zone} value={zone}>
+                      {getZoneLabel(zone, t)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -176,7 +184,7 @@ function TableDialog({
 
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <div className="space-y-1.5">
-              <Label>Capacity</Label>
+              <Label>{t("tableSettings.capacity")}</Label>
               <Input
                 type="number"
                 min={1}
@@ -186,18 +194,18 @@ function TableDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label>Category</Label>
+              <Label>{t("tableSettings.category")}</Label>
               <Select
                 value={form.category}
                 onValueChange={(value) => setForm((prev) => ({ ...prev, category: value as FormState["category"] }))}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder={t("tableSettings.selectCategory")} />
                 </SelectTrigger>
                 <SelectContent>
                   {CATEGORY_OPTIONS.map((category) => (
                     <SelectItem key={category} value={category}>
-                      {category}
+                      {t(`category.${category}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -205,15 +213,15 @@ function TableDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label>Service Status</Label>
+              <Label>{t("tableSettings.serviceStatus")}</Label>
               <Select value={form.status} onValueChange={(value) => setForm((prev) => ({ ...prev, status: value as FormState["status"] }))}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
+                  <SelectValue placeholder={t("tableSettings.selectStatus")} />
                 </SelectTrigger>
                 <SelectContent>
                   {SERVICE_STATUS_OPTIONS.map((status) => (
                     <SelectItem key={status} value={status}>
-                      {status}
+                      {t(`status.service.${status}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -221,18 +229,18 @@ function TableDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label>Occupancy</Label>
+              <Label>{t("tableSettings.occupancy")}</Label>
               <Select
                 value={form.occupancyStatus}
                 onValueChange={(value) => setForm((prev) => ({ ...prev, occupancyStatus: value as FormState["occupancyStatus"] }))}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select occupancy" />
+                  <SelectValue placeholder={t("tableSettings.selectOccupancy")} />
                 </SelectTrigger>
                 <SelectContent>
                   {OCCUPANCY_OPTIONS.map((status) => (
                     <SelectItem key={status} value={status}>
-                      {status}
+                      {t(`status.occupancy.${status}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -242,7 +250,7 @@ function TableDialog({
 
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
             <div className="space-y-1.5">
-              <Label>Position X</Label>
+              <Label>{t("tableSettings.positionX")}</Label>
               <Input
                 type="number"
                 value={form.posX}
@@ -250,7 +258,7 @@ function TableDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Position Y</Label>
+              <Label>{t("tableSettings.positionY")}</Label>
               <Input
                 type="number"
                 value={form.posY}
@@ -264,8 +272,8 @@ function TableDialog({
                   onCheckedChange={(checked) => setForm((prev) => ({ ...prev, isBooked: Boolean(checked) }))}
                 />
                 <div>
-                  <p className="text-sm font-medium">Reserved</p>
-                  <p className="text-xs text-muted-foreground">Mark this table as booked</p>
+                  <p className="text-sm font-medium">{t("tableSettings.reserved")}</p>
+                  <p className="text-xs text-muted-foreground">{t("tableSettings.reservedHint")}</p>
                 </div>
               </div>
             </div>
@@ -274,11 +282,11 @@ function TableDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={submit} disabled={!valid || saving}>
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            {table ? "Save Changes" : "Add Table"}
+            {table ? t("common.saveChanges") : t("tableSettings.addTable")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -287,6 +295,7 @@ function TableDialog({
 }
 
 export default function TableSettingsPage() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -316,11 +325,11 @@ export default function TableSettingsPage() {
       await createTable.mutateAsync({ data: payload as CreateTableBody });
       await refreshTables();
       setDialogOpen(false);
-      toast({ title: "Table created successfully." });
+      toast({ title: t("tableSettings.tableCreated") });
     } catch (error) {
       toast({
-        title: "Failed to create table",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: t("tableSettings.failedCreate"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
         variant: "destructive",
       });
     }
@@ -333,11 +342,11 @@ export default function TableSettingsPage() {
       await refreshTables();
       setDialogOpen(false);
       setEditingTable(undefined);
-      toast({ title: `Table ${editingTable.tableNumber} updated.` });
+      toast({ title: t("tableSettings.tableUpdated", { tableNumber: editingTable.tableNumber }) });
     } catch (error) {
       toast({
-        title: "Failed to update table",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: t("tableSettings.failedUpdate"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
         variant: "destructive",
       });
     }
@@ -348,11 +357,11 @@ export default function TableSettingsPage() {
     try {
       await deleteTable.mutateAsync({ id: deletingTable.id });
       await refreshTables();
-      toast({ title: `Table ${deletingTable.tableNumber} removed.` });
+      toast({ title: t("tableSettings.tableRemoved", { tableNumber: deletingTable.tableNumber }) });
     } catch (error) {
       toast({
-        title: "Failed to delete table",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: t("tableSettings.failedDelete"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
         variant: "destructive",
       });
     } finally {
@@ -378,11 +387,16 @@ export default function TableSettingsPage() {
         },
       });
       await refreshTables();
-      toast({ title: `Table ${table.tableNumber} set to ${nextStatus}.` });
+      toast({
+        title: t("tableSettings.setStatus", {
+          tableNumber: table.tableNumber,
+          status: t(`status.service.${nextStatus}`),
+        }),
+      });
     } catch (error) {
       toast({
-        title: "Failed to update status",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: t("tableSettings.failedUpdateStatus"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
         variant: "destructive",
       });
     }
@@ -400,8 +414,8 @@ export default function TableSettingsPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Table Settings</h1>
-          <p className="text-sm text-muted-foreground">Manage table layout, service status, category, and reservation flags.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t("tableSettings.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("tableSettings.subtitle")}</p>
         </div>
 
         <Button
@@ -412,7 +426,7 @@ export default function TableSettingsPage() {
           className="gap-2"
         >
           <Plus className="h-4 w-4" />
-          Add New Table
+          {t("tableSettings.addNewTable")}
         </Button>
       </div>
 
@@ -420,16 +434,16 @@ export default function TableSettingsPage() {
         <DataTable>
           <TableHeader>
             <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Table</TableHead>
-              <TableHead>Zone</TableHead>
-              <TableHead>Capacity</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Service</TableHead>
-              <TableHead>Reserved</TableHead>
-              <TableHead>Occupancy</TableHead>
-              <TableHead>Position</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>{t("tableSettings.columns.id")}</TableHead>
+              <TableHead>{t("tableSettings.columns.table")}</TableHead>
+              <TableHead>{t("tableSettings.columns.zone")}</TableHead>
+              <TableHead>{t("tableSettings.columns.capacity")}</TableHead>
+              <TableHead>{t("tableSettings.columns.category")}</TableHead>
+              <TableHead>{t("tableSettings.columns.service")}</TableHead>
+              <TableHead>{t("tableSettings.columns.reserved")}</TableHead>
+              <TableHead>{t("tableSettings.columns.occupancy")}</TableHead>
+              <TableHead>{t("tableSettings.columns.position")}</TableHead>
+              <TableHead className="text-right">{t("tableSettings.columns.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -437,28 +451,28 @@ export default function TableSettingsPage() {
               <TableRow key={table.id}>
                 <TableCell className="font-semibold">#{table.id}</TableCell>
                 <TableCell className="font-semibold">{table.tableNumber}</TableCell>
-                <TableCell>{table.zone === "aircon" ? "Air-con" : "Hall"}</TableCell>
+                <TableCell>{getZoneLabel(table.zone as "hall" | "aircon", t, true)}</TableCell>
                 <TableCell>{table.capacity}</TableCell>
-                <TableCell>{table.category}</TableCell>
+                <TableCell>{t(`category.${table.category}`)}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className={getStatusBadgeClass(table.status)}>
-                    {table.status}
+                    {t(`status.service.${table.status}`)}
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  {table.isBooked ? <Badge className="bg-blue-500 text-white">Reserved</Badge> : <span className="text-muted-foreground">No</span>}
+                  {table.isBooked ? <Badge className="bg-blue-500 text-white">{t("tableSettings.reserved")}</Badge> : <span className="text-muted-foreground">{t("common.no")}</span>}
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline" className={getOccupancyBadgeClass(table.occupancyStatus)}>
-                    {table.occupancyStatus}
+                    {t(`status.occupancy.${table.occupancyStatus}`)}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
-                  x:{table.posX} y:{table.posY}
+                  {t("tableSettings.columns.positionValue", { x: table.posX, y: table.posY })}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1.5">
-                    <Button variant="ghost" size="icon" onClick={() => toggleServiceStatus(table)} title="Toggle service status">
+                    <Button variant="ghost" size="icon" onClick={() => toggleServiceStatus(table)} title={t("tableSettings.toggleServiceStatus")}>
                       <Settings2 className="h-4 w-4" />
                     </Button>
                     <Button
@@ -468,11 +482,11 @@ export default function TableSettingsPage() {
                         setEditingTable(table);
                         setDialogOpen(true);
                       }}
-                      title="Edit table"
+                      title={t("tableSettings.editTableAction")}
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setDeletingTable(table)} title="Delete table">
+                    <Button variant="ghost" size="icon" onClick={() => setDeletingTable(table)} title={t("tableSettings.deleteTableAction")}>
                       <Trash2 className="h-4 w-4 text-red-600" />
                     </Button>
                   </div>
@@ -482,7 +496,7 @@ export default function TableSettingsPage() {
             {sortedTables.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={10} className="py-10 text-center text-muted-foreground">
-                  No tables found.
+                  {t("tableSettings.noTablesFound")}
                 </TableCell>
               </TableRow>
             ) : null}
@@ -504,20 +518,20 @@ export default function TableSettingsPage() {
       <AlertDialog open={Boolean(deletingTable)} onOpenChange={(open) => !open && setDeletingTable(undefined)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove this table?</AlertDialogTitle>
+            <AlertDialogTitle>{t("tableSettings.removeDialogTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This action will permanently delete table {deletingTable?.tableNumber}. Ensure it has no ongoing order.
+              {t("tableSettings.removeDialogDescription", { tableNumber: deletingTable?.tableNumber ?? "" })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               className="bg-red-600 text-white hover:bg-red-700"
               disabled={deleteTable.isPending}
             >
               {deleteTable.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Delete Table
+              {t("tableSettings.deleteTable")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

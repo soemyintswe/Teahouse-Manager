@@ -16,6 +16,7 @@ import {
   Receipt,
 } from "lucide-react";
 import { useLocation } from "wouter";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -40,38 +41,38 @@ type TableData = {
 
 const OCCUPANCY_CONFIG: Record<
   TableData["occupancyStatus"],
-  { label: string; bg: string; border: string; text: string; dot: string }
+  { labelKey: string; bg: string; border: string; text: string; dot: string }
 > = {
   available: {
-    label: "Available",
+    labelKey: "status.occupancy.available",
     bg: "bg-emerald-500",
     border: "border-emerald-700",
     text: "text-white",
     dot: "bg-emerald-300",
   },
   occupied: {
-    label: "Occupied",
+    labelKey: "status.occupancy.occupied",
     bg: "bg-amber-400",
     border: "border-amber-600",
     text: "text-amber-950",
     dot: "bg-amber-300",
   },
   payment_pending: {
-    label: "Payment Pending",
+    labelKey: "status.occupancy.payment_pending",
     bg: "bg-red-500",
     border: "border-red-700",
     text: "text-white",
     dot: "bg-red-300",
   },
   paid: {
-    label: "Paid",
+    labelKey: "status.occupancy.paid",
     bg: "bg-blue-500",
     border: "border-blue-700",
     text: "text-white",
     dot: "bg-blue-300",
   },
   dirty: {
-    label: "Dirty",
+    labelKey: "status.occupancy.dirty",
     bg: "bg-slate-500",
     border: "border-slate-700",
     text: "text-white",
@@ -83,8 +84,21 @@ const FLOOR_CANVAS_WIDTH = 620;
 const FLOOR_CANVAS_HEIGHT = 350;
 const DEFAULT_FLOOR_ZOOM = 0.8;
 
+function getCategoryLabel(category: TableData["category"], t: (key: string, options?: Record<string, unknown>) => string) {
+  return t(`category.${category}`);
+}
+
+function getZoneLabel(zone: TableData["zone"], t: (key: string) => string, short = false): string {
+  if (zone === "aircon") {
+    return t(short ? "zones.airconShort" : "zones.aircon");
+  }
+  return t(short ? "zones.hallShort" : "zones.hall");
+}
+
 function TableCard({ table, onClick }: { table: TableData; onClick: () => void }) {
+  const { t } = useTranslation();
   const occupancyConfig = OCCUPANCY_CONFIG[table.occupancyStatus] ?? OCCUPANCY_CONFIG.available;
+  const occupancyLabel = t(occupancyConfig.labelKey);
   const isMaintenance = table.status === "Maintenance";
 
   const baseClass = isMaintenance
@@ -114,26 +128,31 @@ function TableCard({ table, onClick }: { table: TableData; onClick: () => void }
       {isMaintenance ? <Lock className="absolute top-2 left-2 h-3.5 w-3.5" /> : null}
 
       <span className="px-1 text-center text-[10px] sm:text-[11px] font-black leading-tight">
-        {table.tableNumber} - {table.category}
+        {t("floorPlan.tableLabel", {
+          tableNumber: table.tableNumber,
+          category: getCategoryLabel(table.category, t),
+        })}
       </span>
 
-      <span className="px-1 text-center text-[9px] font-semibold leading-tight">(Cap: {table.capacity})</span>
+      <span className="px-1 text-center text-[9px] font-semibold leading-tight">
+        {t("floorPlan.capacity", { capacity: table.capacity })}
+      </span>
 
       <div className="flex items-center gap-1 text-[9px] leading-none">
         {table.category === "VIP" ? (
           <span className="inline-flex items-center gap-0.5 rounded bg-yellow-300/90 px-1 py-0.5 text-yellow-950 font-bold">
-            <Crown className="h-2.5 w-2.5" /> VIP
+            <Crown className="h-2.5 w-2.5" /> {t("category.VIP")}
           </span>
         ) : null}
         {table.isBooked ? (
           <span className="inline-flex items-center gap-0.5 rounded bg-blue-200/90 px-1 py-0.5 text-blue-900 font-bold">
-            <BookmarkCheck className="h-2.5 w-2.5" /> Reserved
+            <BookmarkCheck className="h-2.5 w-2.5" /> {t("floorPlan.reserved")}
           </span>
         ) : null}
       </div>
 
       <span className="text-[8px] font-bold uppercase tracking-wide">
-        {isMaintenance ? "Maintenance" : occupancyConfig.label}
+        {isMaintenance ? t("status.service.Maintenance") : occupancyLabel}
       </span>
     </button>
   );
@@ -143,7 +162,7 @@ function TableCard({ table, onClick }: { table: TableData; onClick: () => void }
   return (
     <Tooltip>
       <TooltipTrigger asChild>{card}</TooltipTrigger>
-      <TooltipContent>Service Suspended</TooltipContent>
+      <TooltipContent>{t("floorPlan.serviceSuspended")}</TooltipContent>
     </Tooltip>
   );
 }
@@ -161,6 +180,7 @@ function QuickActionMenu({
   onCheckout: () => void;
   onMarkClean: () => void;
 }) {
+  const { t } = useTranslation();
   const cfg = OCCUPANCY_CONFIG[table.occupancyStatus] ?? OCCUPANCY_CONFIG.available;
 
   return (
@@ -169,55 +189,56 @@ function QuickActionMenu({
       <div className="fixed inset-x-3 bottom-3 z-50 rounded-xl border bg-card p-4 shadow-2xl sm:inset-x-auto sm:right-4 sm:w-[360px]">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-sm text-muted-foreground">Quick Actions</p>
-            <h3 className="text-xl font-black">
-              Table {table.tableNumber}
-            </h3>
+            <p className="text-sm text-muted-foreground">{t("common.quickActions")}</p>
+            <h3 className="text-xl font-black">{t("floorPlan.table", { tableNumber: table.tableNumber })}</h3>
             <p className="text-xs text-muted-foreground">
-              {table.category} · Cap {table.capacity} · {table.zone === "aircon" ? "Air-con" : "Hall"}
+              {t("floorPlan.tableMeta", {
+                category: getCategoryLabel(table.category, t),
+                capacity: table.capacity,
+                zone: getZoneLabel(table.zone, t, true),
+              })}
             </p>
           </div>
-          <button onClick={onClose} className="rounded p-1 hover:bg-muted/40" aria-label="Close menu">
+          <button onClick={onClose} className="rounded p-1 hover:bg-muted/40" aria-label={t("floorPlan.closeMenu")}>
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <div className="mt-3 flex items-center gap-2">
-          <Badge variant="outline" className="text-xs">ID #{table.id}</Badge>
-          <Badge variant="outline" className="text-xs">{cfg.label}</Badge>
-          {table.isBooked ? <Badge className="text-xs bg-blue-500 text-white">Reserved</Badge> : null}
+          <Badge variant="outline" className="text-xs">
+            {t("floorPlan.tableId", { id: table.id })}
+          </Badge>
+          <Badge variant="outline" className="text-xs">
+            {t(cfg.labelKey)}
+          </Badge>
+          {table.isBooked ? <Badge className="text-xs bg-blue-500 text-white">{t("floorPlan.reserved")}</Badge> : null}
         </div>
 
         <div className="mt-4 space-y-2">
           {table.occupancyStatus === "available" ? (
             <Button className="w-full" onClick={onStartOrder}>
-              Start Order
+              {t("actions.startOrder")}
             </Button>
           ) : null}
 
           {(table.occupancyStatus === "occupied" || table.occupancyStatus === "paid") ? (
             <Button className="w-full bg-slate-700 text-white hover:bg-slate-800" onClick={onCheckout}>
-              Checkout (Mark as Dirty)
+              {t("actions.checkoutMarkDirty")}
             </Button>
           ) : null}
 
           {table.occupancyStatus === "payment_pending" ? (
             <>
-              <Button
-                className="w-full bg-red-600 text-white hover:bg-red-700"
-                onClick={onStartOrder}
-              >
-                <Receipt className="mr-2 h-4 w-4" /> Open Bill / Payment
+              <Button className="w-full bg-red-600 text-white hover:bg-red-700" onClick={onStartOrder}>
+                <Receipt className="mr-2 h-4 w-4" /> {t("floorPlan.openBillPayment")}
               </Button>
-              <p className="text-xs text-muted-foreground">
-                Bill requested. Once payment is confirmed, status will move to Paid automatically.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("floorPlan.paymentPendingHint")}</p>
             </>
           ) : null}
 
           {table.occupancyStatus === "dirty" ? (
             <Button className="w-full bg-emerald-600 text-white hover:bg-emerald-700" onClick={onMarkClean}>
-              <Sparkles className="mr-2 h-4 w-4" /> Mark as Clean
+              <Sparkles className="mr-2 h-4 w-4" /> {t("actions.markClean")}
             </Button>
           ) : null}
         </div>
@@ -227,6 +248,7 @@ function QuickActionMenu({
 }
 
 export default function FloorPlan() {
+  const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -313,17 +335,22 @@ export default function FloorPlan() {
           },
         });
         await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
-        toast({ title: `Table ${table.tableNumber} -> ${OCCUPANCY_CONFIG[next].label}` });
+        toast({
+          title: t("floorPlan.updatedToast", {
+            tableNumber: table.tableNumber,
+            status: t(OCCUPANCY_CONFIG[next].labelKey),
+          }),
+        });
         setSelectedTableId(null);
       } catch (error) {
         toast({
-          title: "Failed to update table",
-          description: error instanceof Error ? error.message : "Unknown error",
+          title: t("floorPlan.failedUpdateTitle"),
+          description: error instanceof Error ? error.message : t("common.unknownError"),
           variant: "destructive",
         });
       }
     },
-    [updateTable, queryClient, toast],
+    [updateTable, queryClient, toast, t],
   );
 
   const handleTableClick = useCallback((table: TableData) => {
@@ -362,20 +389,20 @@ export default function FloorPlan() {
     <div className="flex h-full flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Floor Plan</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Tap a table for quick actions</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t("floorPlan.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("floorPlan.subtitle")}</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="hidden md:flex items-center gap-3 text-sm font-medium">
             {Object.entries(OCCUPANCY_CONFIG).map(([key, cfg]) => (
               <div key={key} className="flex items-center gap-1.5">
                 <div className={`h-3.5 w-3.5 rounded-full ${cfg.bg}`} />
-                <span className="text-muted-foreground">{cfg.label}</span>
+                <span className="text-muted-foreground">{t(cfg.labelKey)}</span>
                 <span className="font-bold text-foreground">{counts[key as keyof typeof counts]}</span>
               </div>
             ))}
             <Badge variant="outline" className="ml-1">
-              Maintenance {maintenanceCount}
+              {t("floorPlan.maintenanceCount", { count: maintenanceCount })}
             </Badge>
           </div>
 
@@ -387,14 +414,14 @@ export default function FloorPlan() {
           </Button>
 
           <div className="flex items-center gap-1 rounded-md border bg-card px-1 py-1">
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomOut} title="Zoom out">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomOut} title={t("floorPlan.zoomOut")}>
               <ZoomOut className="h-3.5 w-3.5" />
             </Button>
             <span className="w-12 text-center text-xs font-semibold">{Math.round(floorZoom * 100)}%</span>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomIn} title="Zoom in">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomIn} title={t("floorPlan.zoomIn")}>
               <ZoomIn className="h-3.5 w-3.5" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomReset} title="Reset zoom">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomReset} title={t("floorPlan.resetZoom")}>
               <RotateCcw className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -414,7 +441,7 @@ export default function FloorPlan() {
             <div className={`h-3 w-3 rounded-full flex-shrink-0 ${cfg.bg}`} />
             <div className="min-w-0">
               <p className="text-2xl font-black text-foreground leading-none">{counts[key as keyof typeof counts]}</p>
-              <p className="text-xs text-muted-foreground truncate mt-0.5">{cfg.label}</p>
+              <p className="text-xs text-muted-foreground truncate mt-0.5">{t(cfg.labelKey)}</p>
             </div>
           </button>
         ))}
@@ -425,17 +452,20 @@ export default function FloorPlan() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-lg font-bold">
-                {OCCUPANCY_CONFIG[statusFilter].label} Tables ({filteredTables.length})
+                {t("floorPlan.availableTablesTitle", {
+                  status: t(OCCUPANCY_CONFIG[statusFilter].labelKey),
+                  count: filteredTables.length,
+                })}
               </h2>
-              <p className="text-sm text-muted-foreground">Tap a row to open quick actions.</p>
+              <p className="text-sm text-muted-foreground">{t("floorPlan.filteredSubtitle")}</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => setStatusFilter(null)}>
-              Clear Filter
+              {t("common.clearFilter")}
             </Button>
           </div>
           {filteredTables.length === 0 ? (
             <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-              No tables found for this status.
+              {t("floorPlan.noTablesForStatus")}
             </div>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -447,19 +477,23 @@ export default function FloorPlan() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-bold">
-                      {table.tableNumber} - {table.category} (Cap: {table.capacity})
+                      {t("floorPlan.tableLabel", {
+                        tableNumber: table.tableNumber,
+                        category: getCategoryLabel(table.category, t),
+                      })}{" "}
+                      {t("floorPlan.capacity", { capacity: table.capacity })}
                     </p>
                     <Badge variant="outline" className="text-xs">
-                      {table.zone === "aircon" ? "Air-con" : "Hall"}
+                      {getZoneLabel(table.zone, t, true)}
                     </Badge>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    ID #{table.id} {table.isBooked ? "· Reserved" : ""}
+                    {t("common.id")} #{table.id} {table.isBooked ? `· ${t("floorPlan.reserved")}` : ""}
                   </p>
                   {table.currentOrderId ? (
-                    <p className="mt-1 text-xs font-medium text-primary">Order #{table.currentOrderId}</p>
+                    <p className="mt-1 text-xs font-medium text-primary">{t("floorPlan.order", { id: table.currentOrderId })}</p>
                   ) : (
-                    <p className="mt-1 text-xs text-muted-foreground">No active order</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{t("floorPlan.noActiveOrder")}</p>
                   )}
                 </button>
               ))}
@@ -472,7 +506,7 @@ export default function FloorPlan() {
         <div className="flex flex-col min-h-0">
           <div className="flex items-center gap-2 mb-2 flex-shrink-0">
             <div className="h-0.5 flex-1 bg-border" />
-            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground px-2">Hall Zone</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground px-2">{t("zones.hall")}</span>
             <div className="h-0.5 flex-1 bg-border" />
           </div>
           <div className="flex-1 rounded-xl border-2 border-dashed border-border bg-muted/30 overflow-auto" data-testid="zone-hall">
@@ -493,7 +527,7 @@ export default function FloorPlan() {
                 ))}
                 {hallTables.length === 0 && (
                   <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
-                    No tables in Hall
+                    {t("floorPlan.noTablesInHall")}
                   </div>
                 )}
               </div>
@@ -504,7 +538,7 @@ export default function FloorPlan() {
         <div className="flex flex-col min-h-0">
           <div className="flex items-center gap-2 mb-2 flex-shrink-0">
             <div className="h-0.5 flex-1 bg-blue-200" />
-            <span className="text-xs font-bold uppercase tracking-widest text-blue-600 px-2">Air-con Room</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-blue-600 px-2">{t("zones.aircon")}</span>
             <div className="h-0.5 flex-1 bg-blue-200" />
           </div>
           <div className="flex-1 rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 overflow-auto" data-testid="zone-aircon">
@@ -528,7 +562,7 @@ export default function FloorPlan() {
                 ))}
                 {airconTables.length === 0 && (
                   <div className="absolute inset-0 flex items-center justify-center text-blue-400 text-sm">
-                    No tables in Air-con Room
+                    {t("floorPlan.noTablesInAircon")}
                   </div>
                 )}
               </div>

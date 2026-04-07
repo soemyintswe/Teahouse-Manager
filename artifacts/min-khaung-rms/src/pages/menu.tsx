@@ -15,6 +15,7 @@ import type {
   UpdateMenuItemBody,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Plus, Pencil, Trash2, Loader2, UtensilsCrossed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -55,14 +56,9 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 
-const STATION_OPTIONS = [
-  { value: "salad", label: "Salad" },
-  { value: "tea-coffee", label: "Tea & Coffee" },
-  { value: "juice", label: "Juice" },
-  { value: "kitchen", label: "Kitchen" },
-] as const;
+const STATION_OPTIONS = ["salad", "tea-coffee", "juice", "kitchen"] as const;
 
-type StationCode = (typeof STATION_OPTIONS)[number]["value"];
+type StationCode = (typeof STATION_OPTIONS)[number];
 type StationFilter = "all" | StationCode;
 
 type ItemFormState = {
@@ -75,8 +71,8 @@ type ItemFormState = {
   available: boolean;
 };
 
-function getStationLabel(station: StationCode): string {
-  return STATION_OPTIONS.find((option) => option.value === station)?.label ?? station;
+function getStationLabel(station: StationCode, t: (key: string) => string): string {
+  return t(`station.${station}`);
 }
 
 function buildInitialItemForm(item: MenuItem | undefined, categories: MenuCategory[]): ItemFormState {
@@ -106,6 +102,7 @@ function ItemDialog({
   onOpenChange: (open: boolean) => void;
   onSubmit: (payload: CreateMenuItemBody | UpdateMenuItemBody) => void;
 }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<ItemFormState>(() => buildInitialItemForm(item, categories));
 
   useEffect(() => {
@@ -136,67 +133,67 @@ function ItemDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{item ? "Edit Menu Item" : "Add New Menu Item"}</DialogTitle>
+          <DialogTitle>{item ? t("menu.editTitle") : t("menu.addTitle")}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>Item Name</Label>
+              <Label>{t("menu.itemName")}</Label>
               <Input
                 value={form.name}
                 onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="e.g. Myanmar Milk Tea"
+                placeholder={t("menu.itemNamePlaceholder")}
                 autoFocus
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Item Name (Myanmar)</Label>
+              <Label>{t("menu.itemNameMm")}</Label>
               <Input
                 value={form.nameMyanmar}
                 onChange={(e) => setForm((prev) => ({ ...prev, nameMyanmar: e.target.value }))}
-                placeholder="e.g. လက်ဖက်ရည်"
+                placeholder={t("menu.itemNameMmPlaceholder")}
               />
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-1.5">
-              <Label>Price (MMK)</Label>
+              <Label>{t("menu.priceMmk")}</Label>
               <Input
                 type="number"
                 min={0}
                 value={form.price}
                 onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
-                placeholder="e.g. 2500"
+                placeholder="2500"
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Station</Label>
+              <Label>{t("menu.station")}</Label>
               <Select
                 value={form.station}
                 onValueChange={(value) => setForm((prev) => ({ ...prev, station: value as StationCode }))}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select station" />
+                  <SelectValue placeholder={t("menu.selectStation")} />
                 </SelectTrigger>
                 <SelectContent>
                   {STATION_OPTIONS.map((station) => (
-                    <SelectItem key={station.value} value={station.value}>
-                      {station.label}
+                    <SelectItem key={station} value={station}>
+                      {getStationLabel(station, t)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Category</Label>
+              <Label>{t("menu.category")}</Label>
               <Select
                 value={form.categoryId}
                 onValueChange={(value) => setForm((prev) => ({ ...prev, categoryId: value }))}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder={t("menu.selectCategory")} />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((category) => (
@@ -210,11 +207,11 @@ function ItemDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Description (optional)</Label>
+            <Label>{t("menu.descriptionOptional")}</Label>
             <Input
               value={form.description}
               onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-              placeholder="Short description"
+              placeholder={t("menu.descriptionPlaceholder")}
             />
           </div>
 
@@ -224,17 +221,17 @@ function ItemDialog({
               checked={form.available}
               onCheckedChange={(checked) => setForm((prev) => ({ ...prev, available: checked }))}
             />
-            <Label htmlFor="item-available">{form.available ? "Available" : "Unavailable"}</Label>
+            <Label htmlFor="item-available">{form.available ? t("menu.available") : t("menu.unavailable")}</Label>
           </div>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={handleSubmit} disabled={!valid || saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {item ? "Save Changes" : "Add Item"}
+            {item ? t("common.saveChanges") : t("actions.addItem")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -243,6 +240,7 @@ function ItemDialog({
 }
 
 export default function MenuPage() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -282,15 +280,15 @@ export default function MenuPage() {
           id: itemDialog.item.id,
           data: payload as UpdateMenuItemBody,
         });
-        toast({ title: "Menu item updated" });
+        toast({ title: t("menu.toastUpdated") });
       } else {
         await createItem.mutateAsync({ data: payload as CreateMenuItemBody });
-        toast({ title: "Menu item added" });
+        toast({ title: t("menu.toastAdded") });
       }
       setItemDialog({ open: false });
       invalidateItems();
     } catch {
-      toast({ title: "Failed to save menu item", variant: "destructive" });
+      toast({ title: t("menu.toastSaveFailed"), variant: "destructive" });
     }
   };
 
@@ -298,11 +296,11 @@ export default function MenuPage() {
     if (!deleteTarget) return;
     try {
       await deleteItem.mutateAsync({ id: deleteTarget.id });
-      toast({ title: "Menu item deleted" });
+      toast({ title: t("menu.toastDeleted") });
       setDeleteTarget(null);
       invalidateItems();
     } catch {
-      toast({ title: "Failed to delete menu item", variant: "destructive" });
+      toast({ title: t("menu.toastDeleteFailed"), variant: "destructive" });
     }
   };
 
@@ -318,21 +316,21 @@ export default function MenuPage() {
     <div className="flex h-full flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Menu Management</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{t("menu.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground">
-            {menuItems.length} items in database
+            {t("menu.itemsCount", { count: menuItems.length })}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={stationFilter} onValueChange={(value) => setStationFilter(value as StationFilter)}>
             <SelectTrigger className="w-44">
-              <SelectValue placeholder="Filter station" />
+              <SelectValue placeholder={t("menu.filterStation")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Stations</SelectItem>
+              <SelectItem value="all">{t("menu.allStations")}</SelectItem>
               {STATION_OPTIONS.map((station) => (
-                <SelectItem key={station.value} value={station.value}>
-                  {station.label}
+                <SelectItem key={station} value={station}>
+                  {getStationLabel(station, t)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -342,7 +340,7 @@ export default function MenuPage() {
             disabled={categories.length === 0}
           >
             <Plus className="mr-2 h-4 w-4" />
-            Add New Item
+            {t("menu.addNewItem")}
           </Button>
         </div>
       </div>
@@ -351,7 +349,7 @@ export default function MenuPage() {
         <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed text-muted-foreground">
           <div className="text-center">
             <UtensilsCrossed className="mx-auto mb-2 h-10 w-10 opacity-30" />
-            <p>No menu category found. Create category first.</p>
+            <p>{t("menu.noCategory")}</p>
           </div>
         </div>
       ) : (
@@ -359,20 +357,20 @@ export default function MenuPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Item Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Station</TableHead>
-                <TableHead className="text-right">Price</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{t("tableSettings.columns.id")}</TableHead>
+                <TableHead>{t("menu.itemName")}</TableHead>
+                <TableHead>{t("menu.category")}</TableHead>
+                <TableHead>{t("menu.station")}</TableHead>
+                <TableHead className="text-right">{t("menu.price")}</TableHead>
+                <TableHead>{t("menu.status")}</TableHead>
+                <TableHead className="text-right">{t("tableSettings.columns.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredItems.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                    No menu items for selected filter.
+                    {t("menu.noItemsForFilter")}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -387,14 +385,14 @@ export default function MenuPage() {
                       </TableCell>
                       <TableCell>{categoryNameById.get(item.categoryId) ?? `Category #${item.categoryId}`}</TableCell>
                       <TableCell>
-                        <Badge variant="secondary">{getStationLabel(item.station)}</Badge>
+                        <Badge variant="secondary">{getStationLabel(item.station, t)}</Badge>
                       </TableCell>
                       <TableCell className="text-right font-semibold">
                         {Number(item.price).toLocaleString()} ks
                       </TableCell>
                       <TableCell>
                         <Badge variant={available ? "secondary" : "outline"}>
-                          {available ? "Available" : "Unavailable"}
+                          {available ? t("menu.available") : t("menu.unavailable")}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -403,7 +401,7 @@ export default function MenuPage() {
                             variant="ghost"
                             size="icon"
                             onClick={() => setItemDialog({ open: true, item })}
-                            title="Edit item"
+                            title={t("menu.editItem")}
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -411,7 +409,7 @@ export default function MenuPage() {
                             variant="ghost"
                             size="icon"
                             onClick={() => setDeleteTarget(item)}
-                            title="Delete item"
+                            title={t("menu.deleteItem")}
                           >
                             <Trash2 className="h-4 w-4 text-red-600" />
                           </Button>
@@ -438,18 +436,18 @@ export default function MenuPage() {
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete menu item?</AlertDialogTitle>
+            <AlertDialogTitle>{t("menu.deleteDialogTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              "{deleteTarget?.name}" ကို ဖျက်မည်။ ဒီလုပ်ဆောင်ချက်ကို ပြန်လည်မပြောင်းနိုင်ပါ။
+              {t("menu.deleteDialogDescription", { name: deleteTarget?.name ?? "" })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDeleteItem}
             >
-              Delete
+              {t("menu.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

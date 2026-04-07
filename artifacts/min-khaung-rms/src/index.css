@@ -111,7 +111,7 @@
   --chart-4: 200 80% 50%;
   --chart-5: 280 60% 60%;
 
-  --app-font-sans: 'Inter', sans-serif;
+  --app-font-sans: 'Inter', 'Noto Sans Myanmar', 'Pyidaungsu', 'Myanmar Text', sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
   --radius: .5rem; /* 8px */
@@ -215,6 +215,10 @@
 @layer base {
   * {
     @apply border-border;
+  }
+
+  html.lang-mm {
+    --app-font-sans: 'Noto Sans Myanmar', 'Pyidaungsu', 'Myanmar Text', 'Inter', sans-serif;
   }
 
   body {

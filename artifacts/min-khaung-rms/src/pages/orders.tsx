@@ -15,6 +15,7 @@ import {
 } from "@workspace/api-client-react";
 import type { MenuCategory, MenuItem, Order } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
   ChefHat,
@@ -42,10 +43,10 @@ type CartItem = {
 
 type HistoryFilter = "today" | "open" | "paid";
 
-const HISTORY_FILTERS: Array<{ value: HistoryFilter; label: string }> = [
-  { value: "today", label: "Today" },
-  { value: "open", label: "Open" },
-  { value: "paid", label: "Paid" },
+const HISTORY_FILTERS: Array<{ value: HistoryFilter; labelKey: string }> = [
+  { value: "today", labelKey: "orders.history.today" },
+  { value: "open", labelKey: "orders.history.open" },
+  { value: "paid", labelKey: "orders.history.paid" },
 ];
 
 function parseTableIdFromSearch(search: string): number | null {
@@ -53,13 +54,6 @@ function parseTableIdFromSearch(search: string): number | null {
   if (!value) return null;
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
-  }
-  return "Failed to complete request.";
 }
 
 function formatMoney(amount: string | number): string {
@@ -73,6 +67,13 @@ function toLocalDateString(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function getZoneLabel(zone: string, t: (key: string) => string, short = false): string {
+  if (zone === "aircon") {
+    return t(short ? "zones.airconShort" : "zones.aircon");
+  }
+  return t(short ? "zones.hallShort" : "zones.hall");
+}
+
 function getOrderStatusBadgeClass(status: string): string {
   if (status === "open") return "border-emerald-300 bg-emerald-50 text-emerald-700";
   if (status === "ready_to_pay") return "border-amber-300 bg-amber-50 text-amber-700";
@@ -81,11 +82,11 @@ function getOrderStatusBadgeClass(status: string): string {
   return "border-muted bg-muted/30 text-muted-foreground";
 }
 
-function getOrderStatusLabel(status: string): string {
-  if (status === "open") return "Open";
-  if (status === "ready_to_pay") return "Ready to Pay";
-  if (status === "paid") return "Paid";
-  if (status === "cancelled") return "Cancelled";
+function getOrderStatusLabel(status: string, t: (key: string) => string): string {
+  if (status === "open") return t("orders.status.open");
+  if (status === "ready_to_pay") return t("orders.status.readyToPay");
+  if (status === "paid") return t("orders.status.paid");
+  if (status === "cancelled") return t("orders.status.cancelled");
   return status;
 }
 
@@ -106,10 +107,12 @@ function OrdersHistoryPanel({
   onUseTable: (tableId: number) => void;
   activeTableId: number | null;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="rounded-lg border bg-card">
       <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
-        <p className="text-sm font-semibold">Orders History</p>
+        <p className="text-sm font-semibold">{t("orders.history.title")}</p>
         <div className="ml-auto flex gap-1.5">
           {HISTORY_FILTERS.map((item) => (
             <button
@@ -121,7 +124,7 @@ function OrdersHistoryPanel({
                   : "bg-muted text-muted-foreground hover:text-foreground"
               }`}
             >
-              {item.label}
+              {t(item.labelKey)}
             </button>
           ))}
         </div>
@@ -133,7 +136,7 @@ function OrdersHistoryPanel({
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : orders.length === 0 ? (
-          <div className="py-8 text-center text-sm text-muted-foreground">No orders in this filter.</div>
+          <div className="py-8 text-center text-sm text-muted-foreground">{t("orders.history.empty")}</div>
         ) : (
           <div className="space-y-2">
             {orders.map((order) => {
@@ -143,14 +146,14 @@ function OrdersHistoryPanel({
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold">
-                        Order #{order.id} · Table {order.tableNumber}
+                        {t("orders.history.orderLine", { id: order.id, table: order.tableNumber })}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(order.createdAt).toLocaleString()}
                       </p>
                     </div>
                     <Badge variant="outline" className={getOrderStatusBadgeClass(order.status)}>
-                      {getOrderStatusLabel(order.status)}
+                      {getOrderStatusLabel(order.status, t)}
                     </Badge>
                   </div>
 
@@ -158,7 +161,7 @@ function OrdersHistoryPanel({
                     <p className="text-sm font-bold text-primary">{formatMoney(order.totalAmount)}</p>
                     <div className="flex gap-1.5">
                       <Button size="sm" variant="outline" onClick={() => onOpenOrder(order.id)}>
-                        Open
+                        {t("orders.history.openBtn")}
                       </Button>
                       <Button
                         size="sm"
@@ -166,7 +169,7 @@ function OrdersHistoryPanel({
                         onClick={() => onUseTable(order.tableId)}
                         disabled={tableActive}
                       >
-                        {tableActive ? "Selected" : "Use Table"}
+                        {tableActive ? t("orders.history.selected") : t("orders.history.useTable")}
                       </Button>
                     </div>
                   </div>
@@ -181,6 +184,7 @@ function OrdersHistoryPanel({
 }
 
 export default function OrdersPage() {
+  const { t } = useTranslation();
   const search = useSearch();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -334,15 +338,15 @@ export default function OrdersPage() {
 
     if (table.status !== "Active") {
       toast({
-        title: "This table is currently unavailable.",
-        description: "Maintenance or archived tables cannot accept new orders.",
+        title: t("orders.unavailableTitle"),
+        description: t("orders.unavailableDesc"),
         variant: "destructive",
       });
       return;
     }
 
     if (existingOpenOrder) {
-      toast({ title: `Table has open order #${existingOpenOrder.id}. Opening it now.` });
+      toast({ title: t("orders.openOrderToast", { id: existingOpenOrder.id }) });
       setLocation(`/orders/${existingOpenOrder.id}`);
       return;
     }
@@ -359,12 +363,12 @@ export default function OrdersPage() {
       await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
       await queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() });
 
-      toast({ title: `Order #${order.id} created for Table ${order.tableNumber}` });
+      toast({ title: t("orders.createdToast", { id: order.id, table: order.tableNumber }) });
       setLocation(`/orders/${order.id}`);
     } catch (error) {
       toast({
-        title: "Unable to create order",
-        description: getErrorMessage(error),
+        title: t("orders.createFailed"),
+        description: error instanceof Error && error.message ? error.message : t("common.unknownError"),
         variant: "destructive",
       });
     }
@@ -381,8 +385,8 @@ export default function OrdersPage() {
   if (!tableId) {
     return (
       <div className="space-y-4">
-        <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
-        <p className="text-sm text-muted-foreground">Select a table to start a new order.</p>
+        <h1 className="text-3xl font-bold tracking-tight">{t("orders.pageTitle")}</h1>
+        <p className="text-sm text-muted-foreground">{t("orders.selectTablePrompt")}</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {selectableTables.map((item) => (
             <button
@@ -390,13 +394,16 @@ export default function OrdersPage() {
               onClick={() => handleSelectTable(item.id)}
               className="rounded-lg border bg-card px-4 py-3 text-left hover:border-primary/40 hover:bg-primary/5 transition-colors"
             >
-              <p className="text-lg font-bold">Table {item.tableNumber}</p>
+              <p className="text-lg font-bold">{t("orders.tableCardTitle", { table: item.tableNumber })}</p>
               <p className="text-xs text-muted-foreground capitalize">
-                {item.zone === "aircon" ? "Air-con Room" : "Hall Zone"} · {item.capacity} seats
+                {t("orders.tableCardMeta", {
+                  zone: getZoneLabel(item.zone, t),
+                  seats: item.capacity,
+                })}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {item.category}
-                {item.isBooked ? " · Reserved" : ""}
+                {t(`category.${item.category}`)}
+                {item.isBooked ? ` · ${t("floorPlan.reserved")}` : ""}
               </p>
             </button>
           ))}
@@ -418,10 +425,10 @@ export default function OrdersPage() {
   if (!table) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-        <p>Table not found.</p>
+        <p>{t("orders.tableNotFound")}</p>
         <Button variant="outline" onClick={() => setLocation("/floor-plan")}>
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Floor Plan
+          {t("orders.backToFloor")}
         </Button>
       </div>
     );
@@ -434,34 +441,38 @@ export default function OrdersPage() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight">Orders · Table {table.tableNumber}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t("orders.header", { table: table.tableNumber })}</h1>
           <p className="text-sm text-muted-foreground">
-            {table.zone === "aircon" ? "Air-con Room" : "Hall Zone"} · {table.capacity} seats · {table.category}
-            {table.isBooked ? " · Reserved" : ""}
+            {t("orders.headerMeta", {
+              zone: getZoneLabel(table.zone, t),
+              seats: table.capacity,
+              category: t(`category.${table.category}`),
+            })}
+            {table.isBooked ? ` · ${t("floorPlan.reserved")}` : ""}
           </p>
         </div>
         <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
-          <Badge variant="outline">Table ID #{table.id}</Badge>
+          <Badge variant="outline">{t("floorPlan.tableId", { id: table.id })}</Badge>
           <Button variant="outline" size="sm" onClick={() => setLocation("/orders")}>
-            Change Table
+            {t("orders.changeTable")}
           </Button>
         </div>
       </div>
 
       {existingOpenOrder ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900">
-          <p className="font-semibold">This table already has an open order #{existingOpenOrder.id}.</p>
-          <p className="text-sm">Continue the current order instead of creating a duplicate.</p>
+          <p className="font-semibold">{t("orders.existingOpenTitle", { id: existingOpenOrder.id })}</p>
+          <p className="text-sm">{t("orders.existingOpenDesc")}</p>
           <Button className="mt-3" size="sm" onClick={() => setLocation(`/orders/${existingOpenOrder.id}`)}>
-            Open Existing Order
+            {t("orders.openExisting")}
           </Button>
         </div>
       ) : null}
 
       {table.status !== "Active" ? (
         <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-700">
-          <p className="font-semibold">This table is currently unavailable.</p>
-          <p className="text-sm">Only tables with Active service status can accept new orders.</p>
+          <p className="font-semibold">{t("orders.unavailableTitle")}</p>
+          <p className="text-sm">{t("orders.onlyActiveDesc")}</p>
         </div>
       ) : null}
 
@@ -492,7 +503,7 @@ export default function OrdersPage() {
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
               className="pl-9"
-              placeholder="Search menu item..."
+              placeholder={t("orders.searchPlaceholder")}
             />
           </div>
 
@@ -504,7 +515,7 @@ export default function OrdersPage() {
             ) : filteredItems.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
                 <UtensilsCrossed className="mb-2 h-10 w-10 opacity-30" />
-                <p>No items found</p>
+                <p>{t("orders.noItemsFound")}</p>
               </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -542,7 +553,7 @@ export default function OrdersPage() {
                         ) : (
                           <Button size="sm" variant="outline" onClick={() => addToCart(item)}>
                             <Plus className="mr-1 h-3.5 w-3.5" />
-                            Add
+                            {t("actions.addItem")}
                           </Button>
                         )}
                       </div>
@@ -557,9 +568,9 @@ export default function OrdersPage() {
         <div className="flex min-h-0 flex-col rounded-lg border bg-card">
           <div className="flex items-center gap-2 border-b px-4 py-3">
             <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-            <span className="font-semibold">Order Summary</span>
+            <span className="font-semibold">{t("orders.orderSummary")}</span>
             <Badge variant="secondary" className="ml-auto">
-              {cartCount} items
+              {t("orders.itemsCount", { count: cartCount })}
             </Badge>
           </div>
 
@@ -567,7 +578,7 @@ export default function OrdersPage() {
             {cart.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
                 <ChefHat className="mb-2 h-10 w-10 opacity-25" />
-                <p>Add food and drinks from the menu.</p>
+                <p>{t("orders.addFoodPrompt")}</p>
               </div>
             ) : (
               cart.map((item) => (
@@ -610,22 +621,22 @@ export default function OrdersPage() {
             <Input
               value={orderNotes}
               onChange={(event) => setOrderNotes(event.target.value)}
-              placeholder="Order notes (optional)"
+              placeholder={t("orders.orderNotesPlaceholder")}
             />
 
             <div className="space-y-1 text-sm">
               <div className="flex justify-between text-muted-foreground">
-                <span>Subtotal</span>
+                <span>{t("orders.subtotal")}</span>
                 <span>{formatMoney(subtotal)}</span>
               </div>
               {table.zone === "aircon" ? (
                 <div className="flex justify-between text-blue-700">
-                  <span>Aircon fee</span>
+                  <span>{t("orders.airconFee")}</span>
                   <span>+ 500 ks</span>
                 </div>
               ) : null}
               <div className="flex justify-between border-t pt-1 text-base font-bold">
-                <span>Total</span>
+                <span>{t("orders.total")}</span>
                 <span className="text-primary">{formatMoney(estimatedTotal)}</span>
               </div>
             </div>
@@ -640,7 +651,7 @@ export default function OrdersPage() {
               ) : (
                 <Send className="mr-2 h-4 w-4" />
               )}
-              Confirm Order
+              {t("actions.confirmOrder")}
             </Button>
           </div>
         </div>

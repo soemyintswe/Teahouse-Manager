@@ -5,6 +5,7 @@ import {
   getListTablesQueryKey,
 } from "@workspace/api-client-react";
 import { useCallback, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +52,17 @@ const DASHBOARD_CANVAS_WIDTH = 620;
 const DASHBOARD_CANVAS_HEIGHT = 320;
 const DEFAULT_DASHBOARD_ZOOM = 0.8;
 
+function getZoneLabel(zone: string, t: (key: string) => string, short = false): string {
+  if (zone === "aircon") {
+    return t(short ? "zones.airconShort" : "zones.aircon");
+  }
+  return t(short ? "zones.hallShort" : "zones.hall");
+}
+
+function getOccupancyStatusLabel(status: TableData["occupancyStatus"], t: (key: string) => string): string {
+  return t(`status.occupancy.${status}`);
+}
+
 function SummaryCard({
   title,
   icon,
@@ -82,10 +94,12 @@ function FloorPreviewCard({
   table: TableData;
   onClick: () => void;
 }) {
+  const { t } = useTranslation();
   const isMaintenance = table.status === "Maintenance";
   const styleClass = isMaintenance
     ? "bg-slate-300 text-slate-100 border-slate-500"
     : (TABLE_STATUS_STYLE[table.occupancyStatus] ?? TABLE_STATUS_STYLE.available);
+
   return (
     <button
       onClick={onClick}
@@ -101,12 +115,15 @@ function FloorPreviewCard({
         <Users className="h-3 w-3" />
         {table.capacity}
       </div>
-      <div className="text-[8px] font-bold leading-none">{isMaintenance ? "SUSPENDED" : table.occupancyStatus.toUpperCase()}</div>
+      <div className="text-[8px] font-bold leading-none">
+        {isMaintenance ? t("status.service.Maintenance") : getOccupancyStatusLabel(table.occupancyStatus, t)}
+      </div>
     </button>
   );
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const [previewZoom, setPreviewZoom] = useState(DEFAULT_DASHBOARD_ZOOM);
 
@@ -159,44 +176,49 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t("dashboard.title")}</h1>
         <Button onClick={() => setLocation("/floor-plan")} className="gap-2">
-          Open Floor Plan
+          {t("dashboard.openFloorPlan")}
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SummaryCard
-          title="Today's Sales"
+          title={t("dashboard.todaySales")}
           icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}
           onClick={() => setLocation("/finance")}
         >
-          <div className="text-lg font-bold sm:text-2xl">{summary?.todaySales ?? "Ks 0"}</div>
+          <div className="text-lg font-bold sm:text-2xl">{summary?.todaySales ?? t("dashboard.defaultSales")}</div>
         </SummaryCard>
 
         <SummaryCard
-          title="Active Orders"
+          title={t("dashboard.activeOrders")}
           icon={<ShoppingBag className="h-4 w-4 text-muted-foreground" />}
           onClick={() => setLocation("/orders")}
         >
           <div className="text-lg font-bold sm:text-2xl">{summary?.activeOrders ?? 0}</div>
-          <p className="text-[11px] text-muted-foreground sm:text-xs">Total today: {summary?.todayOrders ?? 0}</p>
+          <p className="text-[11px] text-muted-foreground sm:text-xs">
+            {t("dashboard.totalToday", { count: summary?.todayOrders ?? 0 })}
+          </p>
         </SummaryCard>
 
         <SummaryCard
-          title="Available Tables"
+          title={t("dashboard.availableTables")}
           icon={<MapIcon className="h-4 w-4 text-muted-foreground" />}
           onClick={() => setLocation("/floor-plan")}
         >
           <div className="text-lg font-bold sm:text-2xl">{summary?.availableTables ?? 0}</div>
           <p className="text-[11px] text-muted-foreground sm:text-xs">
-            {summary?.occupiedTables ?? 0} occupied, {summary?.pendingPaymentTables ?? 0} pending
+            {t("dashboard.occupiedPending", {
+              occupied: summary?.occupiedTables ?? 0,
+              pending: summary?.pendingPaymentTables ?? 0,
+            })}
           </p>
         </SummaryCard>
 
         <SummaryCard
-          title="Low Stock Items"
+          title={t("dashboard.lowStockItems")}
           icon={<AlertTriangle className="h-4 w-4 text-destructive" />}
           onClick={() => setLocation("/inventory")}
         >
@@ -206,18 +228,18 @@ export default function Dashboard() {
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-xl font-bold tracking-tight">Floor Plan Overview</h2>
+          <h2 className="text-xl font-bold tracking-tight">{t("dashboard.floorOverview")}</h2>
           <div className="flex items-center gap-2">
-            <Badge variant="outline">{visibleTables.length} tables</Badge>
+            <Badge variant="outline">{t("dashboard.tableCount", { count: visibleTables.length })}</Badge>
             <div className="flex items-center gap-1 rounded-md border bg-card px-1 py-1">
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomOut} title="Zoom out">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomOut} title={t("floorPlan.zoomOut")}>
                 <ZoomOut className="h-3.5 w-3.5" />
               </Button>
               <span className="w-12 text-center text-xs font-semibold">{Math.round(previewZoom * 100)}%</span>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomIn} title="Zoom in">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomIn} title={t("floorPlan.zoomIn")}>
                 <ZoomIn className="h-3.5 w-3.5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomReset} title="Reset zoom">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleZoomReset} title={t("floorPlan.resetZoom")}>
                 <RotateCcw className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -227,7 +249,7 @@ export default function Dashboard() {
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Hall Zone</CardTitle>
+              <CardTitle className="text-base">{t("zones.hall")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="rounded-lg border border-dashed bg-muted/20 overflow-auto">
@@ -251,7 +273,7 @@ export default function Dashboard() {
                     ))}
                     {hallTables.length === 0 && (
                       <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-                        No tables in hall zone
+                        {t("dashboard.noHallTables")}
                       </div>
                     )}
                   </div>
@@ -262,7 +284,7 @@ export default function Dashboard() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Air-con Room</CardTitle>
+              <CardTitle className="text-base">{t("zones.aircon")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="rounded-lg border border-dashed bg-blue-50/40 overflow-auto">
@@ -286,7 +308,7 @@ export default function Dashboard() {
                     ))}
                     {airconTables.length === 0 && (
                       <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-                        No tables in air-con room
+                        {t("dashboard.noAirconTables")}
                       </div>
                     )}
                   </div>
