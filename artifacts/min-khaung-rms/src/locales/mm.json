@@ -101,6 +101,7 @@
     "lowStockItems": "ပစ္စည်းနည်းနေသောအမျိုးအစား",
     "floorOverview": "စားပွဲနေရာချထားမှု အကြမ်းမြင်ကွင်း",
     "tableCount": "{{count}} စားပွဲ",
+    "noTablesInRoom": "{{room}} တွင် စားပွဲမရှိပါ",
     "noHallTables": "Hall Zone တွင် စားပွဲမရှိပါ",
     "noAirconTables": "Air-con Room တွင် စားပွဲမရှိပါ"
   },

@@ -4,7 +4,8 @@ import {
   useListTables,
   getListTablesQueryKey,
 } from "@workspace/api-client-react";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +26,7 @@ import {
   BookmarkCheck,
   Lock,
 } from "lucide-react";
+import { listRooms, ROOMS_QUERY_KEY } from "@/lib/rooms-api";
 
 type TableData = {
   id: number;
@@ -40,6 +42,13 @@ type TableData = {
   currentOrderId: number | null;
 };
 
+type RoomOption = {
+  code: string;
+  name: string;
+  isActive: boolean;
+  sortOrder: number;
+};
+
 const TABLE_STATUS_STYLE: Record<string, string> = {
   available: "bg-emerald-500 text-white border-emerald-700",
   occupied: "bg-amber-400 text-amber-950 border-amber-600",
@@ -52,11 +61,13 @@ const DASHBOARD_CANVAS_WIDTH = 620;
 const DASHBOARD_CANVAS_HEIGHT = 320;
 const DEFAULT_DASHBOARD_ZOOM = 0.8;
 
-function getZoneLabel(zone: string, t: (key: string) => string, short = false): string {
-  if (zone === "aircon") {
-    return t(short ? "zones.airconShort" : "zones.aircon");
-  }
-  return t(short ? "zones.hallShort" : "zones.hall");
+function formatRoomCodeLabel(code: string): string {
+  const normalized = code.trim();
+  if (!normalized) return "Room";
+  return normalized
+    .split("-")
+    .map((part) => (part.length > 0 ? `${part[0].toUpperCase()}${part.slice(1)}` : part))
+    .join(" ");
 }
 
 function getOccupancyStatusLabel(status: TableData["occupancyStatus"], t: (key: string) => string): string {
@@ -126,12 +137,18 @@ export default function Dashboard() {
   const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const [previewZoom, setPreviewZoom] = useState(DEFAULT_DASHBOARD_ZOOM);
+  const [selectedRoomCode, setSelectedRoomCode] = useState<string | null>(null);
 
   const { data: summary, isLoading: summaryLoading } = useGetDashboardSummary({
     query: { queryKey: getGetDashboardSummaryQueryKey() },
   });
   const { data: tables = [], isLoading: tablesLoading } = useListTables({
     query: { queryKey: getListTablesQueryKey() },
+  });
+  const { data: rooms = [], isLoading: roomsLoading } = useQuery({
+    queryKey: ROOMS_QUERY_KEY,
+    queryFn: listRooms,
+    staleTime: 15000,
   });
 
   const handleZoomIn = useCallback(() => {
@@ -146,17 +163,59 @@ export default function Dashboard() {
     setPreviewZoom(DEFAULT_DASHBOARD_ZOOM);
   }, []);
 
-  if (summaryLoading || tablesLoading) {
+  const visibleTables = (tables as TableData[]).filter((table) => table.status !== "Archived");
+  const roomOptions = useMemo<RoomOption[]>(() => {
+    const map = new Map<string, RoomOption>();
+
+    for (const room of rooms) {
+      map.set(room.code, {
+        code: room.code,
+        name: room.name,
+        isActive: room.isActive,
+        sortOrder: room.sortOrder,
+      });
+    }
+
+    for (const table of visibleTables) {
+      if (!map.has(table.zone)) {
+        map.set(table.zone, {
+          code: table.zone,
+          name: formatRoomCodeLabel(table.zone),
+          isActive: true,
+          sortOrder: 999,
+        });
+      }
+    }
+
+    return [...map.values()].sort((a, b) => {
+      const orderDiff = a.sortOrder - b.sortOrder;
+      if (orderDiff !== 0) return orderDiff;
+      return a.name.localeCompare(b.name);
+    });
+  }, [rooms, visibleTables]);
+
+  useEffect(() => {
+    if (roomOptions.length === 0) {
+      setSelectedRoomCode(null);
+      return;
+    }
+    if (!selectedRoomCode || !roomOptions.some((room) => room.code === selectedRoomCode)) {
+      setSelectedRoomCode(roomOptions[0].code);
+    }
+  }, [roomOptions, selectedRoomCode]);
+
+  const selectedRoom = roomOptions.find((room) => room.code === selectedRoomCode) ?? null;
+  const selectedRoomTables = selectedRoomCode
+    ? visibleTables.filter((table) => table.zone === selectedRoomCode)
+    : [];
+
+  if (summaryLoading || tablesLoading || roomsLoading) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
-
-  const visibleTables = (tables as TableData[]).filter((table) => table.status !== "Archived");
-  const hallTables = visibleTables.filter((table) => table.zone === "hall");
-  const airconTables = visibleTables.filter((table) => table.zone === "aircon");
 
   const openTableOrderFlow = (table: TableData) => {
     if (table.status !== "Active") {
@@ -246,77 +305,58 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">{t("zones.hall")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg border border-dashed bg-muted/20 overflow-auto">
-                <div
-                  className="relative"
-                  style={{ minWidth: DASHBOARD_CANVAS_WIDTH * previewZoom, minHeight: DASHBOARD_CANVAS_HEIGHT * previewZoom }}
-                >
-                  <div
-                    className="absolute left-0 top-0 origin-top-left"
-                    style={{ width: DASHBOARD_CANVAS_WIDTH, height: DASHBOARD_CANVAS_HEIGHT, transform: `scale(${previewZoom})` }}
-                  >
-                    <div
-                      className="absolute inset-0 opacity-20"
-                      style={{
-                        backgroundImage: "radial-gradient(circle, #94a3b8 1px, transparent 1px)",
-                        backgroundSize: "40px 40px",
-                      }}
-                    />
-                    {hallTables.map((table) => (
-                      <FloorPreviewCard key={table.id} table={table} onClick={() => openTableOrderFlow(table)} />
-                    ))}
-                    {hallTables.length === 0 && (
-                      <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-                        {t("dashboard.noHallTables")}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">{t("zones.aircon")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg border border-dashed bg-blue-50/40 overflow-auto">
-                <div
-                  className="relative"
-                  style={{ minWidth: DASHBOARD_CANVAS_WIDTH * previewZoom, minHeight: DASHBOARD_CANVAS_HEIGHT * previewZoom }}
-                >
-                  <div
-                    className="absolute left-0 top-0 origin-top-left"
-                    style={{ width: DASHBOARD_CANVAS_WIDTH, height: DASHBOARD_CANVAS_HEIGHT, transform: `scale(${previewZoom})` }}
-                  >
-                    <div
-                      className="absolute inset-0 opacity-20"
-                      style={{
-                        backgroundImage: "radial-gradient(circle, #93c5fd 1px, transparent 1px)",
-                        backgroundSize: "40px 40px",
-                      }}
-                    />
-                    {airconTables.map((table) => (
-                      <FloorPreviewCard key={table.id} table={table} onClick={() => openTableOrderFlow(table)} />
-                    ))}
-                    {airconTables.length === 0 && (
-                      <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-                        {t("dashboard.noAirconTables")}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="flex flex-wrap items-center gap-2">
+          {roomOptions.map((room) => {
+            const selected = room.code === selectedRoomCode;
+            return (
+              <button
+                key={room.code}
+                onClick={() => setSelectedRoomCode(room.code)}
+                className={`rounded-full border px-4 py-2 text-sm font-semibold transition-all ${
+                  selected ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:border-primary/40"
+                }`}
+              >
+                <span>{room.name}</span>
+                {!room.isActive ? <span className="ml-2 text-[11px] opacity-80">({t("floorPlan.roomClosed")})</span> : null}
+              </button>
+            );
+          })}
         </div>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">{selectedRoom?.name ?? t("floorPlan.noRoomSelected")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border border-dashed bg-muted/20 overflow-auto">
+              <div
+                className="relative"
+                style={{ minWidth: DASHBOARD_CANVAS_WIDTH * previewZoom, minHeight: DASHBOARD_CANVAS_HEIGHT * previewZoom }}
+              >
+                <div
+                  className="absolute left-0 top-0 origin-top-left"
+                  style={{ width: DASHBOARD_CANVAS_WIDTH, height: DASHBOARD_CANVAS_HEIGHT, transform: `scale(${previewZoom})` }}
+                >
+                  <div
+                    className="absolute inset-0 opacity-20"
+                    style={{
+                      backgroundImage: "radial-gradient(circle, #94a3b8 1px, transparent 1px)",
+                      backgroundSize: "40px 40px",
+                    }}
+                  />
+                  {selectedRoomTables.map((table) => (
+                    <FloorPreviewCard key={table.id} table={table} onClick={() => openTableOrderFlow(table)} />
+                  ))}
+                  {selectedRoomTables.length === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                      {t("dashboard.noTablesInRoom", { room: selectedRoom?.name ?? t("floorPlan.noRoomSelected") })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

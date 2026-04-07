@@ -101,6 +101,7 @@
     "lowStockItems": "Low Stock Items",
     "floorOverview": "Floor Plan Overview",
     "tableCount": "{{count}} tables",
+    "noTablesInRoom": "No tables in {{room}}",
     "noHallTables": "No tables in hall zone",
     "noAirconTables": "No tables in air-con room"
   },
