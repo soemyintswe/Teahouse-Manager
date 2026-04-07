@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, sql } from "drizzle-orm";
 import { db, ordersTable, orderItemsTable, menuItemsTable, tablesTable, settingsTable } from "@workspace/db";
+import { canAccessTable, requireAuth } from "../lib/auth";
 import {
   ListOrdersQueryParams,
   ListOrdersResponse,
@@ -67,8 +68,16 @@ async function recalcOrder(orderId: number, executor: any = db): Promise<void> {
   }).where(eq(ordersTable.id, orderId));
 }
 
-router.get("/orders", async (req, res): Promise<void> => {
+router.get("/orders", requireAuth, async (req, res): Promise<void> => {
   const qp = ListOrdersQueryParams.safeParse(req.query);
+  if (req.auth?.role === "guest") {
+    const requestedTableId = qp.success ? qp.data.tableId : undefined;
+    if (requestedTableId == null || !canAccessTable(req, requestedTableId)) {
+      res.status(403).json({ error: "Permission denied." });
+      return;
+    }
+  }
+
   const conditions: any[] = [];
   if (qp.success && qp.data.status) conditions.push(eq(ordersTable.status, qp.data.status));
   if (qp.success && qp.data.tableId != null) conditions.push(eq(ordersTable.tableId, qp.data.tableId));
@@ -85,9 +94,13 @@ router.get("/orders", async (req, res): Promise<void> => {
   res.json(ListOrdersResponse.parse(orders.map(formatOrder)));
 });
 
-router.post("/orders", async (req, res): Promise<void> => {
+router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreateOrderBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (req.auth?.role === "guest" && !canAccessTable(req, parsed.data.tableId)) {
+    res.status(403).json({ error: "Permission denied." });
+    return;
+  }
 
   try {
     const createdOrderId = await db.transaction(async (tx) => {
@@ -165,11 +178,12 @@ router.post("/orders", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/orders/:id", async (req, res): Promise<void> => {
+router.get("/orders/:id", requireAuth, async (req, res): Promise<void> => {
   const params = GetOrderParams.safeParse({ id: parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+  if (req.auth?.role === "guest" && !canAccessTable(req, order.tableId)) { res.status(403).json({ error: "Permission denied." }); return; }
   const items = await db.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, params.data.id));
   res.json(GetOrderResponse.parse({
     ...formatOrder(order),
@@ -177,11 +191,21 @@ router.get("/orders/:id", async (req, res): Promise<void> => {
   }));
 });
 
-router.patch("/orders/:id", async (req, res): Promise<void> => {
+router.patch("/orders/:id", requireAuth, async (req, res): Promise<void> => {
   const params = UpdateOrderParams.safeParse({ id: parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateOrderBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const [targetOrder] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
+  if (!targetOrder) { res.status(404).json({ error: "Order not found" }); return; }
+  if (req.auth?.role === "guest") {
+    if (!canAccessTable(req, targetOrder.tableId)) { res.status(403).json({ error: "Permission denied." }); return; }
+    const nextStatus = parsed.data.status;
+    if (nextStatus && nextStatus !== "ready_to_pay") {
+      res.status(403).json({ error: "Guest can only request bill/payment." });
+      return;
+    }
+  }
 
   const [order] = await db.update(ordersTable).set(parsed.data).where(eq(ordersTable.id, params.data.id)).returning();
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
@@ -211,7 +235,7 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
   res.json(UpdateOrderResponse.parse(formatOrder(order)));
 });
 
-router.post("/orders/:id/items", async (req, res): Promise<void> => {
+router.post("/orders/:id/items", requireAuth, async (req, res): Promise<void> => {
   const params = AddOrderItemParams.safeParse({ id: parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = AddOrderItemBody.safeParse(req.body);
@@ -219,6 +243,7 @@ router.post("/orders/:id/items", async (req, res): Promise<void> => {
 
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+  if (req.auth?.role === "guest" && !canAccessTable(req, order.tableId)) { res.status(403).json({ error: "Permission denied." }); return; }
   const [menuItem] = await db.select().from(menuItemsTable).where(eq(menuItemsTable.id, parsed.data.menuItemId));
   if (!menuItem) { res.status(404).json({ error: "Menu item not found" }); return; }
 
@@ -237,7 +262,7 @@ router.post("/orders/:id/items", async (req, res): Promise<void> => {
   res.status(201).json(formatOrderItem(item));
 });
 
-router.patch("/orders/:id/items/:itemId", async (req, res): Promise<void> => {
+router.patch("/orders/:id/items/:itemId", requireAuth, async (req, res): Promise<void> => {
   const params = UpdateOrderItemParams.safeParse({
     id: parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10),
     itemId: parseInt(Array.isArray(req.params.itemId) ? req.params.itemId[0] : req.params.itemId, 10),
@@ -245,6 +270,9 @@ router.patch("/orders/:id/items/:itemId", async (req, res): Promise<void> => {
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateOrderItemBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
+  if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+  if (req.auth?.role === "guest" && !canAccessTable(req, order.tableId)) { res.status(403).json({ error: "Permission denied." }); return; }
 
   const [item] = await db.update(orderItemsTable).set(parsed.data).where(
     and(eq(orderItemsTable.id, params.data.itemId), eq(orderItemsTable.orderId, params.data.id))
@@ -258,12 +286,15 @@ router.patch("/orders/:id/items/:itemId", async (req, res): Promise<void> => {
   res.json(UpdateOrderItemResponse.parse(formatOrderItem(item)));
 });
 
-router.delete("/orders/:id/items/:itemId", async (req, res): Promise<void> => {
+router.delete("/orders/:id/items/:itemId", requireAuth, async (req, res): Promise<void> => {
   const params = RemoveOrderItemParams.safeParse({
     id: parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10),
     itemId: parseInt(Array.isArray(req.params.itemId) ? req.params.itemId[0] : req.params.itemId, 10),
   });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
+  if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+  if (req.auth?.role === "guest" && !canAccessTable(req, order.tableId)) { res.status(403).json({ error: "Permission denied." }); return; }
   const [item] = await db.delete(orderItemsTable).where(
     and(eq(orderItemsTable.id, params.data.itemId), eq(orderItemsTable.orderId, params.data.id))
   ).returning();

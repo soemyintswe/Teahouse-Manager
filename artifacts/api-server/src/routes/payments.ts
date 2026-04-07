@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, sql } from "drizzle-orm";
 import { db, paymentsTable, ordersTable, tablesTable } from "@workspace/db";
+import { canAccessTable, requireAuth, requireRoles } from "../lib/auth";
 import {
   ListPaymentsQueryParams,
   ListPaymentsResponse,
@@ -13,9 +14,10 @@ const router: IRouter = Router();
 const SUPPORTED_WALLETS = ["wave_pay", "kbz_pay", "aya_pay", "cb_pay"] as const;
 type SupportedWallet = (typeof SUPPORTED_WALLETS)[number];
 
-function parseOrderId(input: string | undefined): number | null {
-  if (!input) return null;
-  const id = Number.parseInt(input, 10);
+function parseOrderId(input: string | string[] | undefined): number | null {
+  const value = Array.isArray(input) ? input[0] : input;
+  if (!value) return null;
+  const id = Number.parseInt(value, 10);
   if (!Number.isFinite(id) || id <= 0) return null;
   return id;
 }
@@ -53,7 +55,7 @@ function formatPayment(p: typeof paymentsTable.$inferSelect) {
   return { ...p, amount: p.amount.toString(), createdAt: p.createdAt.toISOString() };
 }
 
-router.get("/payments", async (req, res): Promise<void> => {
+router.get("/payments", requireRoles(["cashier", "supervisor", "manager", "owner"]), async (req, res): Promise<void> => {
   const qp = ListPaymentsQueryParams.safeParse(req.query);
   const conditions = [];
   if (qp.success && qp.data.status) conditions.push(eq(paymentsTable.status, qp.data.status));
@@ -67,7 +69,7 @@ router.get("/payments", async (req, res): Promise<void> => {
   res.json(ListPaymentsResponse.parse(payments.map(formatPayment)));
 });
 
-router.get("/payments/orders/:orderId/qr", async (req, res): Promise<void> => {
+router.get("/payments/orders/:orderId/qr", requireAuth, async (req, res): Promise<void> => {
   const orderId = parseOrderId(req.params.orderId);
   if (!orderId) {
     res.status(400).json({ error: "Invalid order id." });
@@ -88,6 +90,10 @@ router.get("/payments/orders/:orderId/qr", async (req, res): Promise<void> => {
 
   if (order.status === "cancelled") {
     res.status(409).json({ error: "Cancelled order cannot be paid." });
+    return;
+  }
+  if (req.auth?.role === "guest" && !canAccessTable(req, order.tableId)) {
+    res.status(403).json({ error: "Permission denied." });
     return;
   }
 
@@ -116,12 +122,16 @@ router.get("/payments/orders/:orderId/qr", async (req, res): Promise<void> => {
   });
 });
 
-router.post("/payments", async (req, res): Promise<void> => {
+router.post("/payments", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreatePaymentBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, parsed.data.orderId));
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+  if (req.auth?.role === "guest" && !canAccessTable(req, order.tableId)) {
+    res.status(403).json({ error: "Permission denied." });
+    return;
+  }
 
   const receiptNumber = `RCP-${Date.now()}-${order.id}`;
   const [payment] = await db.insert(paymentsTable).values({
@@ -141,7 +151,7 @@ router.post("/payments", async (req, res): Promise<void> => {
   res.status(201).json(GetPaymentResponse.parse(formatPayment(payment)));
 });
 
-router.get("/payments/:id", async (req, res): Promise<void> => {
+router.get("/payments/:id", requireRoles(["cashier", "supervisor", "manager", "owner"]), async (req, res): Promise<void> => {
   const params = GetPaymentParams.safeParse({ id: parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, params.data.id));

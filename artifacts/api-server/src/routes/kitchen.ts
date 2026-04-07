@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq, inArray } from "drizzle-orm";
 import { db, ordersTable, orderItemsTable, menuItemsTable, tablesTable } from "@workspace/db";
+import { requireRoles } from "../lib/auth";
 import {
   ListKitchenOrdersQueryParams,
   ListKitchenOrdersResponse,
@@ -10,8 +11,9 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+const KITCHEN_ROLES = ["kitchen", "supervisor", "manager", "owner"] as const;
 
-router.get("/kitchen/orders", async (req, res): Promise<void> => {
+router.get("/kitchen/orders", requireRoles(KITCHEN_ROLES), async (req, res): Promise<void> => {
   const query = ListKitchenOrdersQueryParams.safeParse(req.query);
   if (!query.success) { res.status(400).json({ error: query.error.message }); return; }
 
@@ -89,7 +91,7 @@ router.get("/kitchen/orders", async (req, res): Promise<void> => {
   res.json(ListKitchenOrdersResponse.parse(result));
 });
 
-router.patch("/kitchen/items/:itemId/status", async (req, res): Promise<void> => {
+router.patch("/kitchen/items/:itemId/status", requireRoles(KITCHEN_ROLES), async (req, res): Promise<void> => {
   const params = UpdateKitchenItemStatusParams.safeParse({
     itemId: parseInt(Array.isArray(req.params.itemId) ? req.params.itemId[0] : req.params.itemId, 10),
   });

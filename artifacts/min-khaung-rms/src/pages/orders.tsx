@@ -35,6 +35,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 
 const ACTIVE_TABLE_ID_STORAGE_KEY = "teahouse_active_table_id";
 
@@ -205,6 +206,7 @@ export default function OrdersPage() {
   const search = useSearch();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const tableIdFromQuery = useMemo(() => parseTableIdFromSearch(search), [search]);
@@ -212,7 +214,17 @@ export default function OrdersPage() {
   const scanRequested = useMemo(() => parseScanFlagFromSearch(search), [search]);
   const [storedTableId, setStoredTableId] = useState<number | null>(null);
   const tableId =
-    tableIdFromQuery ?? ((scanRequested || menuItemIdFromQuery != null) ? storedTableId : null);
+    tableIdFromQuery ??
+    user?.tableId ??
+    ((scanRequested || menuItemIdFromQuery != null) ? storedTableId : null);
+  const isGuest = user?.role === "guest";
+
+  useEffect(() => {
+    if (!isGuest || !user?.tableId) return;
+    if (tableIdFromQuery != null && tableIdFromQuery !== user.tableId) {
+      setLocation(`/orders?tableId=${user.tableId}&scan=1`);
+    }
+  }, [isGuest, setLocation, tableIdFromQuery, user?.tableId]);
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("today");
   const todayDate = useMemo(() => toLocalDateString(new Date()), []);
 
@@ -242,7 +254,10 @@ export default function OrdersPage() {
   }, [historyFilter, todayDate]);
 
   const { data: allTables = [], isLoading: tablesLoading } = useListTables({
-    query: { queryKey: getListTablesQueryKey() },
+    query: {
+      enabled: !isGuest,
+      queryKey: getListTablesQueryKey(),
+    },
   });
 
   const { data: table, isLoading: tableLoading } = useGetTable(tableId ?? 0, {
@@ -437,6 +452,14 @@ export default function OrdersPage() {
   ]);
 
   const handleSelectTable = (nextTableId: number) => {
+    if (isGuest && user?.tableId && nextTableId !== user.tableId) {
+      toast({
+        title: t("orders.guestTableLockedTitle"),
+        description: t("orders.guestTableLockedDesc"),
+        variant: "destructive",
+      });
+      return;
+    }
     setCart([]);
     setOrderNotes("");
     setSearchText("");
@@ -501,38 +524,46 @@ export default function OrdersPage() {
     return (
       <div className="space-y-4">
         <h1 className="page-title">{t("orders.pageTitle")}</h1>
-        <p className="text-sm text-muted-foreground">{t("orders.selectTablePrompt")}</p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {selectableTables.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => handleSelectTable(item.id)}
-              className="rounded-lg border bg-card px-4 py-3 text-left hover:border-primary/40 hover:bg-primary/5 transition-colors"
-            >
-              <p className="text-lg font-bold">{t("orders.tableCardTitle", { table: item.tableNumber })}</p>
-              <p className="text-xs text-muted-foreground capitalize">
-                {t("orders.tableCardMeta", {
-                  zone: getZoneLabel(item.zone, t),
-                  seats: item.capacity,
-                })}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t(`category.${item.category}`)}
-                {item.isBooked ? ` · ${t("floorPlan.reserved")}` : ""}
-              </p>
-            </button>
-          ))}
-        </div>
+        {isGuest ? (
+          <div className="rounded-lg border border-dashed p-6 text-center text-muted-foreground">
+            {t("orders.scanTableFirstDesc")}
+          </div>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">{t("orders.selectTablePrompt")}</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {selectableTables.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => handleSelectTable(item.id)}
+                  className="rounded-lg border bg-card px-4 py-3 text-left hover:border-primary/40 hover:bg-primary/5 transition-colors"
+                >
+                  <p className="text-lg font-bold">{t("orders.tableCardTitle", { table: item.tableNumber })}</p>
+                  <p className="text-xs text-muted-foreground capitalize">
+                    {t("orders.tableCardMeta", {
+                      zone: getZoneLabel(item.zone, t),
+                      seats: item.capacity,
+                    })}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t(`category.${item.category}`)}
+                    {item.isBooked ? ` · ${t("floorPlan.reserved")}` : ""}
+                  </p>
+                </button>
+              ))}
+            </div>
 
-        <OrdersHistoryPanel
-          orders={historyOrders.slice(0, 20)}
-          loading={historyLoading}
-          filter={historyFilter}
-          onChangeFilter={setHistoryFilter}
-          onOpenOrder={(orderId) => setLocation(`/orders/${orderId}`)}
-          onUseTable={handleSelectTable}
-          activeTableId={tableId}
-        />
+            <OrdersHistoryPanel
+              orders={historyOrders.slice(0, 20)}
+              loading={historyLoading}
+              filter={historyFilter}
+              onChangeFilter={setHistoryFilter}
+              onOpenOrder={(orderId) => setLocation(`/orders/${orderId}`)}
+              onUseTable={handleSelectTable}
+              activeTableId={tableId}
+            />
+          </>
+        )}
       </div>
     );
   }
@@ -568,9 +599,11 @@ export default function OrdersPage() {
         </div>
         <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
           <Badge variant="outline">{t("floorPlan.tableId", { id: table.id })}</Badge>
-          <Button variant="outline" size="sm" onClick={() => setLocation("/orders")}>
-            {t("orders.changeTable")}
-          </Button>
+          {!isGuest ? (
+            <Button variant="outline" size="sm" onClick={() => setLocation("/orders")}>
+              {t("orders.changeTable")}
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -777,15 +810,17 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      <OrdersHistoryPanel
-        orders={historyOrders.slice(0, 20)}
-        loading={historyLoading}
-        filter={historyFilter}
-        onChangeFilter={setHistoryFilter}
-        onOpenOrder={(orderId) => setLocation(`/orders/${orderId}`)}
-        onUseTable={handleSelectTable}
-        activeTableId={tableId}
-      />
+      {!isGuest ? (
+        <OrdersHistoryPanel
+          orders={historyOrders.slice(0, 20)}
+          loading={historyLoading}
+          filter={historyFilter}
+          onChangeFilter={setHistoryFilter}
+          onOpenOrder={(orderId) => setLocation(`/orders/${orderId}`)}
+          onUseTable={handleSelectTable}
+          activeTableId={tableId}
+        />
+      ) : null}
     </div>
   );
 }

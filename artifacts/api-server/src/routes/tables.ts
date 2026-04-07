@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { count, eq } from "drizzle-orm";
 import { db, roomsTable, tablesTable } from "@workspace/db";
+import { canAccessTable, requireAuth, requireRoles } from "../lib/auth";
 import {
   CreateTableBody,
   GetTableParams,
@@ -13,6 +14,7 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+const ADMIN_ROLES = ["supervisor", "manager", "owner"] as const;
 
 const roomCodeRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -31,9 +33,10 @@ function asObject(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function parseRoomId(input: string | undefined): number | null {
-  if (!input) return null;
-  const id = Number.parseInt(input, 10);
+function parseRoomId(input: string | string[] | undefined): number | null {
+  const value = Array.isArray(input) ? input[0] : input;
+  if (!value) return null;
+  const id = Number.parseInt(value, 10);
   if (!Number.isFinite(id) || id <= 0) return null;
   return id;
 }
@@ -134,12 +137,12 @@ async function findTableByNumber(tableNumber: string): Promise<{ id: number } | 
   return table ?? null;
 }
 
-router.get("/rooms", async (_req, res): Promise<void> => {
+router.get("/rooms", requireRoles(["waiter", "kitchen", "cashier", "supervisor", "manager", "owner"]), async (_req, res): Promise<void> => {
   const rooms = await db.select().from(roomsTable).orderBy(roomsTable.sortOrder, roomsTable.name);
   res.json(rooms.map(toIsoRoom));
 });
 
-router.post("/rooms", async (req, res): Promise<void> => {
+router.post("/rooms", requireRoles(ADMIN_ROLES), async (req, res): Promise<void> => {
   const parsed = parseCreateRoomBody(req.body);
   if (!parsed.ok) {
     res.status(400).json({ error: parsed.error });
@@ -158,7 +161,7 @@ router.post("/rooms", async (req, res): Promise<void> => {
   res.status(201).json(toIsoRoom(room));
 });
 
-router.patch("/rooms/:id", async (req, res): Promise<void> => {
+router.patch("/rooms/:id", requireRoles(ADMIN_ROLES), async (req, res): Promise<void> => {
   const roomId = parseRoomId(req.params.id);
   if (!roomId) {
     res.status(400).json({ error: "Invalid room id." });
@@ -202,7 +205,7 @@ router.patch("/rooms/:id", async (req, res): Promise<void> => {
   res.json(toIsoRoom(updated));
 });
 
-router.delete("/rooms/:id", async (req, res): Promise<void> => {
+router.delete("/rooms/:id", requireRoles(ADMIN_ROLES), async (req, res): Promise<void> => {
   const roomId = parseRoomId(req.params.id);
   if (!roomId) {
     res.status(400).json({ error: "Invalid room id." });
@@ -229,12 +232,12 @@ router.delete("/rooms/:id", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
-router.get("/tables", async (_req, res): Promise<void> => {
+router.get("/tables", requireRoles(["waiter", "kitchen", "cashier", "supervisor", "manager", "owner"]), async (_req, res): Promise<void> => {
   const tables = await db.select().from(tablesTable).orderBy(tablesTable.zone, tablesTable.tableNumber);
   res.json(ListTablesResponse.parse(tables.map(toIsoTable)));
 });
 
-router.post("/tables", async (req, res): Promise<void> => {
+router.post("/tables", requireRoles(ADMIN_ROLES), async (req, res): Promise<void> => {
   const parsed = CreateTableBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -263,11 +266,12 @@ router.post("/tables", async (req, res): Promise<void> => {
   res.status(201).json(GetTableResponse.parse(toIsoTable(table)));
 });
 
-router.get("/tables/:id", async (req, res): Promise<void> => {
+router.get("/tables/:id", requireAuth, async (req, res): Promise<void> => {
   const params = GetTableParams.safeParse({ id: parseId(req.params.id) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const [table] = await db.select().from(tablesTable).where(eq(tablesTable.id, params.data.id));
   if (!table) { res.status(404).json({ error: "Table not found" }); return; }
+  if (!canAccessTable(req, table.id)) { res.status(403).json({ error: "Permission denied." }); return; }
   res.json(GetTableResponse.parse(toIsoTable(table)));
 });
 
@@ -277,13 +281,14 @@ router.post("/tables/:id/scan", async (req, res): Promise<void> => {
 
   const [table] = await db.select().from(tablesTable).where(eq(tablesTable.id, params.data.id));
   if (!table) { res.status(404).json({ error: "Table not found" }); return; }
+  if (req.auth?.role === "guest" && !canAccessTable(req, table.id)) { res.status(403).json({ error: "Permission denied." }); return; }
   if (table.status !== "Active") { res.status(409).json({ error: "This table is currently unavailable." }); return; }
 
   const [updated] = await db.update(tablesTable).set({ occupancyStatus: "occupied" }).where(eq(tablesTable.id, params.data.id)).returning();
   res.json(GetTableResponse.parse(toIsoTable(updated)));
 });
 
-router.patch("/tables/:id", async (req, res): Promise<void> => {
+router.patch("/tables/:id", requireRoles(ADMIN_ROLES), async (req, res): Promise<void> => {
   const params = UpdateTableParams.safeParse({ id: parseId(req.params.id) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateTableBody.safeParse(req.body);
@@ -320,7 +325,7 @@ router.patch("/tables/:id", async (req, res): Promise<void> => {
   res.json(UpdateTableResponse.parse(toIsoTable(table)));
 });
 
-router.delete("/tables/:id", async (req, res): Promise<void> => {
+router.delete("/tables/:id", requireRoles(ADMIN_ROLES), async (req, res): Promise<void> => {
   const params = DeleteTableParams.safeParse({ id: parseId(req.params.id) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const [table] = await db.delete(tablesTable).where(eq(tablesTable.id, params.data.id)).returning();

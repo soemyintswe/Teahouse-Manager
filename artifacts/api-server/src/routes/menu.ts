@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
 import { db, menuCategoriesTable, menuItemsTable } from "@workspace/db";
+import { requireRoles } from "../lib/auth";
 import {
   CreateMenuCategoryBody,
   UpdateMenuCategoryParams,
@@ -27,14 +28,14 @@ router.get("/menu-categories", async (_req, res): Promise<void> => {
   res.json(ListMenuCategoriesResponse.parse(cats.map(c => ({ ...c, createdAt: c.createdAt.toISOString() }))));
 });
 
-router.post("/menu-categories", async (req, res): Promise<void> => {
+router.post("/menu-categories", requireRoles(["supervisor", "manager", "owner"]), async (req, res): Promise<void> => {
   const parsed = CreateMenuCategoryBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const [cat] = await db.insert(menuCategoriesTable).values(parsed.data).returning();
   res.status(201).json({ ...cat, createdAt: cat.createdAt.toISOString() });
 });
 
-router.patch("/menu-categories/:id", async (req, res): Promise<void> => {
+router.patch("/menu-categories/:id", requireRoles(["supervisor", "manager", "owner"]), async (req, res): Promise<void> => {
   const params = UpdateMenuCategoryParams.safeParse({ id: parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateMenuCategoryBody.safeParse(req.body);
@@ -44,7 +45,7 @@ router.patch("/menu-categories/:id", async (req, res): Promise<void> => {
   res.json(UpdateMenuCategoryResponse.parse({ ...cat, createdAt: cat.createdAt.toISOString() }));
 });
 
-router.delete("/menu-categories/:id", async (req, res): Promise<void> => {
+router.delete("/menu-categories/:id", requireRoles(["manager", "owner"]), async (req, res): Promise<void> => {
   const params = DeleteMenuCategoryParams.safeParse({ id: parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   await db.delete(menuCategoriesTable).where(eq(menuCategoriesTable.id, params.data.id));
@@ -76,7 +77,7 @@ router.get("/menu-items", async (req, res): Promise<void> => {
   }))));
 });
 
-router.post("/menu-items", async (req, res): Promise<void> => {
+router.post("/menu-items", requireRoles(["supervisor", "manager", "owner"]), async (req, res): Promise<void> => {
   const parsed = CreateMenuItemBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const qrCode = `item-${parsed.data.name.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`;
@@ -97,7 +98,7 @@ router.get("/menu-items/:id", async (req, res): Promise<void> => {
   res.json(GetMenuItemResponse.parse({ ...item, price: item.price.toString(), createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString() }));
 });
 
-router.patch("/menu-items/:id", async (req, res): Promise<void> => {
+router.patch("/menu-items/:id", requireRoles(["supervisor", "manager", "owner"]), async (req, res): Promise<void> => {
   const params = UpdateMenuItemParams.safeParse({ id: parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateMenuItemBody.safeParse(req.body);
@@ -107,7 +108,7 @@ router.patch("/menu-items/:id", async (req, res): Promise<void> => {
   res.json(UpdateMenuItemResponse.parse({ ...item, price: item.price.toString(), createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString() }));
 });
 
-router.delete("/menu-items/:id", async (req, res): Promise<void> => {
+router.delete("/menu-items/:id", requireRoles(["manager", "owner"]), async (req, res): Promise<void> => {
   const params = DeleteMenuItemParams.safeParse({ id: parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   await db.delete(menuItemsTable).where(eq(menuItemsTable.id, params.data.id));

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { sql, eq, and } from "drizzle-orm";
 import { db, ordersTable, tablesTable, inventoryTable, orderItemsTable, paymentsTable } from "@workspace/db";
+import { requireRoles } from "../lib/auth";
 import {
   GetDashboardSummaryResponse,
   GetSalesChartResponse,
@@ -8,8 +9,9 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+const DASHBOARD_ROLES = ["waiter", "cashier", "supervisor", "manager", "owner"] as const;
 
-router.get("/dashboard/summary", async (_req, res): Promise<void> => {
+router.get("/dashboard/summary", requireRoles(DASHBOARD_ROLES), async (_req, res): Promise<void> => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -83,7 +85,7 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
   }));
 });
 
-router.get("/dashboard/sales-chart", async (_req, res): Promise<void> => {
+router.get("/dashboard/sales-chart", requireRoles(DASHBOARD_ROLES), async (_req, res): Promise<void> => {
   const result = [];
   const today = new Date();
 
@@ -122,7 +124,7 @@ router.get("/dashboard/sales-chart", async (_req, res): Promise<void> => {
   res.json(GetSalesChartResponse.parse(result));
 });
 
-router.get("/dashboard/top-items", async (_req, res): Promise<void> => {
+router.get("/dashboard/top-items", requireRoles(DASHBOARD_ROLES), async (_req, res): Promise<void> => {
   const items = await db.select({
     menuItemId: orderItemsTable.menuItemId,
     name: orderItemsTable.menuItemName,

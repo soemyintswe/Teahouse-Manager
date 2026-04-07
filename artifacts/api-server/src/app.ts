@@ -3,6 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { optionalAuth } from "./lib/auth";
 
 const app: Express = express();
 const corsOrigins = (process.env.CORS_ORIGINS ?? "")
@@ -50,6 +51,7 @@ if (corsOrigins.length > 0) {
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(optionalAuth);
 
 app.use("/api", router);
 

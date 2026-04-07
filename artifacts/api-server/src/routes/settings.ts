@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, settingsTable } from "@workspace/db";
+import { requireRoles } from "../lib/auth";
 import {
   GetSettingsResponse,
   UpdateSettingsBody,
@@ -18,7 +19,7 @@ function formatSettings(s: typeof settingsTable.$inferSelect) {
   };
 }
 
-router.get("/settings", async (_req, res): Promise<void> => {
+router.get("/settings", requireRoles(["supervisor", "manager", "owner"]), async (_req, res): Promise<void> => {
   let [settings] = await db.select().from(settingsTable).limit(1);
   if (!settings) {
     // Create default settings
@@ -27,7 +28,7 @@ router.get("/settings", async (_req, res): Promise<void> => {
   res.json(GetSettingsResponse.parse(formatSettings(settings)));
 });
 
-router.patch("/settings", async (req, res): Promise<void> => {
+router.patch("/settings", requireRoles(["manager", "owner"]), async (req, res): Promise<void> => {
   const parsed = UpdateSettingsBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 

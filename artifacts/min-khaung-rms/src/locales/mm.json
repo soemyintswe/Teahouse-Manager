@@ -423,5 +423,67 @@
       "aya_pay": "AYA Pay",
       "cb_pay": "CB Pay"
     }
+  },
+  "auth": {
+    "title": "အကောင့်ဝင်မည်",
+    "subtitle": "ဝန်ထမ်းအကောင့်ဖြင့်ဝင်ရန် သို့မဟုတ် ဧည့်သည်အဖြစ် စားပွဲနှင့်ချိတ်ရန်။",
+    "staffLogin": "ဝန်ထမ်းအကောင့်ဝင်",
+    "guestAccess": "ဧည့်သည်ဝင်ရောက်မှု",
+    "identifier": "အမှတ်အသား",
+    "identifierPlaceholder": "အမည် / email / ဖုန်း",
+    "pin": "PIN",
+    "loginButton": "ဝင်မည်",
+    "guestHint": "ဧည့်သည်များသည် စားပွဲ QR ကို scan လုပ်ပြီး သို့မဟုတ် Table ID ဖြင့် ဝင်နိုင်သည်။",
+    "tableId": "Table ID",
+    "guestConnectButton": "စားပွဲနှင့်ချိတ်မည်",
+    "invalidTable": "Table ID မမှန်ပါ",
+    "loginSuccess": "အောင်မြင်စွာဝင်ပြီးပါပြီ",
+    "loginFailed": "အကောင့်ဝင်မရပါ",
+    "logout": "ထွက်မည်",
+    "guestSession": "ဧည့်သည် session · Table {{table}}",
+    "noAccessTitle": "ခွင့်ပြုချက်မရှိပါ",
+    "noAccessDesc": "သင့် role ဖြင့် ဤစာမျက်နှာကို ဝင်မရနိုင်ပါ။"
+  },
+  "staff": {
+    "title": "ဝန်ထမ်းနှင့် User စီမံခန့်ခွဲမှု",
+    "subtitle": "ဝန်ထမ်းအကောင့်၊ role များနှင့် PIN ဝင်ရောက်မှုကို စီမံပါ။",
+    "addUser": "User ထည့်မည်",
+    "editUser": "{{name}} ကို ပြင်မည်",
+    "name": "အမည်အပြည့်အစုံ",
+    "namePlaceholder": "ဥပမာ မောင်အောင်",
+    "role": "အခန်းကဏ္ဍ",
+    "phone": "ဖုန်း",
+    "email": "အီးမေးလ်",
+    "pin": "PIN",
+    "active": "အသုံးပြုနိုင်",
+    "inactive": "ပိတ်ထား",
+    "activeHint": "ပိတ်ထားလျှင် ဤ user login မရနိုင်ပါ",
+    "status": "အခြေအနေ",
+    "contact": "ဆက်သွယ်ရန်",
+    "empty": "ဝန်ထမ်း user မရှိသေးပါ။",
+    "rolesTitle": "Role လုပ်ပိုင်ခွင့်",
+    "created": "User အသစ်ထည့်ပြီး",
+    "updated": "User {{name}} ကို ပြင်ပြီး",
+    "deleted": "User {{name}} ကို ဖျက်ပြီး",
+    "saveFailed": "User သိမ်းမရပါ",
+    "deleteFailed": "User ဖျက်မရပါ",
+    "deleteTitle": "ဤ user ကို ဖျက်မလား?",
+    "deleteDesc": "{{name}} ကို staff အကောင့်များမှ ဖယ်ရှားပါမည်။",
+    "roles": {
+      "waiter": "စားပွဲထိုးဝန်ထမ်း",
+      "kitchen": "မီးဖိုခန်းဝန်ထမ်း",
+      "cashier": "ငွေကောင်တာ",
+      "supervisor": "ကြီးကြပ်သူ",
+      "manager": "ဆိုင်မန်နေဂျာ",
+      "owner": "လုပ်ငန်းရှင်"
+    },
+    "roleDesc": {
+      "waiter": "Floor plan နှင့် customer order များကို စီမံနိုင်သည်။",
+      "kitchen": "KDS ကိုကြည့်ပြီး မီးဖို item အခြေအနေ update လုပ်နိုင်သည်။",
+      "cashier": "ငွေရှင်းလုပ်ငန်းနှင့် finance records များကို ကြည့်နိုင်သည်။",
+      "supervisor": "နေ့စဉ်လည်ပတ်မှု၊ menu/inventory ပြင်ဆင်မှုများကို ကြီးကြပ်နိုင်သည်။",
+      "manager": "staff, settings နှင့် operational modules များကို စီမံနိုင်သည်။",
+      "owner": "အင်္ဂါရပ်အားလုံးနှင့် user management အပြည့်အစုံ အသုံးပြုနိုင်သည်။"
+    }
   }
 }

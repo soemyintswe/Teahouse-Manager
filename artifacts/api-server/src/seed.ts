@@ -5,6 +5,7 @@ import {
   menuItemsTable,
   pool,
   roomsTable,
+  staffTable,
   tablesTable,
 } from "@workspace/db";
 
@@ -46,6 +47,15 @@ type MenuItemSeed = {
   sortOrder: number;
   imageUrl?: string;
   customizationOptions?: string;
+};
+
+type StaffSeed = {
+  name: string;
+  role: "waiter" | "kitchen" | "cashier" | "supervisor" | "manager" | "owner";
+  phone: string;
+  email: string;
+  pin: string;
+  active: "true" | "false";
 };
 
 const TABLE_SEEDS: TableSeed[] = [
@@ -205,6 +215,15 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
   },
 ];
 
+const STAFF_SEEDS: StaffSeed[] = [
+  { name: "Owner", role: "owner", phone: "09990000001", email: "owner@teahouse.local", pin: "1111", active: "true" },
+  { name: "Manager", role: "manager", phone: "09990000002", email: "manager@teahouse.local", pin: "2222", active: "true" },
+  { name: "Supervisor", role: "supervisor", phone: "09990000003", email: "supervisor@teahouse.local", pin: "3333", active: "true" },
+  { name: "Cashier", role: "cashier", phone: "09990000004", email: "cashier@teahouse.local", pin: "4444", active: "true" },
+  { name: "Kitchen", role: "kitchen", phone: "09990000005", email: "kitchen@teahouse.local", pin: "5555", active: "true" },
+  { name: "Waiter", role: "waiter", phone: "09990000006", email: "waiter@teahouse.local", pin: "6666", active: "true" },
+];
+
 function slugify(input: string): string {
   return input
     .trim()
@@ -346,6 +365,36 @@ async function main() {
       }
     }
 
+    const staffNames = STAFF_SEEDS.map((staff) => staff.name);
+    const existingStaffRows = await tx
+      .select({ id: staffTable.id, name: staffTable.name })
+      .from(staffTable)
+      .where(inArray(staffTable.name, staffNames));
+    const staffIdByName = new Map(existingStaffRows.map((staff) => [staff.name, staff.id]));
+
+    let staffInserted = 0;
+    let staffUpdated = 0;
+
+    for (const staff of STAFF_SEEDS) {
+      const existingId = staffIdByName.get(staff.name);
+      if (existingId != null) {
+        await tx
+          .update(staffTable)
+          .set({
+            role: staff.role,
+            phone: staff.phone,
+            email: staff.email,
+            pin: staff.pin,
+            active: staff.active,
+          })
+          .where(eq(staffTable.id, existingId));
+        staffUpdated += 1;
+      } else {
+        await tx.insert(staffTable).values(staff);
+        staffInserted += 1;
+      }
+    }
+
     return {
       roomsInserted,
       roomsUpdated,
@@ -355,6 +404,8 @@ async function main() {
       categoriesUpdated,
       itemsInserted,
       itemsUpdated,
+      staffInserted,
+      staffUpdated,
     };
   });
 

@@ -423,5 +423,67 @@
       "aya_pay": "AYA Pay",
       "cb_pay": "CB Pay"
     }
+  },
+  "auth": {
+    "title": "Sign In",
+    "subtitle": "Login with staff account or enter as table guest.",
+    "staffLogin": "Staff Login",
+    "guestAccess": "Guest Access",
+    "identifier": "Identifier",
+    "identifierPlaceholder": "Name / email / phone",
+    "pin": "PIN",
+    "loginButton": "Login",
+    "guestHint": "Guests can scan table QR or enter table ID manually.",
+    "tableId": "Table ID",
+    "guestConnectButton": "Connect to Table",
+    "invalidTable": "Invalid table ID",
+    "loginSuccess": "Login successful",
+    "loginFailed": "Login failed",
+    "logout": "Logout",
+    "guestSession": "Guest Session · Table {{table}}",
+    "noAccessTitle": "No Access",
+    "noAccessDesc": "Your account role cannot open this page."
+  },
+  "staff": {
+    "title": "Staff & User Management",
+    "subtitle": "Manage staff accounts, roles, and PIN access.",
+    "addUser": "Add User",
+    "editUser": "Edit {{name}}",
+    "name": "Full Name",
+    "namePlaceholder": "e.g. Maung Aung",
+    "role": "Role",
+    "phone": "Phone",
+    "email": "Email",
+    "pin": "PIN",
+    "active": "Active",
+    "inactive": "Inactive",
+    "activeHint": "Disable this user to block login",
+    "status": "Status",
+    "contact": "Contact",
+    "empty": "No staff users yet.",
+    "rolesTitle": "Role Permissions",
+    "created": "User created",
+    "updated": "User {{name}} updated",
+    "deleted": "User {{name}} deleted",
+    "saveFailed": "Failed to save user",
+    "deleteFailed": "Failed to delete user",
+    "deleteTitle": "Delete this user?",
+    "deleteDesc": "{{name}} will be removed from staff accounts.",
+    "roles": {
+      "waiter": "Waiter",
+      "kitchen": "Kitchen Staff",
+      "cashier": "Cashier",
+      "supervisor": "Supervisor",
+      "manager": "Manager",
+      "owner": "Owner"
+    },
+    "roleDesc": {
+      "waiter": "Can manage floor plan and customer orders.",
+      "kitchen": "Can view KDS and update kitchen item status.",
+      "cashier": "Can process payments and view finance records.",
+      "supervisor": "Can oversee daily operations and menu/inventory updates.",
+      "manager": "Can manage staff, settings, and operational modules.",
+      "owner": "Full access to all features and user management."
+    }
   }
 }

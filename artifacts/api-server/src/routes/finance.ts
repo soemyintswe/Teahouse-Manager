@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { sql, and, gte, lte } from "drizzle-orm";
 import { db, transactionsTable } from "@workspace/db";
+import { requireRoles } from "../lib/auth";
 import {
   ListTransactionsQueryParams,
   ListTransactionsResponse,
@@ -8,12 +9,14 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+const FINANCE_VIEW_ROLES = ["cashier", "supervisor", "manager", "owner"] as const;
+const FINANCE_MANAGE_ROLES = ["supervisor", "manager", "owner"] as const;
 
 function formatTx(t: typeof transactionsTable.$inferSelect) {
   return { ...t, amount: t.amount.toString(), createdAt: t.createdAt.toISOString() };
 }
 
-router.get("/finance/transactions", async (req, res): Promise<void> => {
+router.get("/finance/transactions", requireRoles(FINANCE_VIEW_ROLES), async (req, res): Promise<void> => {
   const qp = ListTransactionsQueryParams.safeParse(req.query);
   const conditions = [];
   if (qp.success && qp.data.type) conditions.push(sql`${transactionsTable.type} = ${qp.data.type}`);
@@ -29,7 +32,7 @@ router.get("/finance/transactions", async (req, res): Promise<void> => {
   res.json(ListTransactionsResponse.parse(txs.map(formatTx)));
 });
 
-router.post("/finance/transactions", async (req, res): Promise<void> => {
+router.post("/finance/transactions", requireRoles(FINANCE_MANAGE_ROLES), async (req, res): Promise<void> => {
   const parsed = CreateTransactionBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const [tx] = await db.insert(transactionsTable).values(parsed.data).returning();

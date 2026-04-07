@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, staffTable } from "@workspace/db";
+import { requireRoles, APP_ROLES } from "../lib/auth";
 import {
   ListStaffResponse,
   CreateStaffMemberBody,
@@ -11,34 +12,49 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+const STAFF_MANAGE_ROLES = ["manager", "owner"] as const;
 
 function formatStaff(s: typeof staffTable.$inferSelect) {
   return { ...s, createdAt: s.createdAt.toISOString(), updatedAt: s.updatedAt.toISOString() };
 }
 
-router.get("/staff", async (_req, res): Promise<void> => {
+router.get("/staff", requireRoles(STAFF_MANAGE_ROLES), async (_req, res): Promise<void> => {
   const members = await db.select().from(staffTable).orderBy(staffTable.name);
   res.json(ListStaffResponse.parse(members.map(formatStaff)));
 });
 
-router.post("/staff", async (req, res): Promise<void> => {
+router.post("/staff", requireRoles(STAFF_MANAGE_ROLES), async (req, res): Promise<void> => {
   const parsed = CreateStaffMemberBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const [member] = await db.insert(staffTable).values(parsed.data).returning();
+  const role = parsed.data.role.trim().toLowerCase();
+  if (!APP_ROLES.includes(role as (typeof APP_ROLES)[number]) || role === "guest") {
+    res.status(400).json({ error: "Invalid staff role." });
+    return;
+  }
+  const [member] = await db.insert(staffTable).values({ ...parsed.data, role }).returning();
   res.status(201).json(formatStaff(member));
 });
 
-router.patch("/staff/:id", async (req, res): Promise<void> => {
+router.patch("/staff/:id", requireRoles(STAFF_MANAGE_ROLES), async (req, res): Promise<void> => {
   const params = UpdateStaffMemberParams.safeParse({ id: parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateStaffMemberBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const [member] = await db.update(staffTable).set(parsed.data).where(eq(staffTable.id, params.data.id)).returning();
+  const payload = { ...parsed.data };
+  if (parsed.data.role) {
+    const role = parsed.data.role.trim().toLowerCase();
+    if (!APP_ROLES.includes(role as (typeof APP_ROLES)[number]) || role === "guest") {
+      res.status(400).json({ error: "Invalid staff role." });
+      return;
+    }
+    payload.role = role;
+  }
+  const [member] = await db.update(staffTable).set(payload).where(eq(staffTable.id, params.data.id)).returning();
   if (!member) { res.status(404).json({ error: "Staff member not found" }); return; }
   res.json(UpdateStaffMemberResponse.parse(formatStaff(member)));
 });
 
-router.delete("/staff/:id", async (req, res): Promise<void> => {
+router.delete("/staff/:id", requireRoles(["owner"]), async (req, res): Promise<void> => {
   const params = DeleteStaffMemberParams.safeParse({ id: parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   await db.delete(staffTable).where(eq(staffTable.id, params.data.id));
