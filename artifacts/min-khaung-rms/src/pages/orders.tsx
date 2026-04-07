@@ -428,19 +428,19 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="flex h-full flex-col gap-4 overflow-x-hidden">
+      <div className="flex max-w-full flex-wrap items-center gap-3">
         <Button variant="outline" size="icon" onClick={() => setLocation("/floor-plan")}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div>
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">Orders · Table {table.tableNumber}</h1>
           <p className="text-sm text-muted-foreground">
             {table.zone === "aircon" ? "Air-con Room" : "Hall Zone"} · {table.capacity} seats · {table.category}
             {table.isBooked ? " · Reserved" : ""}
           </p>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
           <Badge variant="outline">Table ID #{table.id}</Badge>
           <Button variant="outline" size="sm" onClick={() => setLocation("/orders")}>
             Change Table
@@ -467,7 +467,7 @@ export default function OrdersPage() {
 
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-h-0 flex-col gap-3">
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="flex gap-2 overflow-x-auto pb-1 pr-1">
             {(categories as MenuCategory[]).map((category) => (
               <button
                 key={category.id}
@@ -496,7 +496,7 @@ export default function OrdersPage() {
             />
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border bg-card p-3">
+          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto rounded-lg border bg-card p-3">
             {menuItemsLoading ? (
               <div className="flex h-full items-center justify-center">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -512,17 +512,17 @@ export default function OrdersPage() {
                   const quantityInCart =
                     cart.find((cartItem) => cartItem.menuItemId === item.id)?.quantity ?? 0;
                   return (
-                    <div key={item.id} className="rounded-lg border p-3">
-                      <div className="flex justify-between gap-2">
+                    <div key={item.id} className="rounded-lg border p-3 overflow-hidden">
+                      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
                         <div className="min-w-0">
-                          <p className="truncate font-semibold">{item.name}</p>
+                          <p className="font-semibold leading-tight break-words">{item.name}</p>
                           <p className="truncate text-xs text-muted-foreground">{item.nameMyanmar}</p>
                         </div>
-                        <p className="whitespace-nowrap font-bold text-primary">
+                        <p className="text-base font-bold text-primary sm:text-right">
                           {formatMoney(item.price)}
                         </p>
                       </div>
-                      <div className="mt-3 flex justify-end">
+                      <div className="mt-2 flex justify-end">
                         {quantityInCart > 0 ? (
                           <div className="flex items-center gap-2">
                             <button

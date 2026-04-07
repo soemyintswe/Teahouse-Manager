@@ -64,11 +64,11 @@ function SummaryCard({
   return (
     <button className="w-full text-left" onClick={onClick}>
       <Card className="transition-all hover:border-primary/40 hover:shadow-md active:scale-[0.99]">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 px-3 py-2 sm:px-6 sm:py-4">
+          <CardTitle className="text-xs font-medium sm:text-sm">{title}</CardTitle>
           {icon}
         </CardHeader>
-        <CardContent>{children}</CardContent>
+        <CardContent className="px-3 pb-3 pt-0 sm:px-6 sm:pb-5">{children}</CardContent>
       </Card>
     </button>
   );
@@ -165,13 +165,13 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SummaryCard
           title="Today's Sales"
           icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}
           onClick={() => setLocation("/finance")}
         >
-          <div className="text-2xl font-bold">{summary?.todaySales ?? "Ks 0"}</div>
+          <div className="text-lg font-bold sm:text-2xl">{summary?.todaySales ?? "Ks 0"}</div>
         </SummaryCard>
 
         <SummaryCard
@@ -179,8 +179,8 @@ export default function Dashboard() {
           icon={<ShoppingBag className="h-4 w-4 text-muted-foreground" />}
           onClick={() => setLocation("/orders")}
         >
-          <div className="text-2xl font-bold">{summary?.activeOrders ?? 0}</div>
-          <p className="text-xs text-muted-foreground">Total today: {summary?.todayOrders ?? 0}</p>
+          <div className="text-lg font-bold sm:text-2xl">{summary?.activeOrders ?? 0}</div>
+          <p className="text-[11px] text-muted-foreground sm:text-xs">Total today: {summary?.todayOrders ?? 0}</p>
         </SummaryCard>
 
         <SummaryCard
@@ -188,8 +188,8 @@ export default function Dashboard() {
           icon={<MapIcon className="h-4 w-4 text-muted-foreground" />}
           onClick={() => setLocation("/floor-plan")}
         >
-          <div className="text-2xl font-bold">{summary?.availableTables ?? 0}</div>
-          <p className="text-xs text-muted-foreground">
+          <div className="text-lg font-bold sm:text-2xl">{summary?.availableTables ?? 0}</div>
+          <p className="text-[11px] text-muted-foreground sm:text-xs">
             {summary?.occupiedTables ?? 0} occupied, {summary?.pendingPaymentTables ?? 0} pending
           </p>
         </SummaryCard>
@@ -199,7 +199,7 @@ export default function Dashboard() {
           icon={<AlertTriangle className="h-4 w-4 text-destructive" />}
           onClick={() => setLocation("/inventory")}
         >
-          <div className="text-2xl font-bold text-destructive">{summary?.lowStockItems ?? 0}</div>
+          <div className="text-lg font-bold text-destructive sm:text-2xl">{summary?.lowStockItems ?? 0}</div>
         </SummaryCard>
       </div>
 
