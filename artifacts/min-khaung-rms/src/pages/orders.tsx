@@ -518,24 +518,24 @@ export default function OrdersPage() {
                 <p>{t("orders.noItemsFound")}</p>
               </div>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {filteredItems.map((item) => {
                   const quantityInCart =
                     cart.find((cartItem) => cartItem.menuItemId === item.id)?.quantity ?? 0;
                   return (
-                    <div key={item.id} className="rounded-lg border p-3 overflow-hidden">
-                      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+                    <div key={item.id} className="min-w-0 rounded-lg border p-3">
+                      <div className="flex flex-col gap-1.5 md:flex-row md:items-start md:justify-between md:gap-2">
                         <div className="min-w-0">
                           <p className="font-semibold leading-tight break-words">{item.name}</p>
                           <p className="truncate text-xs text-muted-foreground">{item.nameMyanmar}</p>
                         </div>
-                        <p className="text-base font-bold text-primary sm:text-right">
+                        <p className="text-base font-bold text-primary md:shrink-0 md:text-right">
                           {formatMoney(item.price)}
                         </p>
                       </div>
                       <div className="mt-2 flex justify-end">
                         {quantityInCart > 0 ? (
-                          <div className="flex items-center gap-2">
+                          <div className="flex w-full items-center justify-end gap-2 md:w-auto">
                             <button
                               onClick={() => decreaseQty(item.id)}
                               className="flex h-7 w-7 items-center justify-center rounded-full border hover:bg-muted"
@@ -551,7 +551,12 @@ export default function OrdersPage() {
                             </button>
                           </div>
                         ) : (
-                          <Button size="sm" variant="outline" onClick={() => addToCart(item)}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => addToCart(item)}
+                            className="w-full md:w-auto"
+                          >
                             <Plus className="mr-1 h-3.5 w-3.5" />
                             {t("actions.addItem")}
                           </Button>
