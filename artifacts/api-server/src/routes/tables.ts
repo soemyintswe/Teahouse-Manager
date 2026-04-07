@@ -46,6 +46,18 @@ router.get("/tables/:id", async (req, res): Promise<void> => {
   res.json(GetTableResponse.parse({ ...table, createdAt: table.createdAt.toISOString(), updatedAt: table.updatedAt.toISOString() }));
 });
 
+router.post("/tables/:id/scan", async (req, res): Promise<void> => {
+  const params = GetTableParams.safeParse({ id: parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10) });
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  const [table] = await db.select().from(tablesTable).where(eq(tablesTable.id, params.data.id));
+  if (!table) { res.status(404).json({ error: "Table not found" }); return; }
+  if (table.status !== "Active") { res.status(409).json({ error: "This table is currently unavailable." }); return; }
+
+  const [updated] = await db.update(tablesTable).set({ occupancyStatus: "occupied" }).where(eq(tablesTable.id, params.data.id)).returning();
+  res.json(GetTableResponse.parse({ ...updated, createdAt: updated.createdAt.toISOString(), updatedAt: updated.updatedAt.toISOString() }));
+});
+
 router.patch("/tables/:id", async (req, res): Promise<void> => {
   const params = UpdateTableParams.safeParse({ id: parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }

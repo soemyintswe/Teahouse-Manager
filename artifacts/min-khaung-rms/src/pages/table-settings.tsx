@@ -55,7 +55,7 @@ const ZONE_OPTIONS = [
 
 const CATEGORY_OPTIONS = ["Standard", "VIP", "Buffer"] as const;
 const SERVICE_STATUS_OPTIONS = ["Active", "Maintenance", "Archived"] as const;
-const OCCUPANCY_OPTIONS = ["available", "occupied", "payment_pending", "dirty"] as const;
+const OCCUPANCY_OPTIONS = ["available", "occupied", "payment_pending", "paid", "dirty"] as const;
 
 type FormState = {
   tableNumber: string;
@@ -64,7 +64,7 @@ type FormState = {
   category: "Standard" | "VIP" | "Buffer";
   status: "Active" | "Maintenance" | "Archived";
   isBooked: boolean;
-  occupancyStatus: "available" | "occupied" | "payment_pending" | "dirty";
+  occupancyStatus: "available" | "occupied" | "payment_pending" | "paid" | "dirty";
   posX: string;
   posY: string;
 };
@@ -93,6 +93,7 @@ function getOccupancyBadgeClass(status: Table["occupancyStatus"]): string {
   if (status === "available") return "bg-emerald-100 text-emerald-700 border-emerald-300";
   if (status === "occupied") return "bg-amber-100 text-amber-700 border-amber-300";
   if (status === "payment_pending") return "bg-red-100 text-red-700 border-red-300";
+  if (status === "paid") return "bg-blue-100 text-blue-700 border-blue-300";
   return "bg-slate-100 text-slate-700 border-slate-300";
 }
 

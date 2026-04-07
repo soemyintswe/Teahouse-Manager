@@ -14,9 +14,10 @@ type TableSeed = {
   category: "Standard" | "VIP" | "Buffer";
   status: "Active" | "Maintenance" | "Archived";
   isBooked: boolean;
-  occupancyStatus: "available" | "occupied" | "payment_pending" | "dirty";
+  occupancyStatus: "available" | "occupied" | "payment_pending" | "paid" | "dirty";
   posX: number;
   posY: number;
+  currentOrderId: number | null;
   qrCode: string;
 };
 
@@ -40,20 +41,20 @@ type MenuItemSeed = {
 };
 
 const TABLE_SEEDS: TableSeed[] = [
-  { tableNumber: "H1", zone: "hall", capacity: 2, category: "Standard", status: "Active", isBooked: false, occupancyStatus: "available", posX: 80, posY: 120, qrCode: "table-h1" },
-  { tableNumber: "H2", zone: "hall", capacity: 4, category: "Standard", status: "Active", isBooked: false, occupancyStatus: "occupied", posX: 220, posY: 120, qrCode: "table-h2" },
-  { tableNumber: "H3", zone: "hall", capacity: 4, category: "VIP", status: "Active", isBooked: true, occupancyStatus: "available", posX: 360, posY: 120, qrCode: "table-h3" },
-  { tableNumber: "H4", zone: "hall", capacity: 6, category: "VIP", status: "Active", isBooked: false, occupancyStatus: "payment_pending", posX: 500, posY: 120, qrCode: "table-h4" },
-  { tableNumber: "H5", zone: "hall", capacity: 2, category: "Standard", status: "Active", isBooked: false, occupancyStatus: "available", posX: 80, posY: 270, qrCode: "table-h5" },
-  { tableNumber: "H6", zone: "hall", capacity: 4, category: "Buffer", status: "Maintenance", isBooked: false, occupancyStatus: "dirty", posX: 220, posY: 270, qrCode: "table-h6" },
-  { tableNumber: "H7", zone: "hall", capacity: 4, category: "Standard", status: "Active", isBooked: false, occupancyStatus: "available", posX: 360, posY: 270, qrCode: "table-h7" },
-  { tableNumber: "H8", zone: "hall", capacity: 8, category: "Buffer", status: "Archived", isBooked: false, occupancyStatus: "available", posX: 500, posY: 270, qrCode: "table-h8" },
-  { tableNumber: "A1", zone: "aircon", capacity: 2, category: "Standard", status: "Active", isBooked: false, occupancyStatus: "available", posX: 90, posY: 110, qrCode: "table-a1" },
-  { tableNumber: "A2", zone: "aircon", capacity: 4, category: "VIP", status: "Active", isBooked: false, occupancyStatus: "available", posX: 240, posY: 110, qrCode: "table-a2" },
-  { tableNumber: "A3", zone: "aircon", capacity: 4, category: "Standard", status: "Active", isBooked: true, occupancyStatus: "occupied", posX: 390, posY: 110, qrCode: "table-a3" },
-  { tableNumber: "A4", zone: "aircon", capacity: 6, category: "VIP", status: "Active", isBooked: false, occupancyStatus: "available", posX: 540, posY: 110, qrCode: "table-a4" },
-  { tableNumber: "A5", zone: "aircon", capacity: 2, category: "Standard", status: "Active", isBooked: false, occupancyStatus: "available", posX: 165, posY: 260, qrCode: "table-a5" },
-  { tableNumber: "A6", zone: "aircon", capacity: 4, category: "Buffer", status: "Active", isBooked: false, occupancyStatus: "available", posX: 465, posY: 260, qrCode: "table-a6" },
+  { tableNumber: "H1", zone: "hall", capacity: 2, category: "Standard", status: "Active", isBooked: false, occupancyStatus: "available", currentOrderId: null, posX: 80, posY: 120, qrCode: "table-h1" },
+  { tableNumber: "H2", zone: "hall", capacity: 4, category: "Standard", status: "Active", isBooked: false, occupancyStatus: "occupied", currentOrderId: null, posX: 220, posY: 120, qrCode: "table-h2" },
+  { tableNumber: "H3", zone: "hall", capacity: 4, category: "VIP", status: "Active", isBooked: true, occupancyStatus: "available", currentOrderId: null, posX: 360, posY: 120, qrCode: "table-h3" },
+  { tableNumber: "H4", zone: "hall", capacity: 6, category: "VIP", status: "Active", isBooked: false, occupancyStatus: "payment_pending", currentOrderId: null, posX: 500, posY: 120, qrCode: "table-h4" },
+  { tableNumber: "H5", zone: "hall", capacity: 2, category: "Standard", status: "Active", isBooked: false, occupancyStatus: "available", currentOrderId: null, posX: 80, posY: 270, qrCode: "table-h5" },
+  { tableNumber: "H6", zone: "hall", capacity: 4, category: "Buffer", status: "Maintenance", isBooked: false, occupancyStatus: "dirty", currentOrderId: null, posX: 220, posY: 270, qrCode: "table-h6" },
+  { tableNumber: "H7", zone: "hall", capacity: 4, category: "Standard", status: "Active", isBooked: false, occupancyStatus: "available", currentOrderId: null, posX: 360, posY: 270, qrCode: "table-h7" },
+  { tableNumber: "H8", zone: "hall", capacity: 8, category: "Buffer", status: "Archived", isBooked: false, occupancyStatus: "available", currentOrderId: null, posX: 500, posY: 270, qrCode: "table-h8" },
+  { tableNumber: "A1", zone: "aircon", capacity: 2, category: "Standard", status: "Active", isBooked: false, occupancyStatus: "available", currentOrderId: null, posX: 90, posY: 110, qrCode: "table-a1" },
+  { tableNumber: "A2", zone: "aircon", capacity: 4, category: "VIP", status: "Active", isBooked: false, occupancyStatus: "available", currentOrderId: null, posX: 240, posY: 110, qrCode: "table-a2" },
+  { tableNumber: "A3", zone: "aircon", capacity: 4, category: "Standard", status: "Active", isBooked: true, occupancyStatus: "occupied", currentOrderId: null, posX: 390, posY: 110, qrCode: "table-a3" },
+  { tableNumber: "A4", zone: "aircon", capacity: 6, category: "VIP", status: "Active", isBooked: false, occupancyStatus: "available", currentOrderId: null, posX: 540, posY: 110, qrCode: "table-a4" },
+  { tableNumber: "A5", zone: "aircon", capacity: 2, category: "Standard", status: "Active", isBooked: false, occupancyStatus: "paid", currentOrderId: null, posX: 165, posY: 260, qrCode: "table-a5" },
+  { tableNumber: "A6", zone: "aircon", capacity: 4, category: "Buffer", status: "Active", isBooked: false, occupancyStatus: "available", currentOrderId: null, posX: 465, posY: 260, qrCode: "table-a6" },
 ];
 
 const MENU_CATEGORY_SEEDS: MenuCategorySeed[] = [

@@ -38,6 +38,7 @@ export const TableOccupancyStatus = {
   available: "available",
   occupied: "occupied",
   payment_pending: "payment_pending",
+  paid: "paid",
   dirty: "dirty",
 } as const;
 
@@ -87,6 +88,7 @@ export const CreateTableBodyOccupancyStatus = {
   available: "available",
   occupied: "occupied",
   payment_pending: "payment_pending",
+  paid: "paid",
   dirty: "dirty",
 } as const;
 
@@ -127,6 +129,7 @@ export const UpdateTableBodyOccupancyStatus = {
   available: "available",
   occupied: "occupied",
   payment_pending: "payment_pending",
+  paid: "paid",
   dirty: "dirty",
 } as const;
 

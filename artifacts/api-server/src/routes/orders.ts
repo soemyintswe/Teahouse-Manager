@@ -104,6 +104,12 @@ router.post("/orders", async (req, res): Promise<void> => {
         throw error;
       }
 
+      if (["payment_pending", "paid", "dirty"].includes(table.occupancyStatus)) {
+        const error = new Error("This table is currently unavailable.") as Error & { statusCode?: number };
+        error.statusCode = 409;
+        throw error;
+      }
+
       if (table.currentOrderId) {
         const [activeOrder] = await tx.select().from(ordersTable).where(eq(ordersTable.id, table.currentOrderId));
         if (activeOrder && (activeOrder.status === "open" || activeOrder.status === "ready_to_pay")) {
@@ -180,15 +186,26 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
   const [order] = await db.update(ordersTable).set(parsed.data).where(eq(ordersTable.id, params.data.id)).returning();
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
 
-  // If paid/cancelled, free the table
-  if (parsed.data.status === "paid" || parsed.data.status === "cancelled") {
-    await db.update(tablesTable).set({ occupancyStatus: "dirty", currentOrderId: null }).where(eq(tablesTable.currentOrderId, order.id));
+  // Paid table should stay occupied until manual checkout.
+  if (parsed.data.status === "paid") {
+    await db
+      .update(tablesTable)
+      .set({ occupancyStatus: "paid", currentOrderId: order.id })
+      .where(eq(tablesTable.id, order.tableId));
+  }
+
+  // Cancelled order can free table immediately.
+  if (parsed.data.status === "cancelled") {
+    await db
+      .update(tablesTable)
+      .set({ occupancyStatus: "available", currentOrderId: null })
+      .where(eq(tablesTable.id, order.tableId));
   }
   if (parsed.data.status === "ready_to_pay") {
-    await db.update(tablesTable).set({ occupancyStatus: "payment_pending" }).where(eq(tablesTable.currentOrderId, order.id));
+    await db.update(tablesTable).set({ occupancyStatus: "payment_pending" }).where(eq(tablesTable.id, order.tableId));
   }
   if (parsed.data.status === "open") {
-    await db.update(tablesTable).set({ occupancyStatus: "occupied" }).where(eq(tablesTable.currentOrderId, order.id));
+    await db.update(tablesTable).set({ occupancyStatus: "occupied", currentOrderId: order.id }).where(eq(tablesTable.id, order.tableId));
   }
 
   res.json(UpdateOrderResponse.parse(formatOrder(order)));

@@ -4,7 +4,7 @@ import { z } from "zod/v4";
 
 export const tableCategoryEnum = pgEnum("table_category", ["Standard", "VIP", "Buffer"]);
 export const tableStatusEnum = pgEnum("table_status", ["Active", "Maintenance", "Archived"]);
-export const tableOccupancyStatusEnum = pgEnum("table_occupancy_status", ["available", "occupied", "payment_pending", "dirty"]);
+export const tableOccupancyStatusEnum = pgEnum("table_occupancy_status", ["available", "occupied", "payment_pending", "paid", "dirty"]);
 
 export const tablesTable = pgTable("tables", {
   id: serial("id").primaryKey(),

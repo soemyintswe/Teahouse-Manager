@@ -47,9 +47,9 @@ router.post("/payments", async (req, res): Promise<void> => {
     status: "completed",
   }).returning();
 
-  // Mark order as paid and move table to cleaning flow
+  // Mark order as paid, but keep table occupied until manual checkout.
   await db.update(ordersTable).set({ status: "paid", paymentMethod: parsed.data.paymentMethod }).where(eq(ordersTable.id, parsed.data.orderId));
-  await db.update(tablesTable).set({ occupancyStatus: "dirty", currentOrderId: null }).where(eq(tablesTable.currentOrderId, parsed.data.orderId));
+  await db.update(tablesTable).set({ occupancyStatus: "paid", currentOrderId: parsed.data.orderId }).where(eq(tablesTable.id, order.tableId));
 
   res.status(201).json(GetPaymentResponse.parse(formatPayment(payment)));
 });

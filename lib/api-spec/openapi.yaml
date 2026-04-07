@@ -135,6 +135,27 @@ paths:
         "204":
           description: Deleted
 
+  /tables/{id}/scan:
+    post:
+      operationId: scanTableQr
+      tags: [tables]
+      summary: Mark a table as occupied when QR is scanned
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated table
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Table"
+        "404":
+          description: Not found
+
   # ─── MENU ──────────────────────────────────────────────────────────────────
   /menu-categories:
     get:
@@ -891,7 +912,7 @@ components:
           type: boolean
         occupancyStatus:
           type: string
-          enum: ["available", "occupied", "payment_pending", "dirty"]
+          enum: ["available", "occupied", "payment_pending", "paid", "dirty"]
           description: "table occupancy status"
         qrCode:
           type: string
@@ -938,7 +959,7 @@ components:
           type: boolean
         occupancyStatus:
           type: string
-          enum: ["available", "occupied", "payment_pending", "dirty"]
+          enum: ["available", "occupied", "payment_pending", "paid", "dirty"]
         posX:
           type: integer
         posY:
@@ -970,7 +991,7 @@ components:
           type: boolean
         occupancyStatus:
           type: string
-          enum: ["available", "occupied", "payment_pending", "dirty"]
+          enum: ["available", "occupied", "payment_pending", "paid", "dirty"]
         posX:
           type: integer
         posY:

@@ -62,7 +62,7 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
   const tables = await db.select().from(tablesTable);
   const activeServiceTables = tables.filter(t => t.status === "Active");
   const availableTables = activeServiceTables.filter(t => t.occupancyStatus === "available").length;
-  const occupiedTables = activeServiceTables.filter(t => t.occupancyStatus === "occupied").length;
+  const occupiedTables = activeServiceTables.filter(t => t.occupancyStatus === "occupied" || t.occupancyStatus === "paid").length;
   const pendingPaymentTables = activeServiceTables.filter(t => t.occupancyStatus === "payment_pending").length;
 
   // Low stock

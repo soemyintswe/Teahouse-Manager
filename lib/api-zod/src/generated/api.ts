@@ -28,7 +28,7 @@ export const ListTablesResponseItem = zod.object({
     .describe("table service status"),
   isBooked: zod.boolean(),
   occupancyStatus: zod
-    .enum(["available", "occupied", "payment_pending", "dirty"])
+    .enum(["available", "occupied", "payment_pending", "paid", "dirty"])
     .describe("table occupancy status"),
   qrCode: zod.string().optional(),
   posX: zod.number(),
@@ -50,7 +50,7 @@ export const CreateTableBody = zod.object({
   status: zod.enum(["Active", "Maintenance", "Archived"]).optional(),
   isBooked: zod.boolean().optional(),
   occupancyStatus: zod
-    .enum(["available", "occupied", "payment_pending", "dirty"])
+    .enum(["available", "occupied", "payment_pending", "paid", "dirty"])
     .optional(),
   posX: zod.number(),
   posY: zod.number(),
@@ -74,7 +74,7 @@ export const GetTableResponse = zod.object({
     .describe("table service status"),
   isBooked: zod.boolean(),
   occupancyStatus: zod
-    .enum(["available", "occupied", "payment_pending", "dirty"])
+    .enum(["available", "occupied", "payment_pending", "paid", "dirty"])
     .describe("table occupancy status"),
   qrCode: zod.string().optional(),
   posX: zod.number(),
@@ -99,7 +99,7 @@ export const UpdateTableBody = zod.object({
   status: zod.enum(["Active", "Maintenance", "Archived"]).optional(),
   isBooked: zod.boolean().optional(),
   occupancyStatus: zod
-    .enum(["available", "occupied", "payment_pending", "dirty"])
+    .enum(["available", "occupied", "payment_pending", "paid", "dirty"])
     .optional(),
   posX: zod.number().optional(),
   posY: zod.number().optional(),
@@ -117,7 +117,7 @@ export const UpdateTableResponse = zod.object({
     .describe("table service status"),
   isBooked: zod.boolean(),
   occupancyStatus: zod
-    .enum(["available", "occupied", "payment_pending", "dirty"])
+    .enum(["available", "occupied", "payment_pending", "paid", "dirty"])
     .describe("table occupancy status"),
   qrCode: zod.string().optional(),
   posX: zod.number(),
@@ -132,6 +132,34 @@ export const UpdateTableResponse = zod.object({
  */
 export const DeleteTableParams = zod.object({
   id: zod.coerce.number(),
+});
+
+/**
+ * @summary Mark a table as occupied when QR is scanned
+ */
+export const ScanTableQrParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ScanTableQrResponse = zod.object({
+  id: zod.number(),
+  tableNumber: zod.string(),
+  zone: zod.string().describe("hall or aircon"),
+  capacity: zod.number(),
+  category: zod.enum(["Standard", "VIP", "Buffer"]),
+  status: zod
+    .enum(["Active", "Maintenance", "Archived"])
+    .describe("table service status"),
+  isBooked: zod.boolean(),
+  occupancyStatus: zod
+    .enum(["available", "occupied", "payment_pending", "paid", "dirty"])
+    .describe("table occupancy status"),
+  qrCode: zod.string().optional(),
+  posX: zod.number(),
+  posY: zod.number(),
+  currentOrderId: zod.number().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
 });
 
 /**

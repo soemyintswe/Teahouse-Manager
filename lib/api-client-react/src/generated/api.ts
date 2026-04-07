@@ -558,6 +558,90 @@ export const useDeleteTable = <
 };
 
 /**
+ * @summary Mark a table as occupied when QR is scanned
+ */
+export const getScanTableQrUrl = (id: number) => {
+  return `/api/tables/${id}/scan`;
+};
+
+export const scanTableQr = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Table> => {
+  return customFetch<Table>(getScanTableQrUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getScanTableQrMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof scanTableQr>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof scanTableQr>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["scanTableQr"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof scanTableQr>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return scanTableQr(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ScanTableQrMutationResult = NonNullable<
+  Awaited<ReturnType<typeof scanTableQr>>
+>;
+
+export type ScanTableQrMutationError = ErrorType<void>;
+
+/**
+ * @summary Mark a table as occupied when QR is scanned
+ */
+export const useScanTableQr = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof scanTableQr>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof scanTableQr>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getScanTableQrMutationOptions(options));
+};
+
+/**
  * @summary List menu categories
  */
 export const getListMenuCategoriesUrl = () => {

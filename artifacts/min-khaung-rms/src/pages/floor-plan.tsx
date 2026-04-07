@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useListTables, getListTablesQueryKey } from "@workspace/api-client-react";
+import { useListTables, getListTablesQueryKey, useUpdateTable } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Loader2,
   RefreshCw,
-  Users,
   Clock,
   ZoomIn,
   ZoomOut,
@@ -12,11 +11,15 @@ import {
   Crown,
   BookmarkCheck,
   Lock,
+  X,
+  Sparkles,
+  Receipt,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useToast } from "@/hooks/use-toast";
 
 type TableData = {
   id: number;
@@ -26,7 +29,7 @@ type TableData = {
   category: "Standard" | "VIP" | "Buffer";
   status: "Active" | "Maintenance" | "Archived";
   isBooked: boolean;
-  occupancyStatus: "available" | "occupied" | "payment_pending" | "dirty";
+  occupancyStatus: "available" | "occupied" | "payment_pending" | "paid" | "dirty";
   posX: number;
   posY: number;
   currentOrderId: number | null;
@@ -44,7 +47,7 @@ const OCCUPANCY_CONFIG: Record<
     bg: "bg-emerald-500",
     border: "border-emerald-700",
     text: "text-white",
-    dot: "bg-emerald-400",
+    dot: "bg-emerald-300",
   },
   occupied: {
     label: "Occupied",
@@ -60,10 +63,17 @@ const OCCUPANCY_CONFIG: Record<
     text: "text-white",
     dot: "bg-red-300",
   },
+  paid: {
+    label: "Paid",
+    bg: "bg-blue-500",
+    border: "border-blue-700",
+    text: "text-white",
+    dot: "bg-blue-300",
+  },
   dirty: {
-    label: "Cleaning",
-    bg: "bg-slate-400",
-    border: "border-slate-600",
+    label: "Dirty",
+    bg: "bg-slate-500",
+    border: "border-slate-700",
     text: "text-white",
     dot: "bg-slate-300",
   },
@@ -87,27 +97,27 @@ function TableCard({ table, onClick }: { table: TableData; onClick: () => void }
       onClick={onClick}
       disabled={isMaintenance}
       className={`
-        absolute w-[72px] h-[72px] sm:w-[88px] sm:h-[88px] rounded-xl border-2 shadow-md
+        absolute w-[74px] h-[74px] sm:w-[92px] sm:h-[92px] rounded-xl border-2 shadow-md
         flex flex-col items-center justify-center gap-1
         transition-all duration-150 select-none
         ${baseClass}
       `}
       style={{ left: table.posX, top: table.posY }}
     >
-      {!isMaintenance && (table.occupancyStatus === "occupied" || table.occupancyStatus === "payment_pending") && (
+      {!isMaintenance && (table.occupancyStatus === "occupied" || table.occupancyStatus === "payment_pending" || table.occupancyStatus === "paid") && (
         <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
           <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${occupancyConfig.dot}`} />
           <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${occupancyConfig.dot}`} />
         </span>
       )}
 
-      {isMaintenance ? (
-        <Lock className="absolute top-2 left-2 h-3.5 w-3.5" />
-      ) : null}
+      {isMaintenance ? <Lock className="absolute top-2 left-2 h-3.5 w-3.5" /> : null}
 
       <span className="px-1 text-center text-[10px] sm:text-[11px] font-black leading-tight">
-        {table.tableNumber} (Cap: {table.capacity})
+        {table.tableNumber} - {table.category}
       </span>
+
+      <span className="px-1 text-center text-[9px] font-semibold leading-tight">(Cap: {table.capacity})</span>
 
       <div className="flex items-center gap-1 text-[9px] leading-none">
         {table.category === "VIP" ? (
@@ -122,11 +132,9 @@ function TableCard({ table, onClick }: { table: TableData; onClick: () => void }
         ) : null}
       </div>
 
-      {isMaintenance ? (
-        <span className="text-[8px] font-bold uppercase tracking-wide">Maintenance</span>
-      ) : table.occupancyStatus !== "available" ? (
-        <span className="text-[8px] font-bold uppercase tracking-wide">{occupancyConfig.label}</span>
-      ) : null}
+      <span className="text-[8px] font-bold uppercase tracking-wide">
+        {isMaintenance ? "Maintenance" : occupancyConfig.label}
+      </span>
     </button>
   );
 
@@ -140,13 +148,95 @@ function TableCard({ table, onClick }: { table: TableData; onClick: () => void }
   );
 }
 
+function QuickActionMenu({
+  table,
+  onClose,
+  onStartOrder,
+  onCheckout,
+  onMarkClean,
+}: {
+  table: TableData;
+  onClose: () => void;
+  onStartOrder: () => void;
+  onCheckout: () => void;
+  onMarkClean: () => void;
+}) {
+  const cfg = OCCUPANCY_CONFIG[table.occupancyStatus] ?? OCCUPANCY_CONFIG.available;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/35" onClick={onClose} />
+      <div className="fixed inset-x-3 bottom-3 z-50 rounded-xl border bg-card p-4 shadow-2xl sm:inset-x-auto sm:right-4 sm:w-[360px]">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm text-muted-foreground">Quick Actions</p>
+            <h3 className="text-xl font-black">
+              Table {table.tableNumber}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {table.category} · Cap {table.capacity} · {table.zone === "aircon" ? "Air-con" : "Hall"}
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded p-1 hover:bg-muted/40" aria-label="Close menu">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2">
+          <Badge variant="outline" className="text-xs">ID #{table.id}</Badge>
+          <Badge variant="outline" className="text-xs">{cfg.label}</Badge>
+          {table.isBooked ? <Badge className="text-xs bg-blue-500 text-white">Reserved</Badge> : null}
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {table.occupancyStatus === "available" ? (
+            <Button className="w-full" onClick={onStartOrder}>
+              Start Order
+            </Button>
+          ) : null}
+
+          {(table.occupancyStatus === "occupied" || table.occupancyStatus === "paid") ? (
+            <Button className="w-full bg-slate-700 text-white hover:bg-slate-800" onClick={onCheckout}>
+              Checkout (Mark as Dirty)
+            </Button>
+          ) : null}
+
+          {table.occupancyStatus === "payment_pending" ? (
+            <>
+              <Button
+                className="w-full bg-red-600 text-white hover:bg-red-700"
+                onClick={onStartOrder}
+              >
+                <Receipt className="mr-2 h-4 w-4" /> Open Bill / Payment
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Bill requested. Once payment is confirmed, status will move to Paid automatically.
+              </p>
+            </>
+          ) : null}
+
+          {table.occupancyStatus === "dirty" ? (
+            <Button className="w-full bg-emerald-600 text-white hover:bg-emerald-700" onClick={onMarkClean}>
+              <Sparkles className="mr-2 h-4 w-4" /> Mark as Clean
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function FloorPlan() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { data: tables, isLoading } = useListTables({ query: { queryKey: getListTablesQueryKey() } });
+  const updateTable = useUpdateTable();
+
   const [statusFilter, setStatusFilter] = useState<keyof typeof OCCUPANCY_CONFIG | null>(null);
   const [floorZoom, setFloorZoom] = useState(DEFAULT_FLOOR_ZOOM);
   const [lastRefreshed, setLastRefreshed] = useState(new Date());
+  const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -161,24 +251,14 @@ export default function FloorPlan() {
     setLastRefreshed(new Date());
   }, [queryClient]);
 
-  const handleTableClick = useCallback(
-    (table: TableData) => {
-      if (table.status !== "Active") {
-        return;
-      }
-
-      if (table.currentOrderId && (table.occupancyStatus === "occupied" || table.occupancyStatus === "payment_pending")) {
-        setLocation(`/orders/${table.currentOrderId}`);
-        return;
-      }
-      setLocation(`/orders?tableId=${table.id}`);
-    },
-    [setLocation],
-  );
-
   const visibleTables = useMemo(
     () => ((tables ?? []) as TableData[]).filter((table) => table.status !== "Archived"),
     [tables],
+  );
+
+  const selectedTable = useMemo(
+    () => visibleTables.find((table) => table.id === selectedTableId) ?? null,
+    [visibleTables, selectedTableId],
   );
 
   const activeServiceTables = useMemo(
@@ -200,6 +280,7 @@ export default function FloorPlan() {
     available: activeServiceTables.filter((table) => table.occupancyStatus === "available").length,
     occupied: activeServiceTables.filter((table) => table.occupancyStatus === "occupied").length,
     payment_pending: activeServiceTables.filter((table) => table.occupancyStatus === "payment_pending").length,
+    paid: activeServiceTables.filter((table) => table.occupancyStatus === "paid").length,
     dirty: activeServiceTables.filter((table) => table.occupancyStatus === "dirty").length,
   };
 
@@ -221,6 +302,54 @@ export default function FloorPlan() {
     setFloorZoom(DEFAULT_FLOOR_ZOOM);
   }, []);
 
+  const updateOccupancy = useCallback(
+    async (table: TableData, next: TableData["occupancyStatus"], clearOrder = false) => {
+      try {
+        await updateTable.mutateAsync({
+          id: table.id,
+          data: {
+            occupancyStatus: next,
+            currentOrderId: clearOrder ? null : table.currentOrderId,
+          },
+        });
+        await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+        toast({ title: `Table ${table.tableNumber} -> ${OCCUPANCY_CONFIG[next].label}` });
+        setSelectedTableId(null);
+      } catch (error) {
+        toast({
+          title: "Failed to update table",
+          description: error instanceof Error ? error.message : "Unknown error",
+          variant: "destructive",
+        });
+      }
+    },
+    [updateTable, queryClient, toast],
+  );
+
+  const handleTableClick = useCallback((table: TableData) => {
+    if (table.status !== "Active") {
+      return;
+    }
+    setSelectedTableId(table.id);
+  }, []);
+
+  const handleStartOrder = useCallback((table: TableData) => {
+    if (table.occupancyStatus === "payment_pending" && table.currentOrderId) {
+      setLocation(`/cashier?orderId=${table.currentOrderId}`);
+      setSelectedTableId(null);
+      return;
+    }
+
+    if (table.currentOrderId && (table.occupancyStatus === "occupied" || table.occupancyStatus === "paid")) {
+      setLocation(`/orders/${table.currentOrderId}`);
+      setSelectedTableId(null);
+      return;
+    }
+
+    setLocation(`/orders?tableId=${table.id}`);
+    setSelectedTableId(null);
+  }, [setLocation]);
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -234,7 +363,7 @@ export default function FloorPlan() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Floor Plan</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Tap a table to open ordering flow</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Tap a table for quick actions</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="hidden md:flex items-center gap-3 text-sm font-medium">
@@ -272,7 +401,7 @@ export default function FloorPlan() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {Object.entries(OCCUPANCY_CONFIG).map(([key, cfg]) => (
           <button
             key={key}
@@ -298,7 +427,7 @@ export default function FloorPlan() {
               <h2 className="text-lg font-bold">
                 {OCCUPANCY_CONFIG[statusFilter].label} Tables ({filteredTables.length})
               </h2>
-              <p className="text-sm text-muted-foreground">Tap a row to open related order flow.</p>
+              <p className="text-sm text-muted-foreground">Tap a row to open quick actions.</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => setStatusFilter(null)}>
               Clear Filter
@@ -318,14 +447,14 @@ export default function FloorPlan() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-bold">
-                      Table {table.tableNumber} (Cap: {table.capacity})
+                      {table.tableNumber} - {table.category} (Cap: {table.capacity})
                     </p>
                     <Badge variant="outline" className="text-xs">
                       {table.zone === "aircon" ? "Air-con" : "Hall"}
                     </Badge>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {table.category} {table.isBooked ? "· Reserved" : ""}
+                    ID #{table.id} {table.isBooked ? "· Reserved" : ""}
                   </p>
                   {table.currentOrderId ? (
                     <p className="mt-1 text-xs font-medium text-primary">Order #{table.currentOrderId}</p>
@@ -407,6 +536,16 @@ export default function FloorPlan() {
           </div>
         </div>
       </div>
+
+      {selectedTable ? (
+        <QuickActionMenu
+          table={selectedTable}
+          onClose={() => setSelectedTableId(null)}
+          onStartOrder={() => handleStartOrder(selectedTable)}
+          onCheckout={() => updateOccupancy(selectedTable, "dirty", true)}
+          onMarkClean={() => updateOccupancy(selectedTable, "available", true)}
+        />
+      ) : null}
     </div>
   );
 }

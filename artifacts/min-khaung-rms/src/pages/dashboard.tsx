@@ -33,7 +33,7 @@ type TableData = {
   category: "Standard" | "VIP" | "Buffer";
   status: "Active" | "Maintenance" | "Archived";
   isBooked: boolean;
-  occupancyStatus: "available" | "occupied" | "payment_pending" | "dirty";
+  occupancyStatus: "available" | "occupied" | "payment_pending" | "paid" | "dirty";
   posX: number;
   posY: number;
   currentOrderId: number | null;
@@ -43,6 +43,7 @@ const TABLE_STATUS_STYLE: Record<string, string> = {
   available: "bg-emerald-500 text-white border-emerald-700",
   occupied: "bg-amber-400 text-amber-950 border-amber-600",
   payment_pending: "bg-red-500 text-white border-red-700",
+  paid: "bg-blue-500 text-white border-blue-700",
   dirty: "bg-slate-400 text-white border-slate-600",
 };
 
@@ -147,7 +148,7 @@ export default function Dashboard() {
 
     if (
       table.currentOrderId &&
-      (table.occupancyStatus === "occupied" || table.occupancyStatus === "payment_pending")
+      (table.occupancyStatus === "occupied" || table.occupancyStatus === "payment_pending" || table.occupancyStatus === "paid")
     ) {
       setLocation(`/orders/${table.currentOrderId}`);
       return;
