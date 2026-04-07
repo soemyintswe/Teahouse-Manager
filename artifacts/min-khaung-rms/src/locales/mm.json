@@ -284,6 +284,16 @@
     "copySelectedFailedTitle": "ရွေးထားသော စားပွဲများ ပွားမရပါ",
     "layoutEditHint": "စားပွဲကို ဖိဆွဲ၍ နေရာရွှေ့၊ tap နှိပ်၍ရွေးချယ်နိုင်သည်။ ပြီးလျှင် Copy Selected ကိုနှိပ်ပါ။ ရွေးထားသည်: {{count}}",
     "layoutSaving": "စားပွဲတည်နေရာ သိမ်းနေသည်...",
+    "align": {
+      "top": "အပေါ်ညှိ",
+      "bottom": "အောက်ညှိ",
+      "left": "ဘယ်ညှိ",
+      "right": "ညာညှိ",
+      "center": "အလယ်ညှိ",
+      "middle": "အလယ်တန်းညှိ",
+      "success": "စားပွဲ {{count}} ခုကို {{action}} ဖြင့်ညှိပြီးပါပြီ",
+      "failedTitle": "ရွေးထားသော စားပွဲများကို align မလုပ်နိုင်ပါ"
+    },
     "layoutSavedToast": "စားပွဲ {{tableNumber}} တည်နေရာ ပြင်ပြီးပါပြီ",
     "layoutSaveFailedTitle": "စားပွဲတည်နေရာ သိမ်းမရပါ",
     "closeMenu": "မီနူးပိတ်မည်",

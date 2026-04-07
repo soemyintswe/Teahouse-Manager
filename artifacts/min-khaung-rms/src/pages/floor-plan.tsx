@@ -103,6 +103,17 @@ type RoomOption = {
   sortOrder: number;
 };
 
+type AlignAction = "top" | "bottom" | "left" | "right" | "center" | "middle";
+
+const ALIGN_LABEL_KEY: Record<AlignAction, string> = {
+  top: "floorPlan.align.top",
+  bottom: "floorPlan.align.bottom",
+  left: "floorPlan.align.left",
+  right: "floorPlan.align.right",
+  center: "floorPlan.align.center",
+  middle: "floorPlan.align.middle",
+};
+
 function formatRoomCodeLabel(code: string): string {
   const normalized = code.trim();
   if (!normalized) return "Room";
@@ -356,6 +367,7 @@ export default function FloorPlan() {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [draftPositions, setDraftPositions] = useState<Record<number, { x: number; y: number }>>({});
   const [savingLayoutTableId, setSavingLayoutTableId] = useState<number | null>(null);
+  const [isAligningLayout, setIsAligningLayout] = useState(false);
   const [selectedLayoutTableIds, setSelectedLayoutTableIds] = useState<number[]>([]);
   const [suppressLayoutClickTableId, setSuppressLayoutClickTableId] = useState<number | null>(null);
 
@@ -476,6 +488,11 @@ export default function FloorPlan() {
     [roomTables, selectedLayoutTableIds],
   );
 
+  const selectedLayoutTables = useMemo(
+    () => roomTables.filter((table) => selectedLayoutTableIds.includes(table.id)),
+    [roomTables, selectedLayoutTableIds],
+  );
+
   const counts = {
     available: activeServiceTables.filter((table) => table.occupancyStatus === "available").length,
     occupied: activeServiceTables.filter((table) => table.occupancyStatus === "occupied").length,
@@ -499,6 +516,104 @@ export default function FloorPlan() {
   const selectedRoom = useMemo(
     () => roomOptions.find((room) => room.code === selectedRoomCode) ?? null,
     [roomOptions, selectedRoomCode],
+  );
+
+  const getWorkingPosition = useCallback(
+    (table: TableData) => draftPositions[table.id] ?? { x: table.posX, y: table.posY },
+    [draftPositions],
+  );
+
+  const handleAlignSelectedTables = useCallback(
+    async (action: AlignAction) => {
+      if (selectedLayoutTables.length < 2 || savingLayoutTableId !== null || isAligningLayout) return;
+
+      const currentPositions = selectedLayoutTables.map((table) => ({
+        id: table.id,
+        tableNumber: table.tableNumber,
+        ...getWorkingPosition(table),
+      }));
+
+      const minX = Math.min(...currentPositions.map((item) => item.x));
+      const maxX = Math.max(...currentPositions.map((item) => item.x));
+      const minY = Math.min(...currentPositions.map((item) => item.y));
+      const maxY = Math.max(...currentPositions.map((item) => item.y));
+      const centerX = Math.round((minX + maxX) / 2);
+      const middleY = Math.round((minY + maxY) / 2);
+
+      const alignedById = new Map<number, { x: number; y: number }>();
+      for (const pos of currentPositions) {
+        let nextX = pos.x;
+        let nextY = pos.y;
+
+        if (action === "top") nextY = minY;
+        if (action === "bottom") nextY = maxY;
+        if (action === "left") nextX = minX;
+        if (action === "right") nextX = maxX;
+        if (action === "center") nextX = centerX;
+        if (action === "middle") nextY = middleY;
+
+        alignedById.set(pos.id, clampPosition(nextX, nextY));
+      }
+
+      setDraftPositions((prev) => {
+        const next = { ...prev };
+        for (const [id, pos] of alignedById.entries()) {
+          next[id] = pos;
+        }
+        return next;
+      });
+
+      try {
+        setIsAligningLayout(true);
+        await Promise.all(
+          selectedLayoutTables.map(async (table) => {
+            const aligned = alignedById.get(table.id);
+            if (!aligned) return;
+            await updateTable.mutateAsync({
+              id: table.id,
+              data: { posX: Math.round(aligned.x), posY: Math.round(aligned.y) },
+            });
+          }),
+        );
+
+        await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+
+        setDraftPositions((prev) => {
+          const next = { ...prev };
+          for (const table of selectedLayoutTables) {
+            delete next[table.id];
+          }
+          return next;
+        });
+
+        toast({
+          title: t("floorPlan.align.success", {
+            count: selectedLayoutTables.length,
+            action: t(ALIGN_LABEL_KEY[action]),
+          }),
+        });
+      } catch (error) {
+        await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+        toast({
+          title: t("floorPlan.align.failedTitle"),
+          description: error instanceof Error ? error.message : t("common.unknownError"),
+          variant: "destructive",
+        });
+      } finally {
+        setIsAligningLayout(false);
+      }
+    },
+    [
+      clampPosition,
+      getWorkingPosition,
+      isAligningLayout,
+      queryClient,
+      savingLayoutTableId,
+      selectedLayoutTables,
+      t,
+      toast,
+      updateTable,
+    ],
   );
 
   const handleZoomIn = useCallback(() => {
@@ -549,7 +664,7 @@ export default function FloorPlan() {
 
   const handleTablePointerDown = useCallback(
     (table: TableData, event: React.PointerEvent<HTMLButtonElement>) => {
-      if (!isLayoutEditMode || savingLayoutTableId !== null) return;
+      if (!isLayoutEditMode || savingLayoutTableId !== null || isAligningLayout) return;
       if (event.pointerType === "mouse" && event.button !== 0) return;
 
       event.preventDefault();
@@ -563,7 +678,7 @@ export default function FloorPlan() {
         startY: currentPos.y,
       });
     },
-    [draftPositions, isLayoutEditMode, savingLayoutTableId],
+    [draftPositions, isAligningLayout, isLayoutEditMode, savingLayoutTableId],
   );
 
   useEffect(() => {
@@ -635,6 +750,7 @@ export default function FloorPlan() {
 
   const handleTableClick = useCallback((table: TableData) => {
     if (isLayoutEditMode) {
+      if (isAligningLayout) return;
       if (suppressLayoutClickTableId === table.id) {
         setSuppressLayoutClickTableId(null);
         return;
@@ -651,7 +767,7 @@ export default function FloorPlan() {
       return;
     }
     setSelectedTableId(table.id);
-  }, [isLayoutEditMode, roomActiveByCode, suppressLayoutClickTableId]);
+  }, [isAligningLayout, isLayoutEditMode, roomActiveByCode, suppressLayoutClickTableId]);
 
   const handleCopySelectedTables = useCallback(async () => {
     if (!selectedRoomCode) return;
@@ -770,7 +886,7 @@ export default function FloorPlan() {
               setSuppressLayoutClickTableId(null);
               setIsLayoutEditMode((prev) => !prev);
             }}
-            disabled={savingLayoutTableId !== null || createTable.isPending}
+            disabled={savingLayoutTableId !== null || createTable.isPending || isAligningLayout}
           >
             {isLayoutEditMode ? t("floorPlan.exitLayoutEdit") : t("floorPlan.editLayout")}
           </Button>
@@ -780,7 +896,7 @@ export default function FloorPlan() {
               variant="outline"
               size="sm"
               onClick={() => { void handleCopySelectedTables(); }}
-              disabled={selectedLayoutCount === 0 || createTable.isPending}
+              disabled={selectedLayoutCount === 0 || createTable.isPending || isAligningLayout}
               className="gap-2"
             >
               {createTable.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
@@ -896,10 +1012,29 @@ export default function FloorPlan() {
       </div>
 
       {isLayoutEditMode ? (
-        <div className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
-          {savingLayoutTableId !== null
-            ? t("floorPlan.layoutSaving")
-            : t("floorPlan.layoutEditHint", { count: selectedLayoutCount })}
+        <div className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2">
+          <p className="text-sm text-muted-foreground">
+            {savingLayoutTableId !== null || isAligningLayout
+              ? t("floorPlan.layoutSaving")
+              : t("floorPlan.layoutEditHint", { count: selectedLayoutCount })}
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-6">
+            {(["top", "bottom", "left", "right", "center", "middle"] as AlignAction[]).map((action) => (
+              <Button
+                key={action}
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  void handleAlignSelectedTables(action);
+                }}
+                disabled={selectedLayoutCount < 2 || savingLayoutTableId !== null || isAligningLayout}
+                title={t(ALIGN_LABEL_KEY[action])}
+              >
+                {t(ALIGN_LABEL_KEY[action])}
+              </Button>
+            ))}
+          </div>
         </div>
       ) : null}
 

@@ -284,6 +284,16 @@
     "copySelectedFailedTitle": "Failed to copy selected tables",
     "layoutEditHint": "Drag to move tables, tap to select, then use Copy Selected. Selected: {{count}}",
     "layoutSaving": "Saving table position...",
+    "align": {
+      "top": "Align Top",
+      "bottom": "Align Bottom",
+      "left": "Align Left",
+      "right": "Align Right",
+      "center": "Align Center",
+      "middle": "Align Middle",
+      "success": "Aligned {{count}} table(s): {{action}}",
+      "failedTitle": "Failed to align selected tables"
+    },
     "layoutSavedToast": "Table {{tableNumber}} position updated",
     "layoutSaveFailedTitle": "Failed to save table position",
     "closeMenu": "Close menu",
