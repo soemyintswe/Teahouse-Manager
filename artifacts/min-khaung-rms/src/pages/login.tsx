@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEventHandler } from "react";
 import { useLocation } from "wouter";
 import { Loader2, LogIn, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -138,6 +138,16 @@ export default function LoginPage() {
     }
   };
 
+  const onStaffSubmit: FormEventHandler<HTMLFormElement> = (event) => {
+    event.preventDefault();
+    void handleStaffLogin();
+  };
+
+  const onGuestSubmit: FormEventHandler<HTMLFormElement> = (event) => {
+    event.preventDefault();
+    void handleGuestLogin();
+  };
+
   return (
     <div className="min-h-screen bg-background px-4 py-8">
       <div className="mx-auto w-full max-w-md rounded-xl border bg-card p-6 shadow-md">
@@ -156,7 +166,7 @@ export default function LoginPage() {
         </div>
 
         {mode === "staff" ? (
-          <div className="mt-4 space-y-3">
+          <form className="mt-4 space-y-3" onSubmit={onStaffSubmit}>
             <div className="space-y-1">
               <Label>{t("auth.identifier")}</Label>
               <Input
@@ -174,13 +184,13 @@ export default function LoginPage() {
                 placeholder="••••"
               />
             </div>
-            <Button onClick={() => void handleStaffLogin()} disabled={loading || !identifier.trim() || !pin.trim()} className="w-full">
+            <Button type="submit" disabled={loading || !identifier.trim() || !pin.trim()} className="w-full">
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {t("auth.loginButton")}
             </Button>
-          </div>
+          </form>
         ) : (
-          <div className="mt-4 space-y-3">
+          <form className="mt-4 space-y-3" onSubmit={onGuestSubmit}>
             <p className="text-sm text-muted-foreground">{t("auth.guestHint")}</p>
             <div className="space-y-1">
               <Label>{t("auth.tableCode")}</Label>
@@ -192,11 +202,11 @@ export default function LoginPage() {
                 autoCapitalize="characters"
               />
             </div>
-            <Button onClick={() => void handleGuestLogin()} disabled={loading || !tableCodeInput.trim()} className="w-full">
+            <Button type="submit" disabled={loading || !tableCodeInput.trim()} className="w-full">
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {t("auth.guestConnectButton")}
             </Button>
-          </div>
+          </form>
         )}
       </div>
     </div>
