@@ -16,6 +16,14 @@ type GuestLoginBody = {
 };
 
 const STAFF_ALLOWED_ROLES: AppRole[] = ["waiter", "kitchen", "cashier", "supervisor", "manager", "owner"];
+const DEFAULT_BOOTSTRAP_STAFF = [
+  { name: "Owner", role: "owner", phone: "09990000001", email: "owner@teahouse.local", pin: "1111" },
+  { name: "Manager", role: "manager", phone: "09990000002", email: "manager@teahouse.local", pin: "2222" },
+  { name: "Supervisor", role: "supervisor", phone: "09990000003", email: "supervisor@teahouse.local", pin: "3333" },
+  { name: "Cashier", role: "cashier", phone: "09990000004", email: "cashier@teahouse.local", pin: "4444" },
+  { name: "Kitchen", role: "kitchen", phone: "09990000005", email: "kitchen@teahouse.local", pin: "5555" },
+  { name: "Waiter", role: "waiter", phone: "09990000006", email: "waiter@teahouse.local", pin: "6666" },
+] as const;
 
 function normalizeIdentifier(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -36,6 +44,58 @@ function sanitizePrincipal(principal: AuthPrincipal) {
   };
 }
 
+function isStaffActive(value: string | null | undefined): boolean {
+  const normalized = (value ?? "true").trim().toLowerCase();
+  return normalized !== "false" && normalized !== "0" && normalized !== "inactive" && normalized !== "no";
+}
+
+function normalizedText(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+async function getActiveStaffMembers(): Promise<Array<typeof staffTable.$inferSelect>> {
+  let members = await db.select().from(staffTable);
+  let activeMembers = members.filter((member) => isStaffActive(member.active));
+  if (activeMembers.length > 0) return activeMembers;
+
+  for (const seed of DEFAULT_BOOTSTRAP_STAFF) {
+    const existing = members.find((member) => {
+      return (
+        normalizedText(member.name) === normalizedText(seed.name) ||
+        normalizedText(member.email) === normalizedText(seed.email) ||
+        normalizedText(member.phone) === normalizedText(seed.phone)
+      );
+    });
+
+    if (existing) {
+      await db
+        .update(staffTable)
+        .set({
+          name: seed.name,
+          role: seed.role,
+          phone: seed.phone,
+          email: seed.email,
+          pin: seed.pin,
+          active: "true",
+        })
+        .where(eq(staffTable.id, existing.id));
+    } else {
+      await db.insert(staffTable).values({
+        name: seed.name,
+        role: seed.role,
+        phone: seed.phone,
+        email: seed.email,
+        pin: seed.pin,
+        active: "true",
+      });
+    }
+  }
+
+  members = await db.select().from(staffTable);
+  activeMembers = members.filter((member) => isStaffActive(member.active));
+  return activeMembers;
+}
+
 router.post("/auth/staff-login", async (req, res): Promise<void> => {
   const body = (req.body ?? {}) as StaffLoginBody;
   const identifier = normalizeIdentifier(body.identifier);
@@ -46,7 +106,7 @@ router.post("/auth/staff-login", async (req, res): Promise<void> => {
     return;
   }
 
-  const members = await db.select().from(staffTable).where(eq(staffTable.active, "true"));
+  const members = await getActiveStaffMembers();
   const staff = members.find((member) => {
     const byName = member.name.trim().toLowerCase() === identifier;
     const byEmail = member.email?.trim().toLowerCase() === identifier;
