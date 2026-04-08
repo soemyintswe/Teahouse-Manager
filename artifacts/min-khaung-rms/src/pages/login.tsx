@@ -18,6 +18,36 @@ function parseTableIdFromSearch(search: string): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+function parseTableCodeFromSearch(search: string): string | null {
+  const params = new URLSearchParams(search);
+  const value = params.get("tableNumber") ?? params.get("tableCode") ?? params.get("table");
+  if (!value) return null;
+  const normalized = value.trim().toUpperCase();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeTableCode(input: string): string {
+  return input.trim().toUpperCase();
+}
+
+function isValidTableCode(input: string): boolean {
+  return /^[A-Z0-9-]{2,20}$/.test(input);
+}
+
+function getGuestLoginErrorMessage(error: unknown, t: (key: string) => string): string {
+  if (!(error instanceof Error)) return t("common.unknownError");
+  const message = error.message.toLowerCase();
+  if (message.includes("reserved")) return t("auth.tableUnavailableReserved");
+  if (message.includes("occupied")) return t("auth.tableUnavailableOccupied");
+  if (message.includes("waiting for payment")) return t("auth.tableUnavailablePaymentPending");
+  if (message.includes("after payment")) return t("auth.tableUnavailablePaid");
+  if (message.includes("waiting for cleaning")) return t("auth.tableUnavailableDirty");
+  if (message.includes("maintenance")) return t("auth.tableUnavailableMaintenance");
+  if (message.includes("not found")) return t("auth.tableNotFound");
+  if (message.includes("unavailable")) return t("auth.tableUnavailableGeneric");
+  return error.message;
+}
+
 export default function LoginPage() {
   const { t } = useTranslation();
   const [, setLocation] = useLocation();
@@ -27,15 +57,17 @@ export default function LoginPage() {
   const [mode, setMode] = useState<LoginMode>("staff");
   const [identifier, setIdentifier] = useState("");
   const [pin, setPin] = useState("");
-  const [tableIdInput, setTableIdInput] = useState("");
+  const [tableCodeInput, setTableCodeInput] = useState("");
   const [loading, setLoading] = useState(false);
   const queryTableId = useMemo(() => parseTableIdFromSearch(window.location.search), []);
+  const queryTableCode = useMemo(() => parseTableCodeFromSearch(window.location.search), []);
 
   useEffect(() => {
-    if (!queryTableId) return;
+    if (!queryTableId && !queryTableCode) return;
     if (loading) return;
     setLoading(true);
-    void loginGuest({ tableId: queryTableId })
+    const payload = queryTableId ? { tableId: queryTableId } : { tableNumber: queryTableCode ?? undefined };
+    void loginGuest(payload)
       .then((user) => {
         if (user.tableId) {
           setLocation(`/orders?tableId=${user.tableId}&scan=1`);
@@ -46,12 +78,12 @@ export default function LoginPage() {
       .catch((error) => {
         toast({
           title: t("auth.loginFailed"),
-          description: error instanceof Error ? error.message : t("common.unknownError"),
+          description: getGuestLoginErrorMessage(error, t),
           variant: "destructive",
         });
       })
       .finally(() => setLoading(false));
-  }, [loading, loginGuest, queryTableId, setLocation, t, toast]);
+  }, [loading, loginGuest, queryTableCode, queryTableId, setLocation, t, toast]);
 
   const handleStaffLogin = async () => {
     if (!identifier.trim() || !pin.trim()) return;
@@ -78,23 +110,27 @@ export default function LoginPage() {
   };
 
   const handleGuestLogin = async () => {
-    const parsedTableId = Number.parseInt(tableIdInput, 10);
-    if (!Number.isFinite(parsedTableId) || parsedTableId <= 0) {
+    const normalizedTableCode = normalizeTableCode(tableCodeInput);
+    if (!isValidTableCode(normalizedTableCode)) {
       toast({
-        title: t("auth.invalidTable"),
+        title: t("auth.invalidTableCode"),
         variant: "destructive",
       });
       return;
     }
     setLoading(true);
     try {
-      const user = await loginGuest({ tableId: parsedTableId });
-      setLocation(`/orders?tableId=${user.tableId ?? parsedTableId}&scan=1`);
+      const user = await loginGuest({ tableNumber: normalizedTableCode });
+      if (user.tableId) {
+        setLocation(`/orders?tableId=${user.tableId}&scan=1`);
+      } else {
+        setLocation("/orders");
+      }
       toast({ title: t("auth.guestConnected") });
     } catch (error) {
       toast({
         title: t("auth.loginFailed"),
-        description: error instanceof Error ? error.message : t("common.unknownError"),
+        description: getGuestLoginErrorMessage(error, t),
         variant: "destructive",
       });
     } finally {
@@ -147,16 +183,16 @@ export default function LoginPage() {
           <div className="mt-4 space-y-3">
             <p className="text-sm text-muted-foreground">{t("auth.guestHint")}</p>
             <div className="space-y-1">
-              <Label>{t("auth.tableId")}</Label>
+              <Label>{t("auth.tableCode")}</Label>
               <Input
-                type="number"
-                min={1}
-                value={tableIdInput}
-                onChange={(event) => setTableIdInput(event.target.value)}
-                placeholder="1"
+                type="text"
+                value={tableCodeInput}
+                onChange={(event) => setTableCodeInput(normalizeTableCode(event.target.value))}
+                placeholder="H1 / A2"
+                autoCapitalize="characters"
               />
             </div>
-            <Button onClick={() => void handleGuestLogin()} disabled={loading || !tableIdInput.trim()} className="w-full">
+            <Button onClick={() => void handleGuestLogin()} disabled={loading || !tableCodeInput.trim()} className="w-full">
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {t("auth.guestConnectButton")}
             </Button>

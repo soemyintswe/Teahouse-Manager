@@ -33,6 +33,11 @@ function normalizePin(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function normalizeTableNumber(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.trim().toUpperCase();
+}
+
 function sanitizePrincipal(principal: AuthPrincipal) {
   return {
     role: principal.role,
@@ -149,10 +154,8 @@ router.post("/auth/guest-login", async (req, res): Promise<void> => {
     typeof body.tableId === "number" && Number.isFinite(body.tableId) && body.tableId > 0
       ? Math.floor(body.tableId)
       : null;
-  const tableNumber =
-    typeof body.tableNumber === "string" && body.tableNumber.trim().length > 0
-      ? body.tableNumber.trim()
-      : null;
+  const normalizedTableNumber = normalizeTableNumber(body.tableNumber);
+  const tableNumber = normalizedTableNumber.length > 0 ? normalizedTableNumber : null;
 
   if (!tableId && !tableNumber) {
     res.status(400).json({ error: "tableId or tableNumber is required." });
@@ -169,16 +172,38 @@ router.post("/auth/guest-login", async (req, res): Promise<void> => {
     return;
   }
   if (table.status !== "Active") {
+    res.status(409).json({ error: "This table is currently unavailable (maintenance mode)." });
+    return;
+  }
+  if (table.isBooked) {
+    res.status(409).json({ error: "This table is already reserved." });
+    return;
+  }
+  if (table.occupancyStatus === "occupied") {
+    res.status(409).json({ error: "This table is currently occupied." });
+    return;
+  }
+  if (table.occupancyStatus === "payment_pending") {
+    res.status(409).json({ error: "This table is waiting for payment." });
+    return;
+  }
+  if (table.occupancyStatus === "paid") {
+    res.status(409).json({ error: "This table is still in use after payment." });
+    return;
+  }
+  if (table.occupancyStatus === "dirty") {
+    res.status(409).json({ error: "This table is waiting for cleaning." });
+    return;
+  }
+  if (table.occupancyStatus !== "available") {
     res.status(409).json({ error: "This table is currently unavailable." });
     return;
   }
 
-  if (table.occupancyStatus === "available") {
-    await db
-      .update(tablesTable)
-      .set({ occupancyStatus: "occupied" })
-      .where(eq(tablesTable.id, table.id));
-  }
+  await db
+    .update(tablesTable)
+    .set({ occupancyStatus: "occupied" })
+    .where(eq(tablesTable.id, table.id));
 
   const token = issueAuthToken({
     role: "guest",
