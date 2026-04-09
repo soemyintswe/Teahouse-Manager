@@ -9,7 +9,7 @@ import {
   useListMenuItems,
 } from "@workspace/api-client-react";
 import type { MenuItem } from "@workspace/api-client-react";
-import { Expand, ImageIcon, Languages, Loader2, LogIn, Plus, ShoppingCart, Trash2, UserPlus } from "lucide-react";
+import { Crosshair, Expand, ExternalLink, ImageIcon, Languages, Loader2, LogIn, Plus, ShoppingCart, Trash2, UserPlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -247,6 +247,40 @@ export default function PublicHomePage() {
       ...prev,
       phones: prev.phones.map((phone, idx) => (idx === index ? value : phone)),
     }));
+  };
+
+  const openGoogleMap = () => {
+    if (typeof window === "undefined") return;
+    window.open("https://maps.google.com", "_blank", "noopener,noreferrer");
+  };
+
+  const pickCurrentLocationForMapLink = () => {
+    if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
+      toast({
+        title: t("public.register.locationFailedTitle"),
+        description: t("public.register.locationFailedDesc"),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude.toFixed(6);
+        const lng = position.coords.longitude.toFixed(6);
+        const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+        setRegisterForm((prev) => ({ ...prev, mapLink: mapUrl }));
+        toast({ title: t("public.register.locationApplied") });
+      },
+      () => {
+        toast({
+          title: t("public.register.locationFailedTitle"),
+          description: t("public.register.locationPermission"),
+          variant: "destructive",
+        });
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
   };
 
   const addToCart = (item: MenuItem) => {
@@ -839,6 +873,16 @@ export default function PublicHomePage() {
                   onChange={(event) => setRegisterForm((prev) => ({ ...prev, mapLink: event.target.value }))}
                   placeholder="https://maps.google.com/..."
                 />
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button type="button" variant="outline" size="sm" onClick={openGoogleMap}>
+                    <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                    {t("public.register.openGoogleMap")}
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={pickCurrentLocationForMapLink}>
+                    <Crosshair className="mr-1 h-3.5 w-3.5" />
+                    {t("public.register.useCurrentLocation")}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

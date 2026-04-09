@@ -219,49 +219,53 @@ router.post("/auth/customer-register", async (req, res): Promise<void> => {
     return;
   }
 
-  const existingPhoneRows = await db.select().from(customerPhonesTable);
-  const hasDuplicatePhone = phones.some((phone) => existingPhoneRows.some((row) => row.phone === phone));
-  if (hasDuplicatePhone) {
-    res.status(409).json({ error: "One or more phone numbers are already registered." });
-    return;
-  }
+  try {
+    const existingPhoneRows = await db.select().from(customerPhonesTable);
+    const hasDuplicatePhone = phones.some((phone) => existingPhoneRows.some((row) => row.phone === phone));
+    if (hasDuplicatePhone) {
+      res.status(409).json({ error: "One or more phone numbers are already registered." });
+      return;
+    }
 
-  const temporaryPassword = createTemporaryPassword();
-  const [customer] = await db
-    .insert(customersTable)
-    .values({
-      fullName,
-      password: temporaryPassword,
-      status: "pending",
-      mustChangePassword: true,
-    })
-    .returning();
+    const temporaryPassword = createTemporaryPassword();
+    const [customer] = await db
+      .insert(customersTable)
+      .values({
+        fullName,
+        password: temporaryPassword,
+        status: "pending",
+        mustChangePassword: true,
+      })
+      .returning();
 
-  for (let i = 0; i < phones.length; i += 1) {
-    await db.insert(customerPhonesTable).values({
+    for (let i = 0; i < phones.length; i += 1) {
+      await db.insert(customerPhonesTable).values({
+        customerId: customer.id,
+        phone: phones[i],
+        sortOrder: i,
+      });
+    }
+
+    await db.insert(customerAddressesTable).values({
       customerId: customer.id,
-      phone: phones[i],
-      sortOrder: i,
+      unitNo: unitNo || null,
+      street,
+      ward: ward || null,
+      township,
+      region,
+      mapLink: mapLink || null,
+      isDefault: true,
     });
+
+    res.status(201).json({
+      customerId: customer.id,
+      status: customer.status,
+      temporaryPassword,
+      message: "Customer account created. Waiting for admin approval.",
+    });
+  } catch {
+    res.status(500).json({ error: "Failed to register customer account. Please retry in a few seconds." });
   }
-
-  await db.insert(customerAddressesTable).values({
-    customerId: customer.id,
-    unitNo: unitNo || null,
-    street,
-    ward: ward || null,
-    township,
-    region,
-    mapLink: mapLink || null,
-    isDefault: true,
-  });
-
-  res.status(201).json({
-    customerId: customer.id,
-    status: customer.status,
-    temporaryPassword,
-    message: "Customer account created. Waiting for admin approval.",
-  });
 });
 
 router.post("/auth/customer-login", async (req, res): Promise<void> => {

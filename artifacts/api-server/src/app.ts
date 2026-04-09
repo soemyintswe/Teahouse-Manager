@@ -4,6 +4,7 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { optionalAuth } from "./lib/auth";
+import { isDatabaseError } from "./lib/db-errors";
 
 const app: Express = express();
 const corsOrigins = (process.env.CORS_ORIGINS ?? "")
@@ -61,9 +62,11 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
       ? ((err as { statusCode: number }).statusCode || 500)
       : 500;
   const message =
-    err instanceof Error
-      ? err.message || "Internal Server Error"
-      : "Internal Server Error";
+    statusCode >= 500 && isDatabaseError(err)
+      ? "Database schema is updating. Please retry in a few seconds."
+      : err instanceof Error
+        ? err.message || "Internal Server Error"
+        : "Internal Server Error";
 
   logger.error({ err }, "Unhandled API error");
   if (res.headersSent) return;

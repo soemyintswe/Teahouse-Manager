@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { db, customerAddressesTable, customerPhonesTable, customersTable, ordersTable } from "@workspace/db";
 import { requireAuth, requireRoles } from "../lib/auth";
+import { isSchemaDriftError } from "../lib/db-errors";
 
 const router: IRouter = Router();
 
@@ -32,12 +33,6 @@ function toIsoString(value: unknown): string {
     return value;
   }
   return new Date(0).toISOString();
-}
-
-function isSchemaDriftError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const code = (error as { code?: unknown }).code;
-  return code === "42P01" || code === "42703";
 }
 
 router.get("/customers/me", requireAuth, async (req, res): Promise<void> => {

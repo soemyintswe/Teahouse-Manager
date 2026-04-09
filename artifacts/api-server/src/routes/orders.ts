@@ -28,6 +28,7 @@ import {
   UpdateOrderItemResponse,
   RemoveOrderItemParams,
 } from "@workspace/api-zod";
+import { isDatabaseError } from "../lib/db-errors";
 
 const router: IRouter = Router();
 const MODIFIABLE_ORDER_STATUSES = ["open", "ready_to_pay"] as const;
@@ -306,7 +307,12 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
     res.status(201).json(formatOrder(updatedOrder));
   } catch (error) {
     const statusCode = (error as { statusCode?: number })?.statusCode ?? 500;
-    const message = error instanceof Error ? error.message : "Failed to create order";
+    const message =
+      statusCode >= 500 && isDatabaseError(error)
+        ? "Failed to create order due to database update. Please retry shortly."
+        : error instanceof Error
+          ? error.message
+          : "Failed to create order";
     res.status(statusCode).json({ error: message });
   }
 });
@@ -450,7 +456,12 @@ router.post("/orders/delivery-request", requireAuth, async (req, res): Promise<v
     });
   } catch (error) {
     const statusCode = (error as { statusCode?: number })?.statusCode ?? 500;
-    const message = error instanceof Error ? error.message : "Failed to create delivery order.";
+    const message =
+      statusCode >= 500 && isDatabaseError(error)
+        ? "Failed to create delivery order due to database update. Please retry shortly."
+        : error instanceof Error
+          ? error.message
+          : "Failed to create delivery order.";
     res.status(statusCode).json({ error: message });
   }
 });
@@ -617,32 +628,40 @@ router.get("/delivery-orders", requireAuth, async (req, res): Promise<void> => {
     conditions.push(eq(ordersTable.customerId, req.auth.customerId));
   }
 
-  const orders = await db
-    .select()
-    .from(ordersTable)
-    .where(and(...conditions))
-    .orderBy(sql`${ordersTable.createdAt} desc`);
+  try {
+    const orders = await db
+      .select()
+      .from(ordersTable)
+      .where(and(...conditions))
+      .orderBy(sql`${ordersTable.createdAt} desc`);
 
-  const filtered = orders.filter((order) =>
-    regionFilter ? (order.deliveryRegion ?? "").toLowerCase().includes(regionFilter) : true,
-  ).filter((order) =>
-    townshipFilter ? (order.deliveryTownship ?? "").toLowerCase().includes(townshipFilter) : true,
-  ).filter((order) =>
-    streetFilter ? (order.deliveryStreet ?? "").toLowerCase().includes(streetFilter) : true,
-  );
+    const filtered = orders.filter((order) =>
+      regionFilter ? (order.deliveryRegion ?? "").toLowerCase().includes(regionFilter) : true,
+    ).filter((order) =>
+      townshipFilter ? (order.deliveryTownship ?? "").toLowerCase().includes(townshipFilter) : true,
+    ).filter((order) =>
+      streetFilter ? (order.deliveryStreet ?? "").toLowerCase().includes(streetFilter) : true,
+    );
 
-  res.json(
-    filtered.map((order) => ({
-      ...formatOrder(order),
-      customerPhones: (() => {
-        try {
-          return order.customerPhones ? (JSON.parse(order.customerPhones) as string[]) : [];
-        } catch {
-          return [];
-        }
-      })(),
-    })),
-  );
+    res.json(
+      filtered.map((order) => ({
+        ...formatOrder(order),
+        customerPhones: (() => {
+          try {
+            return order.customerPhones ? (JSON.parse(order.customerPhones) as string[]) : [];
+          } catch {
+            return [];
+          }
+        })(),
+      })),
+    );
+  } catch (error) {
+    if (isDatabaseError(error)) {
+      res.json([]);
+      return;
+    }
+    res.status(500).json({ error: "Failed to load delivery orders." });
+  }
 });
 
 router.patch(

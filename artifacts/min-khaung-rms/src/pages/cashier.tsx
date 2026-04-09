@@ -30,6 +30,14 @@ type PaymentQrPreview = {
   issuedAt: string;
 };
 
+type CashierOrderPick = {
+  id: number;
+  tableNumber: string;
+  totalAmount: string;
+  status: string;
+  createdAt: string;
+};
+
 function parseOrderId(search: string): number | null {
   const value = new URLSearchParams(search).get("orderId");
   if (!value) return null;
@@ -66,6 +74,27 @@ export default function CashierPage() {
       queryKey: getGetOrderQueryKey(orderId ?? 0),
       refetchInterval: 15000,
     },
+  });
+
+  const { data: readyToPayOrders = [], isLoading: readyToPayLoading } = useQuery({
+    queryKey: ["cashier-order-pick", "ready_to_pay"],
+    enabled: orderId == null,
+    queryFn: () =>
+      customFetch<CashierOrderPick[]>("/api/orders?status=ready_to_pay", {
+        method: "GET",
+        responseType: "json",
+      }),
+    refetchInterval: 15000,
+  });
+  const { data: openOrders = [], isLoading: openLoading } = useQuery({
+    queryKey: ["cashier-order-pick", "open"],
+    enabled: orderId == null,
+    queryFn: () =>
+      customFetch<CashierOrderPick[]>("/api/orders?status=open", {
+        method: "GET",
+        responseType: "json",
+      }),
+    refetchInterval: 15000,
   });
 
   const shouldLoadQr = Boolean(orderId && order && (order.status === "open" || order.status === "ready_to_pay"));
@@ -116,12 +145,51 @@ export default function CashierPage() {
   }
 
   if (!orderId || !order) {
+    const pickOrders = [...readyToPayOrders, ...openOrders];
+    const isPickLoading = readyToPayLoading || openLoading;
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-        <p>{t("cashier.orderRequired")}</p>
-        <Button variant="outline" onClick={() => setLocation("/orders")}>
-          {t("cashier.goOrders")}
-        </Button>
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
+        <div>
+          <h1 className="page-title">{t("cashier.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("cashier.orderRequired")}</p>
+        </div>
+        <div className="rounded-xl border bg-card p-4">
+          <h2 className="font-semibold">{t("cashier.selectOrderTitle")}</h2>
+          {isPickLoading ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
+          ) : pickOrders.length === 0 ? (
+            <div className="py-6 text-sm text-muted-foreground">{t("cashier.noOrdersToPay")}</div>
+          ) : (
+            <div className="mt-3 grid gap-2">
+              {pickOrders.map((pick) => (
+                <button
+                  key={`pick-${pick.id}`}
+                  className="rounded-md border px-3 py-2 text-left transition-colors hover:bg-muted/30"
+                  onClick={() => setLocation(`/cashier?orderId=${pick.id}`)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-semibold">
+                      #{pick.id} · {pick.tableNumber}
+                    </p>
+                    <Badge variant={pick.status === "ready_to_pay" ? "default" : "outline"}>
+                      {t("orders.status." + (pick.status === "ready_to_pay" ? "readyToPay" : pick.status))}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formatAmount(pick.totalAmount)} · {new Date(pick.createdAt).toLocaleString()}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <Button variant="outline" onClick={() => setLocation("/orders")}>
+            {t("cashier.goOrders")}
+          </Button>
+        </div>
       </div>
     );
   }

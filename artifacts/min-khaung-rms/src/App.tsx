@@ -43,6 +43,7 @@ import NewOrderPage from "@/pages/new-order";
 import OrderDetailPage from "@/pages/order-detail";
 import CashierPage from "@/pages/cashier";
 import StaffPage from "@/pages/staff";
+import InventoryPage from "@/pages/inventory";
 import LoginPage from "@/pages/login";
 import PublicHomePage from "@/pages/public-home";
 import DeliveryOrdersPage from "@/pages/delivery-orders";
@@ -324,7 +325,7 @@ function RouterContent() {
         <Route path="/kitchen" component={guard("kds", Kitchen)} />
         <Route path="/cashier" component={guard("cashier", CashierPage)} />
         <Route path="/menu" component={guard("menu", MenuPage)} />
-        <Route path="/inventory" component={guard("inventory", () => <StubPage title={t("nav.inventory")} />)} />
+        <Route path="/inventory" component={guard("inventory", InventoryPage)} />
         <Route path="/staff" component={guard("staff", StaffPage)} />
         <Route path="/delivery-orders" component={guard("deliveryOrders", DeliveryOrdersPage)} />
         <Route path="/finance" component={guard("finance", () => <StubPage title={t("nav.finance")} />)} />
