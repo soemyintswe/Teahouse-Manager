@@ -5,7 +5,6 @@ import {
   useCreateMenuItem,
   useUpdateMenuItem,
   useDeleteMenuItem,
-  customFetch,
   getListMenuCategoriesQueryKey,
   getListMenuItemsQueryKey,
 } from "@workspace/api-client-react";
@@ -145,21 +144,51 @@ function normalizeGoogleDriveImageUrl(input: string): string {
   return raw;
 }
 
-function fileToBase64(file: File): Promise<string> {
+function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("Unable to read selected file."));
     reader.onload = () => {
       const result = typeof reader.result === "string" ? reader.result : "";
-      const base64 = result.includes(",") ? result.split(",")[1] : result;
-      if (!base64) {
+      if (!result.startsWith("data:")) {
         reject(new Error("Invalid image file."));
         return;
       }
-      resolve(base64);
+      resolve(result);
     };
     reader.readAsDataURL(file);
   });
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Unable to process image."));
+    image.src = src;
+  });
+}
+
+async function optimizeImageToDataUrl(file: File): Promise<string> {
+  const originalDataUrl = await fileToDataUrl(file);
+  const image = await loadImage(originalDataUrl);
+
+  const maxSide = 1200;
+  const originalWidth = image.naturalWidth || image.width;
+  const originalHeight = image.naturalHeight || image.height;
+  const scale = Math.min(1, maxSide / Math.max(originalWidth, originalHeight));
+  const targetWidth = Math.max(1, Math.round(originalWidth * scale));
+  const targetHeight = Math.max(1, Math.round(originalHeight * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const context = canvas.getContext("2d");
+  if (!context) return originalDataUrl;
+  context.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+  const optimized = canvas.toDataURL("image/jpeg", 0.82);
+  return optimized.length < originalDataUrl.length ? optimized : originalDataUrl;
 }
 
 function getItemMetadata(item: Pick<MenuItem, "customizationOptions">): MenuItemMetadata {
@@ -532,22 +561,12 @@ export default function MenuPage() {
   };
 
   const handleUploadImage = async (file: File): Promise<string> => {
-    const base64Data = await fileToBase64(file);
-    const response = await customFetch<{ imageUrl: string; webViewLink?: string }>("/api/menu-images/upload", {
-      method: "POST",
-      responseType: "json",
-      body: JSON.stringify({
-        fileName: file.name,
-        mimeType: file.type || "application/octet-stream",
-        base64Data,
-      }),
-    });
-    const normalized = normalizeGoogleDriveImageUrl(response.imageUrl || response.webViewLink || "");
-    if (!normalized) {
-      throw new Error("Upload succeeded but image URL is missing.");
+    const optimizedDataUrl = await optimizeImageToDataUrl(file);
+    if (optimizedDataUrl.length > 2_000_000) {
+      throw new Error("Image is too large. Please choose a smaller image.");
     }
     toast({ title: t("menu.uploadSuccess") });
-    return normalized;
+    return optimizedDataUrl;
   };
 
   const handleSaveItem = async (payload: CreateMenuItemBody | UpdateMenuItemBody) => {
