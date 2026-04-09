@@ -112,6 +112,10 @@
     "note": "မှတ်ချက်:",
     "ready": "အဆင်သင့်",
     "done": "ပြီး",
+    "cancelItem": "ပယ်ဖျက်မည်",
+    "cancelReasonPrompt": "ဤအစားအစာကို ဘာကြောင့်ပယ်ဖျက်ရသလဲ?",
+    "delayedWarning": "နှောင့်နှေးသတိပေးချက်: item တချို့ အချိန်ကြာနေပါတယ်။",
+    "delayedItemHint": "အချိန်ကြာနေသည့် item - အခြေအနေ update သို့မဟုတ် အကြောင်းပြချက်နှင့်ပယ်ဖျက်ပါ။",
     "allClear": "{{station}} ဌာနအတွက် အော်ဒါမရှိပါ",
     "noActiveItems": "ယခုအချိန်တွင် ဤဌာနတွင် pending item မရှိပါ။"
   },
@@ -243,14 +247,21 @@
       "new": "အသစ်",
       "cooking": "ချက်နေသည်",
       "ready": "အဆင်သင့်",
-      "served": "တင်ပြီး"
+      "served": "တင်ပြီး",
+      "cancelled": "ပယ်ဖျက်ပြီး"
     },
     "toastAdded": "{{name}} ထည့်ပြီး",
     "toastAddFailed": "item ထည့်မရပါ",
     "toastRemoved": "{{name}} ဖယ်ရှားပြီး",
     "toastRemoveFailed": "item ဖယ်ရှားမရပါ",
     "toastReadyToPay": "Order ကို ငွေရှင်းရန်အသင့် အဖြစ်ပြောင်းပြီး",
-    "toastUpdateFailed": "Order update မလုပ်နိုင်ပါ"
+    "toastUpdateFailed": "Order update မလုပ်နိုင်ပါ",
+    "cancelItem": "ပယ်ဖျက်",
+    "cancelReasonPrompt": "{{item}} ကို ပယ်ဖျက်ရန် အကြောင်းပြချက် ထည့်ပါ",
+    "toastCancelled": "{{name}} ကို ပယ်ဖျက်ပြီး",
+    "toastCancelFailed": "item ပယ်ဖျက်မရပါ",
+    "delayedWarningTitle": "နှောင့်နှေးသတိပေးချက်",
+    "delayedWarningDesc": "item တချို့ အချိန်ကြာနေပါတယ်။ သက်ဆိုင်ရာ ဝန်ထမ်းက update သို့မဟုတ် အကြောင်းပြချက်ဖြင့် ပယ်ဖျက်ပေးသင့်ပါတယ်။"
   },
   "notFound": {
     "title": "404 စာမျက်နှာ မတွေ့ပါ",
@@ -271,6 +282,10 @@
     "reserved": "ကြိုတင်ဘွတ်ကင်",
     "openBillPayment": "ဘီလ်/ငွေရှင်းဖွင့်မည်",
     "paymentPendingHint": "ဘီလ်တောင်းထားသည်။ ငွေရှင်းပြီးသည်နှင့် အခြေအနေကို ငွေရှင်းပြီး သို့ အလိုအလျောက်ပြောင်းပါမည်။",
+    "missingPaymentOrderTitle": "ငွေရှင်းရန် အော်ဒါမတွေ့ပါ",
+    "missingPaymentOrderDesc": "ဤစားပွဲကို ငွေရှင်းစောင့်နေဟု မှတ်ထားသော်လည်း အော်ဒါမရှိပါ။ အခြေအနေကို ပြန်ညှိပြီးပါပြီ။",
+    "fixedStaleStatusTitle": "စားပွဲအခြေအနေ ပြန်ပြင်ပြီး",
+    "fixedStaleStatusDesc": "Open order ကိုတွေ့ရှိပြီး ဤစားပွဲနှင့် ပြန်လည်ချိတ်ဆက်ပြီးပါပြီ။",
     "tapToFilter": "အခြေအနေကဒ်နှိပ်ပြီး စားပွဲများကို စစ်ထုတ်နိုင်သည်",
     "noTablesInHall": "Hall Zone တွင် စားပွဲမရှိပါ",
     "noTablesInAircon": "Air-con Room တွင် စားပွဲမရှိပါ",

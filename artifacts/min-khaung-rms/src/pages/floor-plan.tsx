@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useListTables, getListTablesQueryKey, useUpdateTable, useCreateTable } from "@workspace/api-client-react";
+import { useListTables, getListTablesQueryKey, useUpdateTable, useCreateTable, customFetch } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Loader2,
@@ -39,6 +39,12 @@ type TableData = {
   qrCode?: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+type SimpleOrder = {
+  id: number;
+  status: string;
+  tableId: number;
 };
 
 const OCCUPANCY_CONFIG: Record<
@@ -822,9 +828,72 @@ export default function FloorPlan() {
     toast,
   ]);
 
-  const handleStartOrder = useCallback((table: TableData) => {
-    if (table.occupancyStatus === "payment_pending" && table.currentOrderId) {
-      setLocation(`/cashier?orderId=${table.currentOrderId}`);
+  const getLatestTableOrder = useCallback(async (tableId: number, status: string): Promise<SimpleOrder | null> => {
+    try {
+      const orders = await customFetch<SimpleOrder[]>(
+        `/api/orders?tableId=${tableId}&status=${encodeURIComponent(status)}`,
+        { method: "GET", responseType: "json" },
+      );
+      return orders[0] ?? null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const handleStartOrder = useCallback(async (table: TableData) => {
+    if (table.occupancyStatus === "payment_pending") {
+      let targetOrderId = table.currentOrderId;
+
+      if (!targetOrderId) {
+        const readyToPayOrder = await getLatestTableOrder(table.id, "ready_to_pay");
+        if (readyToPayOrder) {
+          targetOrderId = readyToPayOrder.id;
+          try {
+            await updateTable.mutateAsync({
+              id: table.id,
+              data: { occupancyStatus: "payment_pending", currentOrderId: readyToPayOrder.id },
+            });
+            await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+          } catch {}
+        }
+      }
+
+      if (targetOrderId) {
+        setLocation(`/cashier?orderId=${targetOrderId}`);
+        setSelectedTableId(null);
+        return;
+      }
+
+      const openOrder = await getLatestTableOrder(table.id, "open");
+      if (openOrder) {
+        try {
+          await updateTable.mutateAsync({
+            id: table.id,
+            data: { occupancyStatus: "occupied", currentOrderId: openOrder.id },
+          });
+          await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+        } catch {}
+        toast({
+          title: t("floorPlan.fixedStaleStatusTitle"),
+          description: t("floorPlan.fixedStaleStatusDesc"),
+        });
+        setLocation(`/orders/${openOrder.id}`);
+        setSelectedTableId(null);
+        return;
+      }
+
+      try {
+        await updateTable.mutateAsync({
+          id: table.id,
+          data: { occupancyStatus: "available", currentOrderId: null },
+        });
+        await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+      } catch {}
+      toast({
+        title: t("floorPlan.missingPaymentOrderTitle"),
+        description: t("floorPlan.missingPaymentOrderDesc"),
+        variant: "destructive",
+      });
       setSelectedTableId(null);
       return;
     }
@@ -835,9 +904,25 @@ export default function FloorPlan() {
       return;
     }
 
+    if (!table.currentOrderId && (table.occupancyStatus === "occupied" || table.occupancyStatus === "paid")) {
+      const openOrder = await getLatestTableOrder(table.id, "open");
+      if (openOrder) {
+        setLocation(`/orders/${openOrder.id}`);
+        setSelectedTableId(null);
+        return;
+      }
+
+      const readyToPayOrder = await getLatestTableOrder(table.id, "ready_to_pay");
+      if (readyToPayOrder) {
+        setLocation(`/cashier?orderId=${readyToPayOrder.id}`);
+        setSelectedTableId(null);
+        return;
+      }
+    }
+
     setLocation(`/orders?tableId=${table.id}`);
     setSelectedTableId(null);
-  }, [setLocation]);
+  }, [getLatestTableOrder, queryClient, setLocation, t, toast, updateTable]);
 
   if (isLoading || roomsLoading) {
     return (

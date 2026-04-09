@@ -3,6 +3,7 @@ import {
   useGetOrder,
   useAddOrderItem,
   useRemoveOrderItem,
+  useUpdateOrderItem,
   useUpdateOrder,
   useListMenuCategories,
   useListMenuItems,
@@ -20,7 +21,7 @@ import { useTranslation } from "react-i18next";
 import {
   Loader2, ArrowLeft, Plus, Minus, Trash2,
   CreditCard, ChefHat, Clock, CheckCircle2, Circle,
-  UtensilsCrossed, Search, ShoppingBag,
+  UtensilsCrossed, Search, ShoppingBag, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,14 +33,26 @@ const KITCHEN_STATUS_STYLE: Record<string, { color: string; icon: React.ReactNod
   cooking: { color: "bg-amber-100 text-amber-700 border-amber-200", icon: <Clock className="w-3 h-3" /> },
   ready: { color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: <CheckCircle2 className="w-3 h-3" /> },
   served: { color: "bg-blue-100 text-blue-700 border-blue-200", icon: <ChefHat className="w-3 h-3" /> },
+  cancelled: { color: "bg-red-100 text-red-700 border-red-200", icon: <AlertTriangle className="w-3 h-3" /> },
 };
+const ITEM_DELAY_THRESHOLD_MINUTES = 15;
 
 function getKitchenStatusLabel(status: string, t: (key: string) => string): string {
   if (status === "new") return t("orderDetail.kitchen.new");
   if (status === "cooking") return t("orderDetail.kitchen.cooking");
   if (status === "ready") return t("orderDetail.kitchen.ready");
   if (status === "served") return t("orderDetail.kitchen.served");
+  if (status === "cancelled") return t("orderDetail.kitchen.cancelled");
   return status;
+}
+
+function isDelayedKitchenItem(createdAt: string, status: string): boolean {
+  const normalized = status.trim().toLowerCase();
+  if (normalized === "ready" || normalized === "served" || normalized === "cancelled") return false;
+  const createdMs = new Date(createdAt).getTime();
+  if (!Number.isFinite(createdMs)) return false;
+  const diffMinutes = (Date.now() - createdMs) / 60000;
+  return diffMinutes >= ITEM_DELAY_THRESHOLD_MINUTES;
 }
 
 export default function OrderDetailPage() {
@@ -60,6 +73,7 @@ export default function OrderDetailPage() {
 
   const addItem = useAddOrderItem();
   const removeItem = useRemoveOrderItem();
+  const updateOrderItem = useUpdateOrderItem();
   const updateOrder = useUpdateOrder();
 
   const [showAddPanel, setShowAddPanel] = useState(false);
@@ -135,6 +149,28 @@ export default function OrderDetailPage() {
     }
   };
 
+  const handleCancelItem = async (itemId: number, itemName: string) => {
+    if (!order) return;
+    const reason = window.prompt(t("orderDetail.cancelReasonPrompt", { item: itemName }))?.trim() ?? "";
+    if (!reason) return;
+
+    try {
+      await updateOrderItem.mutateAsync({
+        id: order.id,
+        itemId,
+        data: {
+          kitchenStatus: "cancelled",
+          notes: reason,
+        },
+      });
+      await refetch();
+      qc.invalidateQueries({ queryKey: getListTablesQueryKey() });
+      toast({ title: t("orderDetail.toastCancelled", { name: itemName }) });
+    } catch {
+      toast({ title: t("orderDetail.toastCancelFailed"), variant: "destructive" });
+    }
+  };
+
   const handleGoToCashier = () => {
     setLocation(`/cashier?orderId=${orderId}`);
   };
@@ -172,6 +208,7 @@ export default function OrderDetailPage() {
   }[order.status] ?? { label: order.status, className: "" };
 
   const isActive = order.status === "open";
+  const hasDelayedItems = order.items.some((item) => isDelayedKitchenItem(item.createdAt, item.kitchenStatus));
 
   return (
     <div className="flex flex-col h-full gap-4">
@@ -222,6 +259,13 @@ export default function OrderDetailPage() {
           </Button>
         )}
       </div>
+
+      {hasDelayedItems ? (
+        <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className="font-semibold">{t("orderDetail.delayedWarningTitle")}</p>
+          <p className="text-xs">{t("orderDetail.delayedWarningDesc")}</p>
+        </div>
+      ) : null}
 
       <div className="flex-1 flex gap-5 min-h-0">
         <div className="flex-1 flex flex-col min-w-0 gap-4">
@@ -274,13 +318,25 @@ export default function OrderDetailPage() {
                           </td>
                           {isActive && (
                             <td className="px-3 py-3 text-center">
-                              <button
-                                onClick={() => handleRemoveItem(item.id, item.menuItemName)}
-                                className="p-1.5 rounded hover:bg-red-100 hover:text-red-600 text-muted-foreground transition-colors"
-                                title={t("orderDetail.removeItem")}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => handleRemoveItem(item.id, item.menuItemName)}
+                                  className="p-1.5 rounded hover:bg-red-100 hover:text-red-600 text-muted-foreground transition-colors"
+                                  title={t("orderDetail.removeItem")}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                                {item.kitchenStatus !== "served" && item.kitchenStatus !== "cancelled" ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 border-red-300 px-2 text-[11px] text-red-700 hover:bg-red-50"
+                                    onClick={() => void handleCancelItem(item.id, item.menuItemName)}
+                                  >
+                                    {t("orderDetail.cancelItem")}
+                                  </Button>
+                                ) : null}
+                              </div>
                             </td>
                           )}
                         </tr>

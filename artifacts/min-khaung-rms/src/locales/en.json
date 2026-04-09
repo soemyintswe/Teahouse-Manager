@@ -112,6 +112,10 @@
     "note": "Note:",
     "ready": "Ready",
     "done": "Done",
+    "cancelItem": "Cancel Item",
+    "cancelReasonPrompt": "Why is this item cancelled?",
+    "delayedWarning": "Delay alert: some items are taking too long.",
+    "delayedItemHint": "Delayed item - please update or cancel with reason.",
     "allClear": "All clear for {{station}}!",
     "noActiveItems": "No active items in this station right now."
   },
@@ -243,14 +247,21 @@
       "new": "New",
       "cooking": "Cooking",
       "ready": "Ready",
-      "served": "Served"
+      "served": "Served",
+      "cancelled": "Cancelled"
     },
     "toastAdded": "{{name}} added",
     "toastAddFailed": "Failed to add item",
     "toastRemoved": "{{name}} removed",
     "toastRemoveFailed": "Failed to remove item",
     "toastReadyToPay": "Order marked as ready to pay",
-    "toastUpdateFailed": "Failed to update order"
+    "toastUpdateFailed": "Failed to update order",
+    "cancelItem": "Cancel",
+    "cancelReasonPrompt": "Cancel {{item}} - provide reason",
+    "toastCancelled": "{{name}} cancelled",
+    "toastCancelFailed": "Failed to cancel item",
+    "delayedWarningTitle": "Delay Alert",
+    "delayedWarningDesc": "Some items are taking too long. Staff should update status or cancel with reason."
   },
   "notFound": {
     "title": "404 Page Not Found",
@@ -271,6 +282,10 @@
     "reserved": "Reserved",
     "openBillPayment": "Open Bill / Payment",
     "paymentPendingHint": "Bill requested. Once payment is confirmed, status will move to Paid automatically.",
+    "missingPaymentOrderTitle": "No payable order found",
+    "missingPaymentOrderDesc": "This table was marked as payment pending but no bill order exists. Status was reset.",
+    "fixedStaleStatusTitle": "Table status repaired",
+    "fixedStaleStatusDesc": "Found an open order and linked this table back to the active order.",
     "tapToFilter": "Tap a status card to filter tables",
     "noTablesInHall": "No tables in Hall",
     "noTablesInAircon": "No tables in Air-con Room",

@@ -3,6 +3,7 @@ import {
   useListKitchenOrders,
   getListKitchenOrdersQueryKey,
   useUpdateKitchenItemStatus,
+  customFetch,
 } from "@workspace/api-client-react";
 import type { ListKitchenOrdersParams } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import { useLocation, useSearch } from "wouter";
 import { useTranslation } from "react-i18next";
 
 const STATIONS = ["salad", "tea-coffee", "juice", "kitchen"] as const;
+const DELAY_THRESHOLD_MINUTES = 15;
 
 type StationCode = (typeof STATIONS)[number];
 
@@ -66,6 +68,36 @@ export default function Kitchen() {
         },
       },
     );
+  };
+
+  const handleCancel = async (itemId: number) => {
+    const reason = window.prompt(t("kitchen.cancelReasonPrompt"))?.trim() ?? "";
+    if (!reason) return;
+
+    try {
+      await customFetch(`/api/kitchen/items/${itemId}/status`, {
+        method: "PATCH",
+        responseType: "json",
+        body: JSON.stringify({
+          kitchenStatus: "cancelled",
+          reason,
+        }),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getListKitchenOrdersQueryKey(listParams),
+      });
+    } catch {
+      // noop: existing UI refresh will continue; destructive toast can be added later if needed
+    }
+  };
+
+  const isDelayedItem = (createdAt: string, status: string) => {
+    const normalized = status.trim().toLowerCase();
+    if (normalized === "ready" || normalized === "served" || normalized === "cancelled") return false;
+    const createdMs = new Date(createdAt).getTime();
+    if (!Number.isFinite(createdMs)) return false;
+    const diffMinutes = (Date.now() - createdMs) / 60000;
+    return diffMinutes >= DELAY_THRESHOLD_MINUTES;
   };
 
   const getStatusColor = (status: string) => {
@@ -131,8 +163,14 @@ export default function Kitchen() {
               </div>
             </CardHeader>
             <CardContent className="flex-1 p-2 space-y-2 overflow-y-auto">
+              {order.items.some((item) => isDelayedItem(item.createdAt, item.kitchenStatus)) ? (
+                <div className="rounded border border-red-300 bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-700">
+                  {t("kitchen.delayedWarning")}
+                </div>
+              ) : null}
               {order.items.map((item) => {
                 const ready = item.kitchenStatus === "ready";
+                const delayed = isDelayedItem(item.createdAt, item.kitchenStatus);
                 return (
                   <div key={item.id} className={`p-3 rounded border-2 transition-colors ${getStatusColor(item.kitchenStatus)}`}>
                     <div className="flex justify-between items-start font-bold text-lg">
@@ -148,15 +186,31 @@ export default function Kitchen() {
                         {item.notes && <p className="font-semibold text-red-700">{t("kitchen.note")} {item.notes}</p>}
                       </div>
                     )}
+                    {delayed ? (
+                      <p className="mt-2 text-xs font-semibold text-red-700">
+                        {t("kitchen.delayedItemHint")}
+                      </p>
+                    ) : null}
                     <div className="mt-3 flex justify-end">
-                      <Button
-                        size="sm"
-                        onClick={() => handleDone(item.id, item.kitchenStatus)}
-                        disabled={ready || updateStatus.isPending}
-                        className={ready ? "opacity-75" : ""}
-                      >
-                        {ready ? t("kitchen.ready") : t("kitchen.done")}
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-red-300 text-red-700 hover:bg-red-100"
+                          onClick={() => void handleCancel(item.id)}
+                          disabled={ready || updateStatus.isPending}
+                        >
+                          {t("kitchen.cancelItem")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleDone(item.id, item.kitchenStatus)}
+                          disabled={ready || updateStatus.isPending}
+                          className={ready ? "opacity-75" : ""}
+                        >
+                          {ready ? t("kitchen.ready") : t("kitchen.done")}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 );

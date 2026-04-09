@@ -20,6 +20,22 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+const MODIFIABLE_ORDER_STATUSES = ["open", "ready_to_pay"] as const;
+
+function isBillableOrderItem(item: typeof orderItemsTable.$inferSelect): boolean {
+  return (item.kitchenStatus ?? "").trim().toLowerCase() !== "cancelled";
+}
+
+function isOrderModifiable(status: string): boolean {
+  return MODIFIABLE_ORDER_STATUSES.includes(status as (typeof MODIFIABLE_ORDER_STATUSES)[number]);
+}
+
+function normalizeCancelNote(reason: string, actor: string): string {
+  const trimmedReason = reason.trim();
+  const trimmedActor = actor.trim() || "staff";
+  if (!trimmedReason) return `[Cancelled by ${trimmedActor}]`;
+  return `[Cancelled by ${trimmedActor}] ${trimmedReason}`;
+}
 
 function formatOrder(order: typeof ordersTable.$inferSelect) {
   return {
@@ -50,7 +66,9 @@ async function recalcOrder(orderId: number, executor: any = db): Promise<void> {
   const taxRate = settings ? parseFloat(settings.taxRate.toString()) / 100 : 0.05;
   const airconFeeBase = settings ? parseFloat(settings.airconFee.toString()) : 500;
 
-  const subtotal = items.reduce(
+  const subtotal = items
+    .filter(isBillableOrderItem)
+    .reduce(
     (sum: number, item: typeof orderItemsTable.$inferSelect) =>
       sum + parseFloat(item.unitPrice.toString()) * item.quantity,
     0,
@@ -66,6 +84,30 @@ async function recalcOrder(orderId: number, executor: any = db): Promise<void> {
     taxAmount: taxAmount.toFixed(2),
     totalAmount: totalAmount.toFixed(2),
   }).where(eq(ordersTable.id, orderId));
+}
+
+async function syncOrderAfterItemChange(orderId: number, executor: any = db): Promise<void> {
+  const [order] = await executor.select().from(ordersTable).where(eq(ordersTable.id, orderId));
+  if (!order) return;
+
+  await recalcOrder(orderId, executor);
+
+  if (order.status === "paid") return;
+
+  const items = await executor.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, orderId));
+  const hasBillableItems = items.some(isBillableOrderItem);
+
+  if (!hasBillableItems) {
+    await executor
+      .update(ordersTable)
+      .set({ status: "cancelled" })
+      .where(eq(ordersTable.id, orderId));
+
+    await executor
+      .update(tablesTable)
+      .set({ occupancyStatus: "available", currentOrderId: null })
+      .where(eq(tablesTable.id, order.tableId));
+  }
 }
 
 router.get("/orders", requireAuth, async (req, res): Promise<void> => {
@@ -243,6 +285,7 @@ router.post("/orders/:id/items", requireAuth, async (req, res): Promise<void> =>
 
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+  if (!isOrderModifiable(order.status)) { res.status(409).json({ error: "This order can no longer be modified." }); return; }
   if (req.auth?.role === "guest" && !canAccessTable(req, order.tableId)) { res.status(403).json({ error: "Permission denied." }); return; }
   const [menuItem] = await db.select().from(menuItemsTable).where(eq(menuItemsTable.id, parsed.data.menuItemId));
   if (!menuItem) { res.status(404).json({ error: "Menu item not found" }); return; }
@@ -272,15 +315,27 @@ router.patch("/orders/:id/items/:itemId", requireAuth, async (req, res): Promise
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+  if (!isOrderModifiable(order.status)) { res.status(409).json({ error: "This order can no longer be modified." }); return; }
   if (req.auth?.role === "guest" && !canAccessTable(req, order.tableId)) { res.status(403).json({ error: "Permission denied." }); return; }
+  const [existingItem] = await db.select().from(orderItemsTable).where(
+    and(eq(orderItemsTable.id, params.data.itemId), eq(orderItemsTable.orderId, params.data.id))
+  );
+  if (!existingItem) { res.status(404).json({ error: "Order item not found" }); return; }
 
-  const [item] = await db.update(orderItemsTable).set(parsed.data).where(
+  const payload = { ...parsed.data };
+  if (typeof payload.kitchenStatus === "string" && payload.kitchenStatus.trim().toLowerCase() === "cancelled") {
+    const actor = req.auth?.role === "guest" ? "customer" : req.auth?.role ?? "staff";
+    payload.kitchenStatus = "cancelled";
+    payload.notes = normalizeCancelNote(payload.notes ?? existingItem.notes ?? "", actor);
+  }
+
+  const [item] = await db.update(orderItemsTable).set(payload).where(
     and(eq(orderItemsTable.id, params.data.itemId), eq(orderItemsTable.orderId, params.data.id))
   ).returning();
   if (!item) { res.status(404).json({ error: "Order item not found" }); return; }
 
-  if (parsed.data.quantity != null) {
-    await recalcOrder(params.data.id);
+  if (payload.quantity != null || payload.kitchenStatus != null) {
+    await syncOrderAfterItemChange(params.data.id);
   }
 
   res.json(UpdateOrderItemResponse.parse(formatOrderItem(item)));
@@ -294,12 +349,13 @@ router.delete("/orders/:id/items/:itemId", requireAuth, async (req, res): Promis
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+  if (!isOrderModifiable(order.status)) { res.status(409).json({ error: "This order can no longer be modified." }); return; }
   if (req.auth?.role === "guest" && !canAccessTable(req, order.tableId)) { res.status(403).json({ error: "Permission denied." }); return; }
   const [item] = await db.delete(orderItemsTable).where(
     and(eq(orderItemsTable.id, params.data.itemId), eq(orderItemsTable.orderId, params.data.id))
   ).returning();
   if (!item) { res.status(404).json({ error: "Order item not found" }); return; }
-  await recalcOrder(params.data.id);
+  await syncOrderAfterItemChange(params.data.id);
   res.sendStatus(204);
 });
 
