@@ -110,7 +110,46 @@
     "title": "အရင်ကြည့်ပြီး လွယ်ကူမြန်ဆန်စွာ မှာယူလိုက်ပါ",
     "subtitle": "အစားအသောက် Preview ပုံများ၊ ဈေးနှုန်းနှင့် QR များကို ကြည့်ရှုနိုင်သည်။ ဝန်ထမ်းနှင့် ဧည့်သည်များက ဒီနေရာမှ စတင်ဝင်နိုင်သည်။",
     "loginButton": "User Login",
-    "guestButton": "စားပွဲဧည့်သည်ဝင်ရောက်မှု"
+    "guestButton": "စားပွဲဧည့်သည်ဝင်ရောက်မှု",
+    "allCategories": "အစားအသောက်အားလုံး",
+    "preview": {
+      "noDescription": "ဖော်ပြချက်မရှိသေးပါ။"
+    },
+    "deliveryNotice": {
+      "title": "Online Delivery မှာယူမှု",
+      "desc": "ပါဆယ်/အိမ်အရောက် မှာယူရန် Customer အချက်အလက်ကို Register လုပ်ထားရပါမည်။"
+    },
+    "cart": {
+      "itemAdded": "ပစ္စည်းကို cart ထဲထည့်ပြီးပါပြီ",
+      "checkoutButton": "ငွေရှင်းရန် ({{count}})"
+    },
+    "register": {
+      "button": "Register",
+      "title": "Delivery အကောင့် မှတ်ပုံတင်ခြင်း",
+      "subtitle": "Online မှာယူမှုမတင်ခင် ပို့ဆောင်ရေးအချက်အလက်များ ဖြည့်ပါ။",
+      "fullName": "အမည်အပြည့်အစုံ",
+      "phone": "ဖုန်းနံပါတ်",
+      "address": "ပို့ဆောင်မည့်လိပ်စာအပြည့်အစုံ",
+      "mapLinkOptional": "Google Map link (optional)",
+      "saveButton": "မှတ်ပုံတင် သိမ်းမည်",
+      "saved": "Delivery profile သိမ်းပြီးပါပြီ",
+      "requiredTitle": "Register လိုအပ်ပါသည်",
+      "requiredDesc": "အမည်၊ ဖုန်းနံပါတ်၊ လိပ်စာ ကိုဖြည့်ပေးပါ။",
+      "deliveryRequired": "Delivery order တင်ရန် ဆက်သွယ်ရန်/လိပ်စာ အချက်အလက်များ Register လုပ်ထားရပါမည်။"
+    },
+    "checkout": {
+      "title": "Delivery ငွေရှင်းရန်",
+      "emptyCartTitle": "Cart ထဲ item မရှိပါ",
+      "emptyCartDesc": "ငွေရှင်းမလုပ်ခင် menu item ထည့်ပေးပါ။",
+      "paymentMethod": "ငွေပေးချေမှုနည်းလမ်း",
+      "paymentCash": "ပစ္စည်းရောက်မှ ငွေသားပေးမည်",
+      "paymentWallet": "Mobile Wallet",
+      "walletType": "Wallet အမျိုးအစား",
+      "placeOrder": "Delivery Order တင်မည်",
+      "successTitle": "Order #{{id}} တင်ပြီးပါပြီ",
+      "successDesc": "Delivery order လက်ခံထားပါသည်။ စုစုပေါင်း {{total}} ကျပ်။",
+      "failedTitle": "Delivery order တင်မရပါ"
+    }
   },
   "kitchen": {
     "title": "Kitchen Display System",
@@ -505,6 +544,7 @@
     "loginSuccess": "အောင်မြင်စွာဝင်ပြီးပါပြီ",
     "loginFailed": "အကောင့်ဝင်မရပါ",
     "logout": "ထွက်မည်",
+    "cancelToHome": "မူလစာမျက်နှာသို့ ပြန်မည်",
     "guestSession": "ဧည့်သည် session · Table {{table}}",
     "noAccessTitle": "ခွင့်ပြုချက်မရှိပါ",
     "noAccessDesc": "သင့် role ဖြင့် ဤစာမျက်နှာကို ဝင်မရနိုင်ပါ။"

@@ -110,7 +110,46 @@
     "title": "Taste First, Then Order Fast",
     "subtitle": "Browse menu previews, prices, and QR codes. Staff and customers can sign in from here.",
     "loginButton": "User Login",
-    "guestButton": "Table Guest Access"
+    "guestButton": "Table Guest Access",
+    "allCategories": "All Items",
+    "preview": {
+      "noDescription": "No description provided."
+    },
+    "deliveryNotice": {
+      "title": "Online Delivery Orders",
+      "desc": "For parcel/delivery orders, please register customer delivery details first."
+    },
+    "cart": {
+      "itemAdded": "Item added to cart",
+      "checkoutButton": "Checkout ({{count}})"
+    },
+    "register": {
+      "button": "Register",
+      "title": "Delivery Account Registration",
+      "subtitle": "Please provide your delivery details before placing an online order.",
+      "fullName": "Full Name",
+      "phone": "Phone Number",
+      "address": "Full Delivery Address",
+      "mapLinkOptional": "Google Map Link (optional)",
+      "saveButton": "Save Registration",
+      "saved": "Delivery profile saved",
+      "requiredTitle": "Registration required",
+      "requiredDesc": "Please fill full name, phone number, and delivery address.",
+      "deliveryRequired": "Delivery orders require registered contact and address information."
+    },
+    "checkout": {
+      "title": "Delivery Checkout",
+      "emptyCartTitle": "Cart is empty",
+      "emptyCartDesc": "Please add menu items before checkout.",
+      "paymentMethod": "Payment Method",
+      "paymentCash": "Cash on Delivery",
+      "paymentWallet": "Mobile Wallet",
+      "walletType": "Wallet Type",
+      "placeOrder": "Place Delivery Order",
+      "successTitle": "Order #{{id}} created",
+      "successDesc": "Delivery order submitted. Total: {{total}} ks.",
+      "failedTitle": "Failed to place delivery order"
+    }
   },
   "kitchen": {
     "title": "Kitchen Display System",
@@ -505,6 +544,7 @@
     "loginSuccess": "Login successful",
     "loginFailed": "Login failed",
     "logout": "Logout",
+    "cancelToHome": "Cancel",
     "guestSession": "Guest Session · Table {{table}}",
     "noAccessTitle": "No Access",
     "noAccessDesc": "Your account role cannot open this page."

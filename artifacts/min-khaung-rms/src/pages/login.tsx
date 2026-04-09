@@ -10,6 +10,13 @@ import { useTranslation } from "react-i18next";
 
 type LoginMode = "staff" | "guest";
 
+function parseModeFromSearch(search: string): LoginMode | null {
+  const params = new URLSearchParams(search);
+  const mode = params.get("mode");
+  if (mode === "staff" || mode === "guest") return mode;
+  return null;
+}
+
 function parseTableIdFromSearch(search: string): number | null {
   const params = new URLSearchParams(search);
   const value = params.get("tableId");
@@ -54,7 +61,8 @@ export default function LoginPage() {
   const { toast } = useToast();
   const { loginStaff, loginGuest } = useAuth();
 
-  const [mode, setMode] = useState<LoginMode>("staff");
+  const modeFromSearch = useMemo(() => parseModeFromSearch(window.location.search), []);
+  const [mode, setMode] = useState<LoginMode>(modeFromSearch ?? "staff");
   const [identifier, setIdentifier] = useState("");
   const [pin, setPin] = useState("");
   const [tableCodeInput, setTableCodeInput] = useState("");
@@ -84,6 +92,11 @@ export default function LoginPage() {
       })
       .finally(() => setLoading(false));
   }, [loading, loginGuest, queryTableCode, queryTableId, setLocation, t, toast]);
+
+  useEffect(() => {
+    if (!modeFromSearch) return;
+    setMode(modeFromSearch);
+  }, [modeFromSearch]);
 
   const handleStaffLogin = async () => {
     if (!identifier.trim() || !pin.trim()) return;
@@ -188,6 +201,14 @@ export default function LoginPage() {
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {t("auth.loginButton")}
             </Button>
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant="outline" onClick={() => setLocation("/")}>
+                {t("auth.cancelToHome")}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setLocation("/?register=1")}>
+                {t("public.register.button")}
+              </Button>
+            </div>
           </form>
         ) : (
           <form className="mt-4 space-y-3" onSubmit={onGuestSubmit}>
@@ -206,6 +227,14 @@ export default function LoginPage() {
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {t("auth.guestConnectButton")}
             </Button>
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant="outline" onClick={() => setLocation("/")}>
+                {t("auth.cancelToHome")}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setLocation("/?register=1")}>
+                {t("public.register.button")}
+              </Button>
+            </div>
           </form>
         )}
       </div>

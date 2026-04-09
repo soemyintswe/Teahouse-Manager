@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { db, ordersTable, orderItemsTable, menuItemsTable, tablesTable, settingsTable } from "@workspace/db";
 import { canAccessTable, requireAuth } from "../lib/auth";
 import {
@@ -21,6 +21,27 @@ import {
 
 const router: IRouter = Router();
 const MODIFIABLE_ORDER_STATUSES = ["open", "ready_to_pay"] as const;
+const DELIVERY_PAYMENT_METHODS = ["cash", "wallet"] as const;
+const DELIVERY_WALLET_TYPES = ["wave_pay", "kbz_pay", "aya_pay", "cb_pay"] as const;
+
+type DeliveryPaymentMethod = (typeof DELIVERY_PAYMENT_METHODS)[number];
+type DeliveryWalletType = (typeof DELIVERY_WALLET_TYPES)[number];
+
+type DeliveryOrderItemInput = {
+  menuItemId: number;
+  quantity: number;
+};
+
+type DeliveryOrderRequestBody = {
+  customerName?: unknown;
+  customerPhone?: unknown;
+  deliveryAddress?: unknown;
+  googleMapLink?: unknown;
+  notes?: unknown;
+  paymentMethod?: unknown;
+  walletType?: unknown;
+  items?: unknown;
+};
 
 function isBillableOrderItem(item: typeof orderItemsTable.$inferSelect): boolean {
   return (item.kitchenStatus ?? "").trim().toLowerCase() !== "cancelled";
@@ -35,6 +56,44 @@ function normalizeCancelNote(reason: string, actor: string): string {
   const trimmedActor = actor.trim() || "staff";
   if (!trimmedReason) return `[Cancelled by ${trimmedActor}]`;
   return `[Cancelled by ${trimmedActor}] ${trimmedReason}`;
+}
+
+function normalizeText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function parseDeliveryPaymentMethod(value: unknown): DeliveryPaymentMethod {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if ((DELIVERY_PAYMENT_METHODS as readonly string[]).includes(normalized)) {
+    return normalized as DeliveryPaymentMethod;
+  }
+  return "cash";
+}
+
+function parseDeliveryWalletType(value: unknown): DeliveryWalletType | null {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if ((DELIVERY_WALLET_TYPES as readonly string[]).includes(normalized)) {
+    return normalized as DeliveryWalletType;
+  }
+  return null;
+}
+
+function parseDeliveryItems(value: unknown): DeliveryOrderItemInput[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const raw = entry as Record<string, unknown>;
+      const menuItemId = Number(raw.menuItemId);
+      const quantity = Number(raw.quantity);
+      if (!Number.isFinite(menuItemId) || menuItemId <= 0) return null;
+      if (!Number.isFinite(quantity) || quantity <= 0) return null;
+      return {
+        menuItemId: Math.floor(menuItemId),
+        quantity: Math.floor(quantity),
+      };
+    })
+    .filter((entry): entry is DeliveryOrderItemInput => Boolean(entry));
 }
 
 function formatOrder(order: typeof ordersTable.$inferSelect) {
@@ -216,6 +275,120 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   } catch (error) {
     const statusCode = (error as { statusCode?: number })?.statusCode ?? 500;
     const message = error instanceof Error ? error.message : "Failed to create order";
+    res.status(statusCode).json({ error: message });
+  }
+});
+
+router.post("/orders/delivery-request", async (req, res): Promise<void> => {
+  const body = (req.body ?? {}) as DeliveryOrderRequestBody;
+  const customerName = normalizeText(body.customerName);
+  const customerPhone = normalizeText(body.customerPhone);
+  const deliveryAddress = normalizeText(body.deliveryAddress);
+  const googleMapLink = normalizeText(body.googleMapLink);
+  const notes = normalizeText(body.notes);
+  const items = parseDeliveryItems(body.items);
+  const paymentMethod = parseDeliveryPaymentMethod(body.paymentMethod);
+  const walletType = parseDeliveryWalletType(body.walletType);
+
+  if (!customerName || !customerPhone || !deliveryAddress) {
+    res.status(400).json({ error: "customerName, customerPhone, and deliveryAddress are required." });
+    return;
+  }
+  if (items.length === 0) {
+    res.status(400).json({ error: "At least one menu item is required." });
+    return;
+  }
+  if (paymentMethod === "wallet" && !walletType) {
+    res.status(400).json({ error: "walletType is required when paymentMethod is wallet." });
+    return;
+  }
+
+  try {
+    const createdOrderId = await db.transaction(async (tx) => {
+      const [settings] = await tx.select().from(settingsTable).limit(1);
+      const taxRate = settings ? parseFloat(settings.taxRate.toString()) / 100 : 0.05;
+      const mapUrl = googleMapLink.length > 0 ? googleMapLink : null;
+      const paymentLabel = paymentMethod === "wallet" ? `wallet:${walletType}` : "cash";
+
+      const menuIds = [...new Set(items.map((item) => item.menuItemId))];
+      const menuRows = await tx.select().from(menuItemsTable).where(inArray(menuItemsTable.id, menuIds));
+      const menuById = new Map(menuRows.map((menu) => [menu.id, menu]));
+
+      const preparedItems = items.map((item) => {
+        const menu = menuById.get(item.menuItemId);
+        if (!menu) {
+          const error = new Error(`Menu item #${item.menuItemId} not found.`) as Error & { statusCode?: number };
+          error.statusCode = 404;
+          throw error;
+        }
+        return { menu, quantity: item.quantity };
+      });
+
+      const subtotal = preparedItems.reduce(
+        (sum, entry) => sum + parseFloat(entry.menu.price.toString()) * entry.quantity,
+        0,
+      );
+      const taxAmount = subtotal * taxRate;
+      const totalAmount = subtotal + taxAmount;
+
+      const deliveryNotes = [
+        "[DELIVERY]",
+        `name=${customerName}`,
+        `phone=${customerPhone}`,
+        `address=${deliveryAddress}`,
+        mapUrl ? `map=${mapUrl}` : "",
+        notes ? `notes=${notes}` : "",
+      ]
+        .filter(Boolean)
+        .join(" | ");
+
+      const [order] = await tx
+        .insert(ordersTable)
+        .values({
+          tableId: 0,
+          tableNumber: "DELIVERY",
+          status: paymentMethod === "wallet" ? "ready_to_pay" : "open",
+          subtotal: subtotal.toFixed(2),
+          airconFee: "0.00",
+          taxAmount: taxAmount.toFixed(2),
+          totalAmount: totalAmount.toFixed(2),
+          paymentMethod: paymentLabel,
+          notes: deliveryNotes,
+          staffId: null,
+        })
+        .returning();
+
+      for (const entry of preparedItems) {
+        await tx.insert(orderItemsTable).values({
+          orderId: order.id,
+          menuItemId: entry.menu.id,
+          menuItemName: entry.menu.name,
+          quantity: entry.quantity,
+          unitPrice: entry.menu.price,
+          customizations: null,
+          notes: null,
+        });
+      }
+
+      return order.id;
+    });
+
+    const [createdOrder] = await db.select().from(ordersTable).where(eq(ordersTable.id, createdOrderId));
+    if (!createdOrder) {
+      res.status(500).json({ error: "Failed to create delivery order." });
+      return;
+    }
+
+    res.status(201).json({
+      orderId: createdOrder.id,
+      status: createdOrder.status,
+      paymentMethod: createdOrder.paymentMethod,
+      totalAmount: createdOrder.totalAmount.toString(),
+      message: "Delivery order created.",
+    });
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number })?.statusCode ?? 500;
+    const message = error instanceof Error ? error.message : "Failed to create delivery order.";
     res.status(statusCode).json({ error: message });
   }
 });

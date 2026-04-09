@@ -19,15 +19,7 @@ function detectLanguage(): SupportedLanguage {
       return stored;
     }
   }
-
-  if (typeof navigator !== "undefined") {
-    const normalized = navigator.language.toLowerCase();
-    if (normalized.startsWith("my") || normalized.startsWith("mm")) {
-      return "mm";
-    }
-  }
-
-  return "en";
+  return "mm";
 }
 
 function applyLanguageAttributes(language: string) {
