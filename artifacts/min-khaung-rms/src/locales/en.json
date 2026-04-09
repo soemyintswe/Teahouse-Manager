@@ -83,6 +83,8 @@
     "appErrorTitle": "App Error",
     "unexpectedRuntime": "Unexpected runtime error.",
     "unexpectedApp": "Unexpected application error.",
+    "retrying": "Loading in progress, please wait. Reconnecting to server...",
+    "autoRetrying": "Loading in progress, please wait. Retrying automatically in {{seconds}}s.",
     "timeout": "Server connection timed out. Please check internet/API server.",
     "connectFailed": "Unable to connect to server (HTTP {{status}}).",
     "api": "API"

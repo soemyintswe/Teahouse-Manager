@@ -12,6 +12,7 @@ const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | unde
 const fallbackCloudApiBaseUrl = "https://teahouse-api.onrender.com";
 const startupHealthPath = "/api/healthz";
 const startupTimeoutMs = 12000;
+const startupAutoRetryMs = 5000;
 
 const resolvedApiBaseUrl = configuredApiBaseUrl
   ? configuredApiBaseUrl.replace(/\/+$/, "")
@@ -95,20 +96,66 @@ function LoadingScreen({ message }: { message: string }) {
 }
 
 function ErrorScreen({ message, detail }: { message: string; detail?: string }) {
+  return <RetryableErrorScreen message={message} detail={detail} />;
+}
+
+function RetryableErrorScreen({
+  message,
+  detail,
+  onRetry,
+  autoRetryMs = 0,
+}: {
+  message: string;
+  detail?: string;
+  onRetry?: () => void;
+  autoRetryMs?: number;
+}) {
   const apiInfo = resolvedApiBaseUrl ?? "Same-origin /api";
+  const retryAction = React.useMemo(() => onRetry ?? (() => window.location.reload()), [onRetry]);
+  const enableAutoRetry = autoRetryMs > 0;
+  const [secondsLeft, setSecondsLeft] = React.useState(
+    enableAutoRetry ? Math.ceil(autoRetryMs / 1000) : 0,
+  );
+
+  React.useEffect(() => {
+    if (!enableAutoRetry) return;
+
+    const startedAt = Date.now();
+    setSecondsLeft(Math.ceil(autoRetryMs / 1000));
+
+    const intervalId = window.setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const remaining = Math.max(0, Math.ceil((autoRetryMs - elapsed) / 1000));
+      setSecondsLeft(remaining);
+    }, 250);
+
+    const timeoutId = window.setTimeout(() => {
+      retryAction();
+    }, autoRetryMs);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [autoRetryMs, enableAutoRetry, message, detail, retryAction]);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
       <div className="w-full max-w-lg rounded-xl border border-destructive/40 bg-card p-6 shadow-lg">
         <h1 className="text-xl font-bold text-destructive">{i18n.t("bootstrap.appErrorTitle")}</h1>
         <p className="mt-2 text-sm">{message}</p>
+        {enableAutoRetry ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            {i18n.t("bootstrap.autoRetrying", { seconds: secondsLeft })}
+          </p>
+        ) : null}
         <div className="mt-3 rounded-md bg-muted p-3 text-xs text-muted-foreground">
           <p>{i18n.t("bootstrap.api")}: {apiInfo}</p>
           {detail ? <p className="mt-1 line-clamp-3">{detail}</p> : null}
         </div>
         <button
           type="button"
-          onClick={() => window.location.reload()}
+          onClick={retryAction}
           className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           <RefreshCw className="h-4 w-4" />
@@ -157,6 +204,15 @@ function BootstrapApp() {
     status: "loading",
     message: i18n.t("bootstrap.initializing"),
   });
+  const [retryTick, setRetryTick] = React.useState(0);
+
+  const requestBootstrapRetry = React.useCallback(() => {
+    setState({
+      status: "loading",
+      message: i18n.t("bootstrap.retrying"),
+    });
+    setRetryTick((prev) => prev + 1);
+  }, []);
 
   React.useEffect(() => {
     let mounted = true;
@@ -200,14 +256,21 @@ function BootstrapApp() {
       window.removeEventListener("error", handleWindowError);
       window.removeEventListener("unhandledrejection", handleUnhandledRejection);
     };
-  }, []);
+  }, [retryTick]);
 
   if (state.status === "loading") {
     return <LoadingScreen message={state.message} />;
   }
 
   if (state.status === "error") {
-    return <ErrorScreen message={state.message} detail={state.detail} />;
+    return (
+      <RetryableErrorScreen
+        message={state.message}
+        detail={state.detail}
+        onRetry={requestBootstrapRetry}
+        autoRetryMs={startupAutoRetryMs}
+      />
+    );
   }
 
   return (

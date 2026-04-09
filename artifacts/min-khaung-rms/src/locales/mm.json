@@ -83,6 +83,8 @@
     "appErrorTitle": "App အမှား",
     "unexpectedRuntime": "မမျှော်လင့်ထားသော runtime error ဖြစ်ပွားသည်။",
     "unexpectedApp": "မမျှော်လင့်ထားသော app error ဖြစ်ပွားသည်။",
+    "retrying": "Loading လုပ်နေပါသည်၊ ခေတ္တစောင့်ပါ။ Server ကို ပြန်လည်ချိတ်ဆက်နေပါသည်...",
+    "autoRetrying": "Loading လုပ်နေပါသည်၊ ခေတ္တစောင့်ပါ။ {{seconds}} စက္ကန့်အတွင်း အလိုအလျှောက် ထပ်မံချိတ်ဆက်မည်။",
     "timeout": "Server ချိတ်ဆက်မှု အချိန်ကုန်သွားပါသည်။ Internet/API server ကို စစ်ဆေးပါ။",
     "connectFailed": "Server ချိတ်ဆက်မရပါ (HTTP {{status}}).",
     "api": "API"
