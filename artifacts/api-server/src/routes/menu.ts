@@ -2,7 +2,6 @@ import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
 import { db, menuCategoriesTable, menuItemsTable } from "@workspace/db";
 import { requireRoles } from "../lib/auth";
-import { uploadMenuImageToDrive } from "../lib/google-drive";
 import {
   CreateMenuCategoryBody,
   UpdateMenuCategoryParams,
@@ -28,6 +27,18 @@ type UploadMenuImageBody = {
   mimeType?: unknown;
   base64Data?: unknown;
 };
+
+function parseImageUploadPayload(base64Data: string): { mimeTypeFromDataUrl: string | null; binary: Buffer } {
+  const dataUrlMatch = base64Data.match(/^data:([^;]+);base64,(.+)$/i);
+  const mimeTypeFromDataUrl = dataUrlMatch?.[1]?.trim() ?? null;
+  const base64Payload = (dataUrlMatch?.[2] ?? base64Data).trim();
+  const binary = Buffer.from(base64Payload, "base64");
+  return { mimeTypeFromDataUrl, binary };
+}
+
+function isAllowedImageMime(value: string): boolean {
+  return /^image\/[a-z0-9.+-]+$/i.test(value);
+}
 
 router.get("/menu-images/proxy", async (req, res): Promise<void> => {
   const rawUrl = typeof req.query.url === "string" ? req.query.url.trim() : "";
@@ -85,21 +96,41 @@ router.get("/menu-images/proxy", async (req, res): Promise<void> => {
 
 router.post("/menu-images/upload", requireRoles(["supervisor", "manager", "owner"]), async (req, res): Promise<void> => {
   const body = (req.body ?? {}) as UploadMenuImageBody;
-  const fileName = typeof body.fileName === "string" ? body.fileName.trim() : "";
-  const mimeType = typeof body.mimeType === "string" ? body.mimeType.trim() : "application/octet-stream";
+  const fileName = typeof body.fileName === "string" ? body.fileName.trim() : `menu-${Date.now()}.jpg`;
+  const requestedMimeType = typeof body.mimeType === "string" ? body.mimeType.trim() : "";
   const base64Data = typeof body.base64Data === "string" ? body.base64Data.trim() : "";
 
-  if (!fileName || !base64Data) {
-    res.status(400).json({ error: "fileName and base64Data are required." });
+  if (!base64Data) {
+    res.status(400).json({ error: "base64Data is required." });
     return;
   }
 
   try {
-    const uploaded = await uploadMenuImageToDrive({ fileName, mimeType, base64Data });
-    res.status(201).json(uploaded);
+    const { mimeTypeFromDataUrl, binary } = parseImageUploadPayload(base64Data);
+    if (!Number.isFinite(binary.length) || binary.length < 8) {
+      res.status(400).json({ error: "Invalid image data." });
+      return;
+    }
+    if (binary.length > 2_000_000) {
+      res.status(413).json({ error: "Image is too large. Keep file under 2MB." });
+      return;
+    }
+
+    const mimeTypeCandidate = (requestedMimeType || mimeTypeFromDataUrl || "image/jpeg").toLowerCase();
+    const mimeType = isAllowedImageMime(mimeTypeCandidate) ? mimeTypeCandidate : "image/jpeg";
+    const imageUrl = `data:${mimeType};base64,${binary.toString("base64")}`;
+
+    res.status(201).json({
+      fileId: `inline-${Date.now()}`,
+      fileName,
+      imageUrl,
+      webViewLink: imageUrl,
+      downloadUrl: imageUrl,
+      storage: "inline",
+    });
   } catch (error) {
     res.status(500).json({
-      error: error instanceof Error ? error.message : "Failed to upload image to Google Drive.",
+      error: error instanceof Error ? error.message : "Failed to process image upload.",
     });
   }
 });
