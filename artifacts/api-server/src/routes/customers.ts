@@ -24,6 +24,22 @@ function normalizeFilter(value: unknown): string | null {
   return text.length > 0 ? text.toLowerCase() : null;
 }
 
+function toIsoString(value: unknown): string {
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+    return value;
+  }
+  return new Date(0).toISOString();
+}
+
+function isSchemaDriftError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  return code === "42P01" || code === "42703";
+}
+
 router.get("/customers/me", requireAuth, async (req, res): Promise<void> => {
   if (req.auth?.role !== "customer" || !req.auth.customerId) {
     res.status(403).json({ error: "Only customer account can access this endpoint." });
@@ -61,83 +77,91 @@ router.get("/customers/me", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.get("/customers", requireRoles(["manager", "owner"]), async (req, res): Promise<void> => {
-  const statusFilter = normalizeFilter(req.query.status);
-  const regionFilter = normalizeFilter(req.query.region);
-  const townshipFilter = normalizeFilter(req.query.township);
-  const streetFilter = normalizeFilter(req.query.street);
+  try {
+    const statusFilter = normalizeFilter(req.query.status);
+    const regionFilter = normalizeFilter(req.query.region);
+    const townshipFilter = normalizeFilter(req.query.township);
+    const streetFilter = normalizeFilter(req.query.street);
 
-  const allCustomers = await db.select().from(customersTable).orderBy(desc(customersTable.createdAt));
-  const customerIds = allCustomers.map((customer) => customer.id);
-  const phones = customerIds.length > 0
-    ? await db.select().from(customerPhonesTable).where(inArray(customerPhonesTable.customerId, customerIds))
-    : [];
-  const addresses = customerIds.length > 0
-    ? await db.select().from(customerAddressesTable).where(inArray(customerAddressesTable.customerId, customerIds))
-    : [];
-  const deliveryOrders = customerIds.length > 0
-    ? await db
-        .select()
-        .from(ordersTable)
-        .where(and(inArray(ordersTable.customerId, customerIds), eq(ordersTable.orderSource, "delivery")))
-    : [];
+    const allCustomers = await db.select().from(customersTable).orderBy(desc(customersTable.createdAt));
+    const customerIds = allCustomers.map((customer) => customer.id);
+    const phones = customerIds.length > 0
+      ? await db.select().from(customerPhonesTable).where(inArray(customerPhonesTable.customerId, customerIds))
+      : [];
+    const addresses = customerIds.length > 0
+      ? await db.select().from(customerAddressesTable).where(inArray(customerAddressesTable.customerId, customerIds))
+      : [];
+    const deliveryOrders = customerIds.length > 0
+      ? await db
+          .select()
+          .from(ordersTable)
+          .where(and(inArray(ordersTable.customerId, customerIds), eq(ordersTable.orderSource, "delivery")))
+      : [];
 
-  const phonesByCustomer = new Map<number, string[]>();
-  for (const row of phones) {
-    const list = phonesByCustomer.get(row.customerId) ?? [];
-    list.push(row.phone);
-    phonesByCustomer.set(row.customerId, list);
-  }
-
-  const addressByCustomer = new Map<number, typeof addresses[number]>();
-  for (const row of addresses) {
-    const existing = addressByCustomer.get(row.customerId);
-    if (!existing || row.isDefault) {
-      addressByCustomer.set(row.customerId, row);
+    const phonesByCustomer = new Map<number, string[]>();
+    for (const row of phones) {
+      const list = phonesByCustomer.get(row.customerId) ?? [];
+      list.push(row.phone);
+      phonesByCustomer.set(row.customerId, list);
     }
+
+    const addressByCustomer = new Map<number, typeof addresses[number]>();
+    for (const row of addresses) {
+      const existing = addressByCustomer.get(row.customerId);
+      if (!existing || row.isDefault) {
+        addressByCustomer.set(row.customerId, row);
+      }
+    }
+
+    const ordersByCustomer = new Map<number, typeof deliveryOrders>();
+    for (const row of deliveryOrders) {
+      const customerId = row.customerId ?? 0;
+      const list = ordersByCustomer.get(customerId) ?? [];
+      list.push(row);
+      ordersByCustomer.set(customerId, list);
+    }
+
+    const result = allCustomers
+      .map((customer) => {
+        const defaultAddress = addressByCustomer.get(customer.id);
+        const customerOrders = ordersByCustomer.get(customer.id) ?? [];
+        const latestOrder = [...customerOrders].sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        )[0];
+        return {
+          id: customer.id,
+          fullName: customer.fullName,
+          status: customer.status,
+          mustChangePassword: customer.mustChangePassword,
+          createdAt: toIsoString(customer.createdAt),
+          phones: (phonesByCustomer.get(customer.id) ?? []).sort(),
+          address: defaultAddress
+            ? {
+                unitNo: defaultAddress.unitNo,
+                street: defaultAddress.street,
+                ward: defaultAddress.ward,
+                township: defaultAddress.township,
+                region: defaultAddress.region,
+                mapLink: defaultAddress.mapLink,
+              }
+            : null,
+          totalDeliveryOrders: customerOrders.length,
+          latestDeliveryStatus: latestOrder?.deliveryStatus ?? null,
+        };
+      })
+      .filter((row) => (statusFilter ? row.status.toLowerCase() === statusFilter : true))
+      .filter((row) => (regionFilter ? (row.address?.region ?? "").toLowerCase().includes(regionFilter) : true))
+      .filter((row) => (townshipFilter ? (row.address?.township ?? "").toLowerCase().includes(townshipFilter) : true))
+      .filter((row) => (streetFilter ? (row.address?.street ?? "").toLowerCase().includes(streetFilter) : true));
+
+    res.json(result);
+  } catch (error) {
+    if (isSchemaDriftError(error)) {
+      res.json([]);
+      return;
+    }
+    res.status(500).json({ error: "Failed to load customer accounts." });
   }
-
-  const ordersByCustomer = new Map<number, typeof deliveryOrders>();
-  for (const row of deliveryOrders) {
-    const customerId = row.customerId ?? 0;
-    const list = ordersByCustomer.get(customerId) ?? [];
-    list.push(row);
-    ordersByCustomer.set(customerId, list);
-  }
-
-  const result = allCustomers
-    .map((customer) => {
-      const defaultAddress = addressByCustomer.get(customer.id);
-      const customerOrders = ordersByCustomer.get(customer.id) ?? [];
-      const latestOrder = [...customerOrders].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      )[0];
-      return {
-        id: customer.id,
-        fullName: customer.fullName,
-        status: customer.status,
-        mustChangePassword: customer.mustChangePassword,
-        createdAt: customer.createdAt.toISOString(),
-        phones: (phonesByCustomer.get(customer.id) ?? []).sort(),
-        address: defaultAddress
-          ? {
-              unitNo: defaultAddress.unitNo,
-              street: defaultAddress.street,
-              ward: defaultAddress.ward,
-              township: defaultAddress.township,
-              region: defaultAddress.region,
-              mapLink: defaultAddress.mapLink,
-            }
-          : null,
-        totalDeliveryOrders: customerOrders.length,
-        latestDeliveryStatus: latestOrder?.deliveryStatus ?? null,
-      };
-    })
-    .filter((row) => (statusFilter ? row.status.toLowerCase() === statusFilter : true))
-    .filter((row) => (regionFilter ? (row.address?.region ?? "").toLowerCase().includes(regionFilter) : true))
-    .filter((row) => (townshipFilter ? (row.address?.township ?? "").toLowerCase().includes(townshipFilter) : true))
-    .filter((row) => (streetFilter ? (row.address?.street ?? "").toLowerCase().includes(streetFilter) : true));
-
-  res.json(result);
 });
 
 router.patch("/customers/:id/status", requireRoles(["manager", "owner"]), async (req, res): Promise<void> => {

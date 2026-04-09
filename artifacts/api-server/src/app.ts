@@ -55,4 +55,19 @@ app.use(optionalAuth);
 
 app.use("/api", router);
 
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const statusCode =
+    typeof err === "object" && err !== null && "statusCode" in err && typeof (err as { statusCode?: unknown }).statusCode === "number"
+      ? ((err as { statusCode: number }).statusCode || 500)
+      : 500;
+  const message =
+    err instanceof Error
+      ? err.message || "Internal Server Error"
+      : "Internal Server Error";
+
+  logger.error({ err }, "Unhandled API error");
+  if (res.headersSent) return;
+  res.status(statusCode).json({ error: message });
+});
+
 export default app;
