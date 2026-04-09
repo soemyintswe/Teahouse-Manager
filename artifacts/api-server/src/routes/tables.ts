@@ -129,12 +129,51 @@ async function validateRoomCodeExists(zoneCode: string): Promise<boolean> {
   return Boolean(room);
 }
 
-async function findTableByNumber(tableNumber: string): Promise<{ id: number } | null> {
-  const [table] = await db
-    .select({ id: tablesTable.id })
-    .from(tablesTable)
-    .where(eq(tablesTable.tableNumber, tableNumber));
-  return table ?? null;
+function getZonePrefix(zoneCode: string): string {
+  const upper = zoneCode.trim().toUpperCase();
+  for (const char of upper) {
+    if (char >= "A" && char <= "Z") return char;
+  }
+  return "T";
+}
+
+function getTailNumber(value: string): number | null {
+  const match = /(\d+)$/.exec(value.trim().toUpperCase());
+  if (!match) return null;
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+async function resolveAutoTableNumber(zoneCode: string, requested: string | null | undefined, excludeId?: number): Promise<string> {
+  const prefix = getZonePrefix(zoneCode);
+  const requestedNumber = requested ? getTailNumber(requested) : null;
+
+  const rows = await db.select({ id: tablesTable.id, tableNumber: tablesTable.tableNumber }).from(tablesTable);
+  const usedByPrefix = new Set<number>();
+  const usedNumbers = new Set<string>();
+
+  for (const row of rows) {
+    if (excludeId != null && row.id === excludeId) continue;
+    const normalized = row.tableNumber.trim().toUpperCase();
+    usedNumbers.add(normalized);
+    if (!normalized.startsWith(prefix)) continue;
+    const tail = getTailNumber(normalized);
+    if (tail != null) usedByPrefix.add(tail);
+  }
+
+  if (requestedNumber != null) {
+    const candidate = `${prefix}${requestedNumber}`;
+    if (!usedNumbers.has(candidate) && !usedByPrefix.has(requestedNumber)) {
+      return candidate;
+    }
+  }
+
+  let nextNumber = 1;
+  while (usedByPrefix.has(nextNumber) || usedNumbers.has(`${prefix}${nextNumber}`)) {
+    nextNumber += 1;
+  }
+
+  return `${prefix}${nextNumber}`;
 }
 
 router.get("/rooms", requireRoles(["waiter", "kitchen", "cashier", "supervisor", "manager", "owner"]), async (_req, res): Promise<void> => {
@@ -200,6 +239,17 @@ router.patch("/rooms/:id", requireRoles(ADMIN_ROLES), async (req, res): Promise<
       .update(tablesTable)
       .set({ zone: payload.code })
       .where(eq(tablesTable.zone, currentRoom.code));
+
+    const movedTables = await db.select().from(tablesTable).where(eq(tablesTable.zone, payload.code));
+    for (const moved of movedTables) {
+      const nextTableNumber = await resolveAutoTableNumber(payload.code, moved.tableNumber, moved.id);
+      if (nextTableNumber !== moved.tableNumber) {
+        await db
+          .update(tablesTable)
+          .set({ tableNumber: nextTableNumber })
+          .where(eq(tablesTable.id, moved.id));
+      }
+    }
   }
 
   res.json(toIsoRoom(updated));
@@ -244,22 +294,12 @@ router.post("/tables", requireRoles(ADMIN_ROLES), async (req, res): Promise<void
     return;
   }
 
-  const tableNumber = parsed.data.tableNumber.trim();
-  if (!tableNumber) {
-    res.status(400).json({ error: "Table number is required." });
-    return;
-  }
-
   if (!(await validateRoomCodeExists(parsed.data.zone))) {
     res.status(400).json({ error: "Room does not exist for this zone code." });
     return;
   }
 
-  const existing = await findTableByNumber(tableNumber);
-  if (existing) {
-    res.status(409).json({ error: "Table number already exists." });
-    return;
-  }
+  const tableNumber = await resolveAutoTableNumber(parsed.data.zone, parsed.data.tableNumber);
 
   const qrCode = `table-${tableNumber}-${Date.now()}`;
   const [table] = await db.insert(tablesTable).values({ ...parsed.data, tableNumber, qrCode }).returning();
@@ -294,25 +334,26 @@ router.patch("/tables/:id", requireRoles(ADMIN_ROLES), async (req, res): Promise
   const parsed = UpdateTableBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
+  const [currentTable] = await db.select().from(tablesTable).where(eq(tablesTable.id, params.data.id));
+  if (!currentTable) { res.status(404).json({ error: "Table not found" }); return; }
+
   const payload = { ...parsed.data };
 
   if (payload.tableNumber != null) {
     payload.tableNumber = payload.tableNumber.trim();
-    if (!payload.tableNumber) {
-      res.status(400).json({ error: "Table number is required." });
-      return;
-    }
-
-    const existing = await findTableByNumber(payload.tableNumber);
-    if (existing && existing.id !== params.data.id) {
-      res.status(409).json({ error: "Table number already exists." });
-      return;
-    }
   }
 
   if (payload.zone && !(await validateRoomCodeExists(payload.zone))) {
     res.status(400).json({ error: "Room does not exist for this zone code." });
     return;
+  }
+
+  if (payload.zone || payload.tableNumber != null) {
+    const nextZone = payload.zone ?? currentTable.zone;
+    const requested = payload.tableNumber && payload.tableNumber.length > 0
+      ? payload.tableNumber
+      : currentTable.tableNumber;
+    payload.tableNumber = await resolveAutoTableNumber(nextZone, requested, params.data.id);
   }
 
   if (payload.status && payload.status !== "Active") {

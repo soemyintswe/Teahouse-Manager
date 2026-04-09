@@ -95,11 +95,12 @@ const TABLE_CARD_WIDTH = 92;
 const TABLE_CARD_HEIGHT = 92;
 
 type DragState = {
-  tableId: number;
+  tableIds: number[];
+  anchorTableId: number;
+  cloneMode: boolean;
   startClientX: number;
   startClientY: number;
-  startX: number;
-  startY: number;
+  startPositions: Record<number, { x: number; y: number }>;
 };
 
 type RoomOption = {
@@ -109,7 +110,15 @@ type RoomOption = {
   sortOrder: number;
 };
 
-type AlignAction = "top" | "bottom" | "left" | "right" | "center" | "middle";
+type AlignAction =
+  | "top"
+  | "bottom"
+  | "left"
+  | "right"
+  | "center"
+  | "middle"
+  | "distribute_horizontal"
+  | "distribute_vertical";
 
 const ALIGN_LABEL_KEY: Record<AlignAction, string> = {
   top: "floorPlan.align.top",
@@ -118,6 +127,8 @@ const ALIGN_LABEL_KEY: Record<AlignAction, string> = {
   right: "floorPlan.align.right",
   center: "floorPlan.align.center",
   middle: "floorPlan.align.middle",
+  distribute_horizontal: "floorPlan.align.distributeHorizontal",
+  distribute_vertical: "floorPlan.align.distributeVertical",
 };
 
 function formatRoomCodeLabel(code: string): string {
@@ -529,13 +540,114 @@ export default function FloorPlan() {
     [draftPositions],
   );
 
+  const persistTablePositions = useCallback(
+    async ({
+      updates,
+      successTitle,
+      errorTitle,
+      clearSelection = true,
+    }: {
+      updates: Array<{ table: TableData; x: number; y: number }>;
+      successTitle?: string;
+      errorTitle: string;
+      clearSelection?: boolean;
+    }) => {
+      if (updates.length === 0) return;
+
+      const touchedIds = updates.map((entry) => entry.table.id);
+      try {
+        setIsAligningLayout(true);
+        setSavingLayoutTableId(updates[0]?.table.id ?? null);
+        await Promise.all(
+          updates.map(async ({ table, x, y }) => {
+            await updateTable.mutateAsync({
+              id: table.id,
+              data: { posX: Math.round(x), posY: Math.round(y) },
+            });
+          }),
+        );
+        await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+        if (successTitle) toast({ title: successTitle });
+      } catch (error) {
+        await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+        toast({
+          title: errorTitle,
+          description: error instanceof Error ? error.message : t("common.unknownError"),
+          variant: "destructive",
+        });
+      } finally {
+        setIsAligningLayout(false);
+        setSavingLayoutTableId(null);
+        setDraftPositions((prev) => {
+          const next = { ...prev };
+          for (const id of touchedIds) {
+            delete next[id];
+          }
+          return next;
+        });
+        if (clearSelection) {
+          setSelectedLayoutTableIds([]);
+        }
+      }
+    },
+    [queryClient, t, toast, updateTable],
+  );
+
+  const duplicateTablesWithPositions = useCallback(
+    async (tablesToCopy: TableData[], targetPositions: Record<number, { x: number; y: number }>) => {
+      if (tablesToCopy.length === 0) return;
+
+      const existingNumbers = new Set(allTables.map((table) => table.tableNumber));
+      try {
+        setSavingLayoutTableId(tablesToCopy[0]?.id ?? null);
+        for (const table of tablesToCopy) {
+          const nextTableNumber = getNextTableNumber(table.tableNumber, existingNumbers);
+          existingNumbers.add(nextTableNumber);
+          const target = targetPositions[table.id] ?? clampPosition(table.posX + 28, table.posY + 28);
+
+          await createTable.mutateAsync({
+            data: {
+              tableNumber: nextTableNumber,
+              zone: table.zone,
+              capacity: table.capacity,
+              category: table.category,
+              status: table.status === "Archived" ? "Active" : table.status,
+              isBooked: false,
+              occupancyStatus: "available",
+              posX: Math.round(target.x),
+              posY: Math.round(target.y),
+            },
+          });
+        }
+
+        await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+        setSelectedLayoutTableIds([]);
+        toast({
+          title: t("floorPlan.copySelectedSuccess", { count: tablesToCopy.length }),
+        });
+      } catch (error) {
+        toast({
+          title: t("floorPlan.copySelectedFailedTitle"),
+          description: error instanceof Error ? error.message : t("common.unknownError"),
+          variant: "destructive",
+        });
+      } finally {
+        setSavingLayoutTableId(null);
+      }
+    },
+    [allTables, clampPosition, createTable, queryClient, t, toast],
+  );
+
   const handleAlignSelectedTables = useCallback(
     async (action: AlignAction) => {
       if (selectedLayoutTables.length < 2 || savingLayoutTableId !== null || isAligningLayout) return;
+      if ((action === "distribute_horizontal" || action === "distribute_vertical") && selectedLayoutTables.length < 3) {
+        return;
+      }
 
       const currentPositions = selectedLayoutTables.map((table) => ({
         id: table.id,
-        tableNumber: table.tableNumber,
+        table,
         ...getWorkingPosition(table),
       }));
 
@@ -547,18 +659,35 @@ export default function FloorPlan() {
       const middleY = Math.round((minY + maxY) / 2);
 
       const alignedById = new Map<number, { x: number; y: number }>();
-      for (const pos of currentPositions) {
-        let nextX = pos.x;
-        let nextY = pos.y;
 
-        if (action === "top") nextY = minY;
-        if (action === "bottom") nextY = maxY;
-        if (action === "left") nextX = minX;
-        if (action === "right") nextX = maxX;
-        if (action === "center") nextX = centerX;
-        if (action === "middle") nextY = middleY;
+      if (action === "distribute_horizontal") {
+        const sorted = [...currentPositions].sort((a, b) => a.x - b.x);
+        const span = maxX - minX;
+        const gap = span / (sorted.length - 1);
+        sorted.forEach((pos, index) => {
+          alignedById.set(pos.id, clampPosition(Math.round(minX + gap * index), pos.y));
+        });
+      } else if (action === "distribute_vertical") {
+        const sorted = [...currentPositions].sort((a, b) => a.y - b.y);
+        const span = maxY - minY;
+        const gap = span / (sorted.length - 1);
+        sorted.forEach((pos, index) => {
+          alignedById.set(pos.id, clampPosition(pos.x, Math.round(minY + gap * index)));
+        });
+      } else {
+        for (const pos of currentPositions) {
+          let nextX = pos.x;
+          let nextY = pos.y;
 
-        alignedById.set(pos.id, clampPosition(nextX, nextY));
+          if (action === "top") nextY = minY;
+          if (action === "bottom") nextY = maxY;
+          if (action === "left") nextX = minX;
+          if (action === "right") nextX = maxX;
+          if (action === "center") nextX = centerX;
+          if (action === "middle") nextY = middleY;
+
+          alignedById.set(pos.id, clampPosition(nextX, nextY));
+        }
       }
 
       setDraftPositions((prev) => {
@@ -569,58 +698,94 @@ export default function FloorPlan() {
         return next;
       });
 
-      try {
-        setIsAligningLayout(true);
-        await Promise.all(
-          selectedLayoutTables.map(async (table) => {
-            const aligned = alignedById.get(table.id);
-            if (!aligned) return;
-            await updateTable.mutateAsync({
-              id: table.id,
-              data: { posX: Math.round(aligned.x), posY: Math.round(aligned.y) },
-            });
-          }),
-        );
+      const updates = currentPositions
+        .map(({ table, id }) => {
+          const pos = alignedById.get(id);
+          if (!pos) return null;
+          return { table, x: pos.x, y: pos.y };
+        })
+        .filter((entry): entry is { table: TableData; x: number; y: number } => entry !== null);
 
-        await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
-
-        setDraftPositions((prev) => {
-          const next = { ...prev };
-          for (const table of selectedLayoutTables) {
-            delete next[table.id];
-          }
-          return next;
-        });
-
-        toast({
-          title: t("floorPlan.align.success", {
-            count: selectedLayoutTables.length,
-            action: t(ALIGN_LABEL_KEY[action]),
-          }),
-        });
-      } catch (error) {
-        await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
-        toast({
-          title: t("floorPlan.align.failedTitle"),
-          description: error instanceof Error ? error.message : t("common.unknownError"),
-          variant: "destructive",
-        });
-      } finally {
-        setIsAligningLayout(false);
-      }
+      await persistTablePositions({
+        updates,
+        successTitle: t("floorPlan.align.success", {
+          count: selectedLayoutTables.length,
+          action: t(ALIGN_LABEL_KEY[action]),
+        }),
+        errorTitle: t("floorPlan.align.failedTitle"),
+      });
     },
     [
       clampPosition,
       getWorkingPosition,
       isAligningLayout,
-      queryClient,
+      persistTablePositions,
       savingLayoutTableId,
       selectedLayoutTables,
       t,
-      toast,
-      updateTable,
     ],
   );
+
+  const handleAutoArrangeSelectedTables = useCallback(async () => {
+    if (selectedLayoutTables.length < 2 || savingLayoutTableId !== null || isAligningLayout) return;
+
+    const ordered = selectedLayoutTables
+      .map((table) => ({
+        table,
+        ...getWorkingPosition(table),
+      }))
+      .sort((a, b) => {
+        const yDiff = a.y - b.y;
+        if (Math.abs(yDiff) > 8) return yDiff;
+        return a.x - b.x;
+      });
+
+    const minX = Math.min(...ordered.map((item) => item.x));
+    const minY = Math.min(...ordered.map((item) => item.y));
+    const columns = Math.max(1, Math.ceil(Math.sqrt(ordered.length)));
+    const spacingX = TABLE_CARD_WIDTH + 20;
+    const spacingY = TABLE_CARD_HEIGHT + 20;
+
+    const arrangedById = new Map<number, { x: number; y: number }>();
+    ordered.forEach((item, index) => {
+      const row = Math.floor(index / columns);
+      const col = index % columns;
+      arrangedById.set(
+        item.table.id,
+        clampPosition(Math.round(minX + col * spacingX), Math.round(minY + row * spacingY)),
+      );
+    });
+
+    setDraftPositions((prev) => {
+      const next = { ...prev };
+      for (const [id, pos] of arrangedById.entries()) {
+        next[id] = pos;
+      }
+      return next;
+    });
+
+    const updates = ordered
+      .map(({ table }) => {
+        const pos = arrangedById.get(table.id);
+        if (!pos) return null;
+        return { table, x: pos.x, y: pos.y };
+      })
+      .filter((entry): entry is { table: TableData; x: number; y: number } => entry !== null);
+
+    await persistTablePositions({
+      updates,
+      successTitle: t("floorPlan.autoArrangeSuccess", { count: selectedLayoutTables.length }),
+      errorTitle: t("floorPlan.autoArrangeFailedTitle"),
+    });
+  }, [
+    clampPosition,
+    getWorkingPosition,
+    isAligningLayout,
+    persistTablePositions,
+    savingLayoutTableId,
+    selectedLayoutTables,
+    t,
+  ]);
 
   const handleZoomIn = useCallback(() => {
     setFloorZoom((prev) => Math.min(1.6, Number((prev + 0.1).toFixed(2))));
@@ -634,40 +799,6 @@ export default function FloorPlan() {
     setFloorZoom(DEFAULT_FLOOR_ZOOM);
   }, []);
 
-  const persistTablePosition = useCallback(
-    async (tableId: number, x: number, y: number) => {
-      const table = visibleTables.find((item) => item.id === tableId);
-      if (!table) return;
-
-      try {
-        setSavingLayoutTableId(tableId);
-        await updateTable.mutateAsync({
-          id: tableId,
-          data: { posX: x, posY: y },
-        });
-        await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
-        toast({
-          title: t("floorPlan.layoutSavedToast", { tableNumber: table.tableNumber }),
-        });
-      } catch (error) {
-        await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
-        toast({
-          title: t("floorPlan.layoutSaveFailedTitle"),
-          description: error instanceof Error ? error.message : t("common.unknownError"),
-          variant: "destructive",
-        });
-      } finally {
-        setSavingLayoutTableId(null);
-        setDraftPositions((prev) => {
-          const next = { ...prev };
-          delete next[tableId];
-          return next;
-        });
-      }
-    },
-    [queryClient, t, toast, updateTable, visibleTables],
-  );
-
   const handleTablePointerDown = useCallback(
     (table: TableData, event: React.PointerEvent<HTMLButtonElement>) => {
       if (!isLayoutEditMode || savingLayoutTableId !== null || isAligningLayout) return;
@@ -675,16 +806,36 @@ export default function FloorPlan() {
 
       event.preventDefault();
       setSelectedTableId(null);
-      const currentPos = draftPositions[table.id] ?? { x: table.posX, y: table.posY };
+      const cloneMode = event.ctrlKey || event.metaKey;
+      const roomTableIds = new Set(roomTables.map((item) => item.id));
+      const selectedIdsInRoom = selectedLayoutTableIds.filter((id) => roomTableIds.has(id));
+      const shouldUseSelection = selectedIdsInRoom.includes(table.id);
+      const tableIds = shouldUseSelection ? selectedIdsInRoom : [table.id];
+      const startPositions: Record<number, { x: number; y: number }> = {};
+      for (const id of tableIds) {
+        const target = visibleTables.find((item) => item.id === id);
+        if (!target) continue;
+        startPositions[id] = getWorkingPosition(target);
+      }
+
       setDragState({
-        tableId: table.id,
+        tableIds,
+        anchorTableId: table.id,
+        cloneMode,
         startClientX: event.clientX,
         startClientY: event.clientY,
-        startX: currentPos.x,
-        startY: currentPos.y,
+        startPositions,
       });
     },
-    [draftPositions, isAligningLayout, isLayoutEditMode, savingLayoutTableId],
+    [
+      getWorkingPosition,
+      isAligningLayout,
+      isLayoutEditMode,
+      savingLayoutTableId,
+      selectedLayoutTableIds,
+      roomTables,
+      visibleTables,
+    ],
   );
 
   useEffect(() => {
@@ -693,27 +844,75 @@ export default function FloorPlan() {
     const onPointerMove = (event: PointerEvent) => {
       const dx = (event.clientX - dragState.startClientX) / floorZoom;
       const dy = (event.clientY - dragState.startClientY) / floorZoom;
-      const next = clampPosition(dragState.startX + dx, dragState.startY + dy);
-      setDraftPositions((prev) => ({ ...prev, [dragState.tableId]: next }));
+      setDraftPositions((prev) => {
+        const next = { ...prev };
+        for (const tableId of dragState.tableIds) {
+          const startPos = dragState.startPositions[tableId];
+          if (!startPos) continue;
+          next[tableId] = clampPosition(startPos.x + dx, startPos.y + dy);
+        }
+        return next;
+      });
     };
 
     const onPointerUp = () => {
-      const current = draftPositions[dragState.tableId] ?? { x: dragState.startX, y: dragState.startY };
-      const moved = Math.abs(current.x - dragState.startX) > 0.5 || Math.abs(current.y - dragState.startY) > 0.5;
-      const tableId = dragState.tableId;
+      const updates = dragState.tableIds
+        .map((tableId) => {
+          const table = visibleTables.find((item) => item.id === tableId);
+          const startPos = dragState.startPositions[tableId];
+          if (!table || !startPos) return null;
+          const current = draftPositions[tableId] ?? startPos;
+          return { table, startPos, current };
+        })
+        .filter((entry): entry is { table: TableData; startPos: { x: number; y: number }; current: { x: number; y: number } } => entry !== null);
+
+      const moved = updates.some(
+        ({ startPos, current }) => Math.abs(current.x - startPos.x) > 0.5 || Math.abs(current.y - startPos.y) > 0.5,
+      );
+      const anchorTableId = dragState.anchorTableId;
+      const cloneMode = dragState.cloneMode;
       setDragState(null);
 
       if (!moved) {
         setDraftPositions((prev) => {
           const next = { ...prev };
-          delete next[tableId];
+          for (const tableId of dragState.tableIds) {
+            delete next[tableId];
+          }
           return next;
         });
         return;
       }
 
-      setSuppressLayoutClickTableId(tableId);
-      void persistTablePosition(tableId, Math.round(current.x), Math.round(current.y));
+      setSuppressLayoutClickTableId(anchorTableId);
+
+      if (cloneMode) {
+        const targetPositions: Record<number, { x: number; y: number }> = {};
+        for (const update of updates) {
+          targetPositions[update.table.id] = update.current;
+        }
+        setDraftPositions((prev) => {
+          const next = { ...prev };
+          for (const update of updates) {
+            delete next[update.table.id];
+          }
+          return next;
+        });
+        void duplicateTablesWithPositions(
+          updates.map((entry) => entry.table),
+          targetPositions,
+        );
+        return;
+      }
+
+      void persistTablePositions({
+        updates: updates.map(({ table, current }) => ({ table, x: current.x, y: current.y })),
+        successTitle:
+          updates.length === 1
+            ? t("floorPlan.layoutSavedToast", { tableNumber: updates[0].table.tableNumber })
+            : t("floorPlan.layoutSavedMultipleToast", { count: updates.length }),
+        errorTitle: t("floorPlan.layoutSaveFailedTitle"),
+      });
     };
 
     window.addEventListener("pointermove", onPointerMove);
@@ -723,7 +922,7 @@ export default function FloorPlan() {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
     };
-  }, [clampPosition, dragState, draftPositions, floorZoom, persistTablePosition]);
+  }, [clampPosition, dragState, draftPositions, duplicateTablesWithPositions, floorZoom, persistTablePositions, t, visibleTables]);
 
   const updateOccupancy = useCallback(
     async (table: TableData, next: TableData["occupancyStatus"], clearOrder = false) => {
@@ -780,53 +979,12 @@ export default function FloorPlan() {
 
     const selectedTables = roomTables.filter((table) => selectedLayoutTableIds.includes(table.id));
     if (selectedTables.length === 0) return;
-
-    const existingNumbers = new Set(allTables.map((table) => table.tableNumber));
-
-    try {
-      for (const table of selectedTables) {
-        const nextTableNumber = getNextTableNumber(table.tableNumber, existingNumbers);
-        existingNumbers.add(nextTableNumber);
-        const nextPosition = clampPosition(table.posX + 28, table.posY + 28);
-
-        await createTable.mutateAsync({
-          data: {
-            tableNumber: nextTableNumber,
-            zone: table.zone,
-            capacity: table.capacity,
-            category: table.category,
-            status: table.status === "Archived" ? "Active" : table.status,
-            isBooked: false,
-            occupancyStatus: "available",
-            posX: Math.round(nextPosition.x),
-            posY: Math.round(nextPosition.y),
-          },
-        });
-      }
-
-      await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
-      setSelectedLayoutTableIds([]);
-      toast({
-        title: t("floorPlan.copySelectedSuccess", { count: selectedTables.length }),
-      });
-    } catch (error) {
-      toast({
-        title: t("floorPlan.copySelectedFailedTitle"),
-        description: error instanceof Error ? error.message : t("common.unknownError"),
-        variant: "destructive",
-      });
+    const nextPositions: Record<number, { x: number; y: number }> = {};
+    for (const table of selectedTables) {
+      nextPositions[table.id] = clampPosition(table.posX + 28, table.posY + 28);
     }
-  }, [
-    allTables,
-    clampPosition,
-    createTable,
-    queryClient,
-    roomTables,
-    selectedLayoutTableIds,
-    selectedRoomCode,
-    t,
-    toast,
-  ]);
+    await duplicateTablesWithPositions(selectedTables, nextPositions);
+  }, [clampPosition, duplicateTablesWithPositions, roomTables, selectedLayoutTableIds, selectedRoomCode]);
 
   const getLatestTableOrder = useCallback(async (tableId: number, status: string): Promise<SimpleOrder | null> => {
     try {
@@ -1103,8 +1261,19 @@ export default function FloorPlan() {
               ? t("floorPlan.layoutSaving")
               : t("floorPlan.layoutEditHint", { count: selectedLayoutCount })}
           </p>
-          <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-6">
-            {(["top", "bottom", "left", "right", "center", "middle"] as AlignAction[]).map((action) => (
+          <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-5 xl:grid-cols-9">
+            {(
+              [
+                "top",
+                "bottom",
+                "left",
+                "right",
+                "center",
+                "middle",
+                "distribute_horizontal",
+                "distribute_vertical",
+              ] as AlignAction[]
+            ).map((action) => (
               <Button
                 key={action}
                 variant="outline"
@@ -1113,12 +1282,31 @@ export default function FloorPlan() {
                 onClick={() => {
                   void handleAlignSelectedTables(action);
                 }}
-                disabled={selectedLayoutCount < 2 || savingLayoutTableId !== null || isAligningLayout}
+                disabled={
+                  selectedLayoutCount < 2 ||
+                  (action === "distribute_horizontal" || action === "distribute_vertical"
+                    ? selectedLayoutCount < 3
+                    : false) ||
+                  savingLayoutTableId !== null ||
+                  isAligningLayout
+                }
                 title={t(ALIGN_LABEL_KEY[action])}
               >
                 {t(ALIGN_LABEL_KEY[action])}
               </Button>
             ))}
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                void handleAutoArrangeSelectedTables();
+              }}
+              disabled={selectedLayoutCount < 2 || savingLayoutTableId !== null || isAligningLayout}
+              title={t("floorPlan.autoArrange")}
+            >
+              {t("floorPlan.autoArrange")}
+            </Button>
           </div>
         </div>
       ) : null}
@@ -1153,7 +1341,7 @@ export default function FloorPlan() {
                   onPointerDown={(event) => handleTablePointerDown(table, event)}
                   positionOverride={draftPositions[table.id]}
                   isLayoutEditMode={isLayoutEditMode}
-                  isDragging={dragState?.tableId === table.id}
+                  isDragging={dragState?.tableIds.includes(table.id) ?? false}
                   isSelected={selectedLayoutTableIds.includes(table.id)}
                 />
               ))}
