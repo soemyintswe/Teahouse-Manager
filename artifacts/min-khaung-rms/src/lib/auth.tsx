@@ -64,7 +64,7 @@ type AuthContextValue = {
 const AUTH_STORAGE_KEY = "teahouse_auth_token";
 
 const ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
-  guest: ["orders", "cashier"],
+  guest: ["orders"],
   waiter: ["dashboard", "floorPlan", "orders"],
   kitchen: ["kds", "orders"],
   cashier: ["dashboard", "orders", "cashier", "finance"],

@@ -189,6 +189,27 @@
     "unavailableDesc": "Maintenance သို့ Archived စားပွဲများတွင် order အသစ်မဖွင့်နိုင်ပါ။",
     "onlyActiveDesc": "Active ဝန်ဆောင်မှုရှိသော စားပွဲများသာ အော်ဒါအသစ်လက်ခံနိုင်သည်။",
     "searchPlaceholder": "မီနူးရှာရန်...",
+    "viewMode": {
+      "label": "ကြည့်ရှုပုံစံ",
+      "xlarge": "ပုံကြီး",
+      "large": "ပုံအကြီး",
+      "medium": "ပုံအလတ်",
+      "small": "ပုံအသေး",
+      "list": "စာရင်း",
+      "details": "အသေးစိတ်ဇယား"
+    },
+    "menuTable": {
+      "photo": "ပုံ",
+      "item": "မီနူးအမည်",
+      "price": "စျေး",
+      "action": "လုပ်ဆောင်ချက်"
+    },
+    "meta": {
+      "weight": "အလေးချိန်: {{value}} g",
+      "calories": "ကယ်လိုရီ: {{value}} kcal",
+      "ingredients": "ပါဝင်ပစ္စည်း: {{value}}",
+      "discount": "လျှော့ဈေး: {{value}}"
+    },
     "noItemsFound": "item မတွေ့ပါ",
     "orderSummary": "အော်ဒါအကျဉ်းချုပ်",
     "itemsCount": "{{count}} ခု",

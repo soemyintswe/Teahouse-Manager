@@ -22,6 +22,7 @@ import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
   ChefHat,
+  ImageIcon,
   Loader2,
   Minus,
   Plus,
@@ -34,10 +35,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 
 const ACTIVE_TABLE_ID_STORAGE_KEY = "teahouse_active_table_id";
+const GUEST_MENU_VIEW_STORAGE_KEY = "teahouse_guest_menu_view_mode";
 
 type CartItem = {
   menuItemId: number;
@@ -48,11 +52,32 @@ type CartItem = {
 };
 
 type HistoryFilter = "today" | "open" | "paid";
+type MenuViewMode = "xlarge" | "large" | "medium" | "small" | "list" | "details";
+type MenuItemMetadata = {
+  weightGrams?: number;
+  calories?: number;
+  ingredients?: string;
+  discountPrice?: string;
+};
+
+type MenuMetaLine = {
+  key: "weight" | "calories" | "ingredients" | "discount";
+  value: string;
+};
 
 const HISTORY_FILTERS: Array<{ value: HistoryFilter; labelKey: string }> = [
   { value: "today", labelKey: "orders.history.today" },
   { value: "open", labelKey: "orders.history.open" },
   { value: "paid", labelKey: "orders.history.paid" },
+];
+
+const GUEST_MENU_VIEW_OPTIONS: Array<{ value: MenuViewMode; labelKey: string }> = [
+  { value: "xlarge", labelKey: "orders.viewMode.xlarge" },
+  { value: "large", labelKey: "orders.viewMode.large" },
+  { value: "medium", labelKey: "orders.viewMode.medium" },
+  { value: "small", labelKey: "orders.viewMode.small" },
+  { value: "list", labelKey: "orders.viewMode.list" },
+  { value: "details", labelKey: "orders.viewMode.details" },
 ];
 
 function parseTableIdFromSearch(search: string): number | null {
@@ -72,6 +97,81 @@ function parseMenuItemIdFromSearch(search: string): number | null {
 function parseScanFlagFromSearch(search: string): boolean {
   const value = new URLSearchParams(search).get("scan");
   return value === "1" || value === "true" || value === "yes";
+}
+
+function parseCustomizationPayload(raw: string | null | undefined): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Ignore malformed metadata.
+  }
+  return {};
+}
+
+function getMenuItemMetadata(item: Pick<MenuItem, "customizationOptions">): MenuItemMetadata {
+  const payload = parseCustomizationPayload(item.customizationOptions);
+  const meta = payload.meta;
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return {};
+  const metadata = meta as Record<string, unknown>;
+  return {
+    weightGrams: typeof metadata.weightGrams === "number" ? metadata.weightGrams : undefined,
+    calories: typeof metadata.calories === "number" ? metadata.calories : undefined,
+    ingredients: typeof metadata.ingredients === "string" ? metadata.ingredients : undefined,
+    discountPrice: typeof metadata.discountPrice === "string" ? metadata.discountPrice : undefined,
+  };
+}
+
+function hasMyanmarText(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return /[\u1000-\u109F]/.test(value);
+}
+
+function getLocalizedMenuNames(item: MenuItem, isMyanmar: boolean): { primary: string; secondary: string } {
+  const mm = item.nameMyanmar?.trim() ?? "";
+  const en = item.name?.trim() ?? "";
+
+  if (isMyanmar) {
+    const primary = hasMyanmarText(mm) ? mm : en;
+    const secondary = hasMyanmarText(mm) ? en : "";
+    return { primary, secondary };
+  }
+
+  if (en.length > 0) {
+    const secondary = hasMyanmarText(mm) ? mm : "";
+    return { primary: en, secondary };
+  }
+
+  return { primary: mm, secondary: "" };
+}
+
+function getMenuMetaLines(item: MenuItem): MenuMetaLine[] {
+  const metadata = getMenuItemMetadata(item);
+  const lines: MenuMetaLine[] = [];
+  if (typeof metadata.weightGrams === "number") {
+    lines.push({ key: "weight", value: String(metadata.weightGrams) });
+  }
+  if (typeof metadata.calories === "number") {
+    lines.push({ key: "calories", value: String(metadata.calories) });
+  }
+  if (metadata.ingredients?.trim()) {
+    lines.push({ key: "ingredients", value: metadata.ingredients.trim() });
+  }
+  const discount = metadata.discountPrice ? Number(metadata.discountPrice) : Number.NaN;
+  if (Number.isFinite(discount) && discount > 0 && discount < Number(item.price)) {
+    lines.push({ key: "discount", value: String(discount) });
+  }
+  return lines;
+}
+
+function getGuestGridClass(viewMode: MenuViewMode): string {
+  if (viewMode === "xlarge") return "grid-cols-1";
+  if (viewMode === "large") return "grid-cols-1 sm:grid-cols-2";
+  if (viewMode === "small") return "grid-cols-2 md:grid-cols-3 xl:grid-cols-4";
+  return "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3";
 }
 
 function formatMoney(amount: string | number): string {
@@ -202,12 +302,13 @@ function OrdersHistoryPanel({
 }
 
 export default function OrdersPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const search = useSearch();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const isMyanmar = i18n.resolvedLanguage === "mm";
 
   const tableIdFromQuery = useMemo(() => parseTableIdFromSearch(search), [search]);
   const menuItemIdFromQuery = useMemo(() => parseMenuItemIdFromSearch(search), [search]);
@@ -218,6 +319,8 @@ export default function OrdersPage() {
     user?.tableId ??
     ((scanRequested || menuItemIdFromQuery != null) ? storedTableId : null);
   const isGuest = user?.role === "guest";
+  const [menuViewMode, setMenuViewMode] = useState<MenuViewMode>("large");
+  const [selectedMenuItemId, setSelectedMenuItemId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isGuest || !user?.tableId) return;
@@ -246,6 +349,21 @@ export default function OrdersPage() {
       setStoredTableId(parsed);
     }
   }, [tableIdFromQuery]);
+
+  useEffect(() => {
+    if (!isGuest || typeof window === "undefined") return;
+    const raw = window.localStorage.getItem(GUEST_MENU_VIEW_STORAGE_KEY);
+    if (!raw) return;
+    const allowed = GUEST_MENU_VIEW_OPTIONS.some((option) => option.value === raw);
+    if (allowed) {
+      setMenuViewMode(raw as MenuViewMode);
+    }
+  }, [isGuest]);
+
+  useEffect(() => {
+    if (!isGuest || typeof window === "undefined") return;
+    window.localStorage.setItem(GUEST_MENU_VIEW_STORAGE_KEY, menuViewMode);
+  }, [isGuest, menuViewMode]);
 
   const historyQueryParams = useMemo(() => {
     if (historyFilter === "today") return { date: todayDate };
@@ -339,6 +457,23 @@ export default function OrdersPage() {
       (item) => item.name.toLowerCase().includes(q) || item.nameMyanmar.toLowerCase().includes(q),
     );
   }, [menuItems, searchText]);
+
+  const selectedMenuItem = useMemo(() => {
+    if (filteredItems.length === 0) return null;
+    if (selectedMenuItemId == null) return filteredItems[0];
+    return filteredItems.find((item) => item.id === selectedMenuItemId) ?? filteredItems[0];
+  }, [filteredItems, selectedMenuItemId]);
+
+  useEffect(() => {
+    if (!isGuest) return;
+    if (filteredItems.length === 0) {
+      setSelectedMenuItemId(null);
+      return;
+    }
+    if (!filteredItems.some((item) => item.id === selectedMenuItemId)) {
+      setSelectedMenuItemId(filteredItems[0].id);
+    }
+  }, [filteredItems, isGuest, selectedMenuItemId]);
 
   const addToCart = (menuItem: MenuItem) => {
     setCart((prev) => {
@@ -464,6 +599,7 @@ export default function OrdersPage() {
     setOrderNotes("");
     setSearchText("");
     setActiveCategoryId(null);
+    setSelectedMenuItemId(null);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(ACTIVE_TABLE_ID_STORAGE_KEY, String(nextTableId));
     }
@@ -572,7 +708,7 @@ export default function OrdersPage() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
         <p>{t("orders.tableNotFound")}</p>
-        <Button variant="outline" onClick={() => setLocation("/floor-plan")}>
+        <Button variant="outline" onClick={() => setLocation(isGuest ? "/orders" : "/floor-plan")}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           {t("orders.backToFloor")}
         </Button>
@@ -583,7 +719,7 @@ export default function OrdersPage() {
   return (
     <div className="flex h-full flex-col gap-4 overflow-x-hidden">
       <div className="flex max-w-full flex-wrap items-center gap-3">
-        <Button variant="outline" size="icon" onClick={() => setLocation("/floor-plan")}>
+        <Button variant="outline" size="icon" onClick={() => setLocation(isGuest ? "/orders" : "/floor-plan")}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="min-w-0">
@@ -626,23 +762,123 @@ export default function OrdersPage() {
 
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-h-0 flex-col gap-3">
-          <div className="flex gap-2 overflow-x-auto pb-1 pr-1">
-            {(categories as MenuCategory[]).map((category) => (
-              <button
-                key={category.id}
-                onClick={() => {
-                  setActiveCategoryId(category.id);
-                  setSearchText("");
-                }}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
-                  resolvedCategoryId === category.id
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {category.name}
-              </button>
-            ))}
+          {isGuest && selectedMenuItem ? (
+            <div className="rounded-lg border bg-card p-3">
+              <div className="grid gap-3 sm:grid-cols-[168px_minmax(0,1fr)]">
+                <button
+                  type="button"
+                  className="overflow-hidden rounded-md border bg-muted/30 text-left"
+                  onClick={() => setSelectedMenuItemId(selectedMenuItem.id)}
+                >
+                  {selectedMenuItem.imageUrl ? (
+                    <img
+                      src={selectedMenuItem.imageUrl}
+                      alt={selectedMenuItem.name}
+                      className="h-40 w-full object-cover sm:h-full"
+                    />
+                  ) : (
+                    <div className="flex h-40 items-center justify-center text-muted-foreground sm:h-full">
+                      <ImageIcon className="h-10 w-10 opacity-40" />
+                    </div>
+                  )}
+                </button>
+                <div className="min-w-0">
+                  {(() => {
+                    const names = getLocalizedMenuNames(selectedMenuItem, isMyanmar);
+                    const quantityInCart =
+                      cart.find((cartItem) => cartItem.menuItemId === selectedMenuItem.id)?.quantity ?? 0;
+                    const metaLines = getMenuMetaLines(selectedMenuItem);
+                    return (
+                      <>
+                        <p className="text-lg font-semibold leading-tight break-words">{names.primary}</p>
+                        {names.secondary ? (
+                          <p className="mt-1 text-sm text-muted-foreground">{names.secondary}</p>
+                        ) : null}
+                        {selectedMenuItem.description ? (
+                          <p className="mt-2 text-sm text-muted-foreground">{selectedMenuItem.description}</p>
+                        ) : null}
+                        {metaLines.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {metaLines.map((line) => (
+                              <Badge key={`${selectedMenuItem.id}-${line.key}`} variant="outline" className="text-xs">
+                                {line.key === "weight" ? t("orders.meta.weight", { value: line.value }) : null}
+                                {line.key === "calories" ? t("orders.meta.calories", { value: line.value }) : null}
+                                {line.key === "ingredients" ? t("orders.meta.ingredients", { value: line.value }) : null}
+                                {line.key === "discount"
+                                  ? t("orders.meta.discount", { value: formatMoney(Number(line.value)) })
+                                  : null}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xl font-bold text-primary">{formatMoney(selectedMenuItem.price)}</p>
+                          {quantityInCart > 0 ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => decreaseQty(selectedMenuItem.id)}
+                                className="flex h-8 w-8 items-center justify-center rounded-full border hover:bg-muted"
+                              >
+                                <Minus className="h-3.5 w-3.5" />
+                              </button>
+                              <span className="w-5 text-center text-sm font-bold">{quantityInCart}</span>
+                              <button
+                                onClick={() => addToCart(selectedMenuItem)}
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <Button size="sm" onClick={() => addToCart(selectedMenuItem)}>
+                              <Plus className="mr-1.5 h-4 w-4" />
+                              {t("actions.addItem")}
+                            </Button>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="flex gap-2 overflow-x-auto pb-1 pr-1">
+              {(categories as MenuCategory[]).map((category) => (
+                <button
+                  key={category.id}
+                  onClick={() => {
+                    setActiveCategoryId(category.id);
+                    setSearchText("");
+                  }}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                    resolvedCategoryId === category.id
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {isMyanmar && hasMyanmarText(category.nameMyanmar) ? category.nameMyanmar : category.name}
+                </button>
+              ))}
+            </div>
+            {isGuest ? (
+              <div className="w-full md:w-56">
+                <Select value={menuViewMode} onValueChange={(value) => setMenuViewMode(value as MenuViewMode)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("orders.viewMode.label")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GUEST_MENU_VIEW_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {t(option.labelKey)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
           </div>
 
           <div className="relative">
@@ -665,17 +901,176 @@ export default function OrdersPage() {
                 <UtensilsCrossed className="mb-2 h-10 w-10 opacity-30" />
                 <p>{t("orders.noItemsFound")}</p>
               </div>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            ) : isGuest && menuViewMode === "details" ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[90px]">{t("orders.menuTable.photo")}</TableHead>
+                      <TableHead>{t("orders.menuTable.item")}</TableHead>
+                      <TableHead className="text-right">{t("orders.menuTable.price")}</TableHead>
+                      <TableHead className="text-right">{t("orders.menuTable.action")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredItems.map((item) => {
+                      const names = getLocalizedMenuNames(item, isMyanmar);
+                      const quantityInCart = cart.find((cartItem) => cartItem.menuItemId === item.id)?.quantity ?? 0;
+                      const isSelected = selectedMenuItem?.id === item.id;
+                      return (
+                        <TableRow
+                          key={item.id}
+                          className={isSelected ? "bg-primary/5" : undefined}
+                          onClick={() => setSelectedMenuItemId(item.id)}
+                        >
+                          <TableCell>
+                            <button type="button" className="overflow-hidden rounded-md border">
+                              {item.imageUrl ? (
+                                <img src={item.imageUrl} alt={item.name} className="h-14 w-14 object-cover" />
+                              ) : (
+                                <div className="flex h-14 w-14 items-center justify-center bg-muted/30 text-muted-foreground">
+                                  <ImageIcon className="h-5 w-5 opacity-40" />
+                                </div>
+                              )}
+                            </button>
+                          </TableCell>
+                          <TableCell>
+                            <p className="font-semibold">{names.primary}</p>
+                            {names.secondary ? <p className="text-xs text-muted-foreground">{names.secondary}</p> : null}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-primary">
+                            {formatMoney(item.price)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {quantityInCart > 0 ? (
+                              <div className="ml-auto flex w-fit items-center gap-2">
+                                <button
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    decreaseQty(item.id);
+                                  }}
+                                  className="flex h-7 w-7 items-center justify-center rounded-full border hover:bg-muted"
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </button>
+                                <span className="w-5 text-center text-sm font-bold">{quantityInCart}</span>
+                                <button
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    addToCart(item);
+                                  }}
+                                  className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  addToCart(item);
+                                }}
+                              >
+                                <Plus className="mr-1 h-3.5 w-3.5" />
+                                {t("actions.addItem")}
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : isGuest && menuViewMode === "list" ? (
+              <div className="space-y-2">
                 {filteredItems.map((item) => {
-                  const quantityInCart =
-                    cart.find((cartItem) => cartItem.menuItemId === item.id)?.quantity ?? 0;
+                  const names = getLocalizedMenuNames(item, isMyanmar);
+                  const quantityInCart = cart.find((cartItem) => cartItem.menuItemId === item.id)?.quantity ?? 0;
+                  return (
+                    <div key={item.id} className="grid grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border p-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedMenuItemId(item.id)}
+                        className="overflow-hidden rounded-md border"
+                      >
+                        {item.imageUrl ? (
+                          <img src={item.imageUrl} alt={item.name} className="h-16 w-16 object-cover" />
+                        ) : (
+                          <div className="flex h-16 w-16 items-center justify-center bg-muted/30 text-muted-foreground">
+                            <ImageIcon className="h-5 w-5 opacity-40" />
+                          </div>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedMenuItemId(item.id)}
+                        className="min-w-0 text-left"
+                      >
+                        <p className="truncate font-semibold">{names.primary}</p>
+                        {names.secondary ? <p className="truncate text-xs text-muted-foreground">{names.secondary}</p> : null}
+                        <p className="text-sm font-bold text-primary">{formatMoney(item.price)}</p>
+                      </button>
+                      {quantityInCart > 0 ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => decreaseQty(item.id)}
+                            className="flex h-7 w-7 items-center justify-center rounded-full border hover:bg-muted"
+                          >
+                            <Minus className="h-3 w-3" />
+                          </button>
+                          <span className="w-4 text-center text-sm font-bold">{quantityInCart}</span>
+                          <button
+                            onClick={() => addToCart(item)}
+                            className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <Button size="sm" variant="outline" onClick={() => addToCart(item)} className="whitespace-nowrap px-2.5">
+                          <Plus className="mr-1 h-3.5 w-3.5" />
+                          {t("actions.addItem")}
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className={`grid gap-3 ${isGuest ? getGuestGridClass(menuViewMode) : "md:grid-cols-2 xl:grid-cols-3"}`}>
+                {filteredItems.map((item) => {
+                  const names = getLocalizedMenuNames(item, isMyanmar);
+                  const quantityInCart = cart.find((cartItem) => cartItem.menuItemId === item.id)?.quantity ?? 0;
                   return (
                     <div key={item.id} className="min-w-0 rounded-lg border p-3">
+                      <button
+                        type="button"
+                        className="mb-2 block w-full overflow-hidden rounded-md border"
+                        onClick={() => setSelectedMenuItemId(item.id)}
+                      >
+                        {item.imageUrl ? (
+                          <img src={item.imageUrl} alt={item.name} className="h-28 w-full object-cover" />
+                        ) : (
+                          <div className="flex h-28 w-full items-center justify-center bg-muted/30 text-muted-foreground">
+                            <ImageIcon className="h-8 w-8 opacity-40" />
+                          </div>
+                        )}
+                      </button>
                       <div className="flex flex-col gap-1.5 md:flex-row md:items-start md:justify-between md:gap-2">
                         <div className="min-w-0">
-                          <p className="font-semibold leading-tight break-words">{item.name}</p>
-                          <p className="truncate text-xs text-muted-foreground">{item.nameMyanmar}</p>
+                          <button
+                            type="button"
+                            className="font-semibold leading-tight break-words text-left hover:text-primary"
+                            onClick={() => setSelectedMenuItemId(item.id)}
+                          >
+                            {names.primary}
+                          </button>
+                          {names.secondary ? (
+                            <p className="truncate text-xs text-muted-foreground">{names.secondary}</p>
+                          ) : null}
                         </div>
                         <p className="text-base font-bold text-primary md:shrink-0 md:text-right">
                           {formatMoney(item.price)}

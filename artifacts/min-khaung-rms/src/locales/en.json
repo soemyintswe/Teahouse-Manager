@@ -189,6 +189,27 @@
     "unavailableDesc": "Maintenance or archived tables cannot accept new orders.",
     "onlyActiveDesc": "Only tables with Active service status can accept new orders.",
     "searchPlaceholder": "Search menu item...",
+    "viewMode": {
+      "label": "View mode",
+      "xlarge": "Extra large icons",
+      "large": "Large icons",
+      "medium": "Medium icons",
+      "small": "Small icons",
+      "list": "List",
+      "details": "Details"
+    },
+    "menuTable": {
+      "photo": "Photo",
+      "item": "Menu Item",
+      "price": "Price",
+      "action": "Action"
+    },
+    "meta": {
+      "weight": "Weight: {{value}} g",
+      "calories": "Calories: {{value}} kcal",
+      "ingredients": "Ingredients: {{value}}",
+      "discount": "Discount: {{value}}"
+    },
     "noItemsFound": "No items found",
     "orderSummary": "Order Summary",
     "itemsCount": "{{count}} items",
