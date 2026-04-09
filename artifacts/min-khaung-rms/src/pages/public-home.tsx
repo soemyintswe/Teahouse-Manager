@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { buildMenuItemScanLink, buildQrImageUrl } from "@/lib/qr-links";
+import { resolveMenuImageUrl } from "@/lib/menu-image";
 
 type PublicViewMode = "xlarge" | "large" | "medium" | "small" | "list" | "details";
 
@@ -152,7 +153,7 @@ export default function PublicHomePage() {
                     <td className="px-3 py-2">
                       <div className="h-14 w-14 overflow-hidden rounded-md border">
                         {item.imageUrl ? (
-                          <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+                          <img src={resolveMenuImageUrl(item.imageUrl)} alt={item.name} className="h-full w-full object-cover" />
                         ) : (
                           <div className="flex h-full w-full items-center justify-center bg-muted text-muted-foreground">
                             <ImageIcon className="h-4 w-4" />
@@ -196,7 +197,7 @@ function MenuCard({ item, isMyanmar }: { item: MenuItem; isMyanmar: boolean }) {
     <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
       <div className="h-36 w-full bg-muted/30">
         {item.imageUrl ? (
-          <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+          <img src={resolveMenuImageUrl(item.imageUrl)} alt={item.name} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full items-center justify-center text-muted-foreground">
             <ImageIcon className="h-8 w-8 opacity-50" />
@@ -220,7 +221,7 @@ function MenuListRow({ item, isMyanmar }: { item: MenuItem; isMyanmar: boolean }
     <div className="grid grid-cols-[72px_minmax(0,1fr)_52px] items-center gap-2 rounded-xl border bg-card p-2">
       <div className="h-16 w-16 overflow-hidden rounded-md border">
         {item.imageUrl ? (
-          <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+          <img src={resolveMenuImageUrl(item.imageUrl)} alt={item.name} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full items-center justify-center bg-muted text-muted-foreground">
             <ImageIcon className="h-4 w-4" />

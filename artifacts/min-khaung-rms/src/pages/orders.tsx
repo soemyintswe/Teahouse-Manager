@@ -39,6 +39,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
+import { resolveMenuImageUrl } from "@/lib/menu-image";
 
 const ACTIVE_TABLE_ID_STORAGE_KEY = "teahouse_active_table_id";
 const GUEST_MENU_VIEW_STORAGE_KEY = "teahouse_guest_menu_view_mode";
@@ -771,7 +772,7 @@ export default function OrdersPage() {
                 >
                   {selectedMenuItem.imageUrl ? (
                     <img
-                      src={selectedMenuItem.imageUrl}
+                      src={resolveMenuImageUrl(selectedMenuItem.imageUrl)}
                       alt={selectedMenuItem.name}
                       className="h-40 w-full object-cover sm:h-full"
                     />
@@ -923,7 +924,7 @@ export default function OrdersPage() {
                           <TableCell>
                             <button type="button" className="overflow-hidden rounded-md border">
                               {item.imageUrl ? (
-                                <img src={item.imageUrl} alt={item.name} className="h-14 w-14 object-cover" />
+                                <img src={resolveMenuImageUrl(item.imageUrl)} alt={item.name} className="h-14 w-14 object-cover" />
                               ) : (
                                 <div className="flex h-14 w-14 items-center justify-center bg-muted/30 text-muted-foreground">
                                   <ImageIcon className="h-5 w-5 opacity-40" />
@@ -994,7 +995,7 @@ export default function OrdersPage() {
                         className="overflow-hidden rounded-md border"
                       >
                         {item.imageUrl ? (
-                          <img src={item.imageUrl} alt={item.name} className="h-16 w-16 object-cover" />
+                          <img src={resolveMenuImageUrl(item.imageUrl)} alt={item.name} className="h-16 w-16 object-cover" />
                         ) : (
                           <div className="flex h-16 w-16 items-center justify-center bg-muted/30 text-muted-foreground">
                             <ImageIcon className="h-5 w-5 opacity-40" />
@@ -1049,7 +1050,7 @@ export default function OrdersPage() {
                         onClick={() => setSelectedMenuItemId(item.id)}
                       >
                         {item.imageUrl ? (
-                          <img src={item.imageUrl} alt={item.name} className="h-28 w-full object-cover" />
+                          <img src={resolveMenuImageUrl(item.imageUrl)} alt={item.name} className="h-28 w-full object-cover" />
                         ) : (
                           <div className="flex h-28 w-full items-center justify-center bg-muted/30 text-muted-foreground">
                             <ImageIcon className="h-8 w-8 opacity-40" />

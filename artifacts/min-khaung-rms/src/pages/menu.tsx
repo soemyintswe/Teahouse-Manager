@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { buildMenuItemScanLink, buildQrImageUrl, openQrPrintWindow } from "@/lib/qr-links";
+import { resolveMenuImageUrl } from "@/lib/menu-image";
 
 const STATION_OPTIONS = ["salad", "tea-coffee", "juice", "kitchen"] as const;
 
@@ -417,7 +418,7 @@ function ItemDialog({
               {form.imageUrl.trim().length > 0 ? (
                 <div className="overflow-hidden rounded-md border bg-muted/20 p-1">
                   <img
-                    src={normalizeGoogleDriveImageUrl(form.imageUrl)}
+                    src={resolveMenuImageUrl(normalizeGoogleDriveImageUrl(form.imageUrl))}
                     alt="Menu preview"
                     className="h-28 w-28 rounded object-cover"
                   />

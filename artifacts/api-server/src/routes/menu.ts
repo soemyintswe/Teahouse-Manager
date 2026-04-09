@@ -29,6 +29,60 @@ type UploadMenuImageBody = {
   base64Data?: unknown;
 };
 
+router.get("/menu-images/proxy", async (req, res): Promise<void> => {
+  const rawUrl = typeof req.query.url === "string" ? req.query.url.trim() : "";
+  if (!rawUrl) {
+    res.status(400).json({ error: "url is required." });
+    return;
+  }
+
+  let target: URL;
+  try {
+    target = new URL(rawUrl);
+  } catch {
+    res.status(400).json({ error: "Invalid URL." });
+    return;
+  }
+
+  if (target.protocol !== "https:") {
+    res.status(400).json({ error: "Only https URLs are allowed." });
+    return;
+  }
+
+  const host = target.hostname.toLowerCase();
+  const allowed =
+    host === "drive.google.com" ||
+    host === "docs.google.com" ||
+    host.endsWith(".googleusercontent.com");
+  if (!allowed) {
+    res.status(403).json({ error: "Host is not allowed for proxy." });
+    return;
+  }
+
+  try {
+    const upstream = await fetch(target.toString(), { redirect: "follow" });
+    if (!upstream.ok) {
+      res.status(upstream.status).json({ error: `Upstream error: ${upstream.statusText || upstream.status}` });
+      return;
+    }
+
+    const contentType = upstream.headers.get("content-type") ?? "";
+    if (!contentType.toLowerCase().startsWith("image/")) {
+      res.status(415).json({ error: "Upstream response is not an image." });
+      return;
+    }
+
+    const bytes = Buffer.from(await upstream.arrayBuffer());
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.send(bytes);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Image proxy failed.",
+    });
+  }
+});
+
 router.post("/menu-images/upload", requireRoles(["supervisor", "manager", "owner"]), async (req, res): Promise<void> => {
   const body = (req.body ?? {}) as UploadMenuImageBody;
   const fileName = typeof body.fileName === "string" ? body.fileName.trim() : "";
