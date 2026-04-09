@@ -10,6 +10,7 @@
     "toggleLabel": "ဘာသာစကား"
   },
   "nav": {
+    "publicMenu": "အများပြည်သူ မီနူး",
     "dashboard": "ပင်မစာမျက်နှာ",
     "floorPlan": "စားပွဲနေရာချထားမှု",
     "tableSettings": "စားပွဲခုံပြင်ဆင်ချက်",
@@ -19,6 +20,7 @@
     "menu": "မီနူး",
     "inventory": "ပစ္စည်းစာရင်း",
     "staff": "ဝန်ထမ်း",
+    "deliveryOrders": "Delivery မှာယူမှုများ",
     "finance": "ငွေစာရင်း",
     "settings": "ဆက်တင်များ"
   },
@@ -111,13 +113,20 @@
     "subtitle": "အစားအသောက် Preview ပုံများ၊ ဈေးနှုန်းနှင့် QR များကို ကြည့်ရှုနိုင်သည်။ ဝန်ထမ်းနှင့် ဧည့်သည်များက ဒီနေရာမှ စတင်ဝင်နိုင်သည်။",
     "loginButton": "User Login",
     "guestButton": "စားပွဲဧည့်သည်ဝင်ရောက်မှု",
+    "customerLogin": "Customer Login",
+    "myDeliveryOrders": "မိမိ Delivery မှာယူမှုများ",
     "allCategories": "အစားအသောက်အားလုံး",
     "preview": {
       "noDescription": "ဖော်ပြချက်မရှိသေးပါ။"
     },
     "deliveryNotice": {
       "title": "Online Delivery မှာယူမှု",
-      "desc": "ပါဆယ်/အိမ်အရောက် မှာယူရန် Customer အချက်အလက်ကို Register လုပ်ထားရပါမည်။"
+      "desc": "ပါဆယ်/အိမ်အရောက် မှာယူရန် Customer အချက်အလက်ကို Register လုပ်ထားရပါမည်။",
+      "customerTitle": "သင်၏ Delivery အကောင့်"
+    },
+    "profile": {
+      "loadFailed": "Customer profile မဖွင့်နိုင်ပါ",
+      "notFound": "Customer profile မတွေ့ပါ။ ဝန်ထမ်းကို ဆက်သွယ်ပါ။"
     },
     "cart": {
       "itemAdded": "ပစ္စည်းကို cart ထဲထည့်ပြီးပါပြီ",
@@ -129,10 +138,26 @@
       "subtitle": "Online မှာယူမှုမတင်ခင် ပို့ဆောင်ရေးအချက်အလက်များ ဖြည့်ပါ။",
       "fullName": "အမည်အပြည့်အစုံ",
       "phone": "ဖုန်းနံပါတ်",
+      "phoneList": "ဖုန်းနံပါတ်များ",
+      "addPhone": "ဖုန်းထပ်ထည့်မည်",
+      "removePhone": "ဖယ်မည်",
       "address": "ပို့ဆောင်မည့်လိပ်စာအပြည့်အစုံ",
+      "addressUnit": "အိမ်အမှတ်/အခန်း/အလွှာ",
+      "addressUnitPlaceholder": "ဥပမာ အမှတ် ၁၂၊ အခန်း A၊ ဒုတိယထပ်",
+      "addressStreet": "လမ်းအမည်",
+      "addressWard": "ရပ်ကွက်",
+      "addressTownship": "မြို့နယ်",
+      "addressRegion": "တိုင်းဒေသကြီး/ပြည်နယ်",
       "mapLinkOptional": "Google Map link (optional)",
       "saveButton": "မှတ်ပုံတင် သိမ်းမည်",
+      "goLogin": "Login သို့သွားမည်",
       "saved": "Delivery profile သိမ်းပြီးပါပြီ",
+      "pendingApproval": "အကောင့်ဖန်တီးပြီးပါပြီ။ Admin approve လုပ်ပြီးမှ login ဝင်နိုင်ပါမည်။",
+      "failedTitle": "Register မအောင်မြင်ပါ",
+      "tempPasswordReady": "ယာယီစကားဝှက် ထုတ်ပေးပြီးပါပြီ",
+      "tempPasswordHint": "အောက်ပါအချက်အလက်ဖြင့် Customer Login ကို စတင်ဝင်ပါ။",
+      "loginPhone": "Login ဖုန်း:",
+      "loginPassword": "ယာယီစကားဝှက်:",
       "requiredTitle": "Register လိုအပ်ပါသည်",
       "requiredDesc": "အမည်၊ ဖုန်းနံပါတ်၊ လိပ်စာ ကိုဖြည့်ပေးပါ။",
       "deliveryRequired": "Delivery order တင်ရန် ဆက်သွယ်ရန်/လိပ်စာ အချက်အလက်များ Register လုပ်ထားရပါမည်။"
@@ -146,9 +171,38 @@
       "paymentWallet": "Mobile Wallet",
       "walletType": "Wallet အမျိုးအစား",
       "placeOrder": "Delivery Order တင်မည်",
+      "customerLoginRequiredTitle": "Customer login လိုအပ်ပါသည်",
+      "customerLoginRequiredDesc": "Delivery order တင်ရန် Customer account ဖြင့် login ဝင်ပါ။",
       "successTitle": "Order #{{id}} တင်ပြီးပါပြီ",
       "successDesc": "Delivery order လက်ခံထားပါသည်။ စုစုပေါင်း {{total}} ကျပ်။",
       "failedTitle": "Delivery order တင်မရပါ"
+    }
+  },
+  "deliveryOrders": {
+    "title": "Delivery မှာယူမှုများ",
+    "summary": "အော်ဒါ {{count}} ခု · စုစုပေါင်း {{total}} ကျပ်",
+    "loadFailed": "Delivery orders မဖွင့်နိုင်ပါ",
+    "statusUpdated": "Delivery status ပြင်ပြီးပါပြီ",
+    "updateFailed": "Delivery status ပြင်မရပါ",
+    "empty": "Delivery order မရှိပါ။",
+    "unknownCustomer": "Customer အမည်မရှိ",
+    "labels": {
+      "phones": "ဖုန်းနံပါတ်များ",
+      "payment": "ငွေပေးချေမှု",
+      "address": "ပို့ဆောင်ရမည့်လိပ်စာ"
+    },
+    "filter": {
+      "region": "တိုင်း/ပြည်နယ်အလိုက် စစ်ထုတ်",
+      "township": "မြို့နယ်အလိုက် စစ်ထုတ်",
+      "street": "လမ်းအလိုက် စစ်ထုတ်"
+    },
+    "status": {
+      "all": "အားလုံး",
+      "received": "လက်ခံပြီး",
+      "preparing": "ပြင်ဆင်နေ",
+      "out_for_delivery": "ပို့ဆောင်နေ",
+      "delivered": "ပို့ပြီး",
+      "cancelled": "ပယ်ဖျက်ပြီး"
     }
   },
   "kitchen": {
@@ -524,11 +578,15 @@
     "subtitle": "ဝန်ထမ်းအကောင့်ဖြင့်ဝင်ရန် သို့မဟုတ် ဧည့်သည်အဖြစ် စားပွဲနှင့်ချိတ်ရန်။",
     "staffLogin": "ဝန်ထမ်းအကောင့်ဝင်",
     "guestAccess": "ဧည့်သည်ဝင်ရောက်မှု",
+    "customerLogin": "Customer",
     "identifier": "အသုံးပြုသူအမည်",
     "identifierPlaceholder": "အသုံးပြုသူအမည် / email / ဖုန်း",
     "pin": "စကားဝှက်",
     "loginButton": "ဝင်မည်",
     "guestHint": "ဧည့်သည်များသည် စားပွဲ QR ကို scan လုပ်ပြီး သို့မဟုတ် စားပွဲကုဒ် (ဥပမာ H1, A2) ဖြင့် ဝင်နိုင်သည်။",
+    "customerHint": "Online delivery order များအတွက် ဖုန်းနံပါတ်နှင့် စကားဝှက်ဖြင့် customer login ဝင်ပါ။",
+    "customerPhone": "ဖုန်းနံပါတ်",
+    "customerPassword": "စကားဝှက်",
     "tableCode": "စားပွဲကုဒ်",
     "guestConnectButton": "စားပွဲနှင့်ချိတ်မည်",
     "invalidTableCode": "စားပွဲကုဒ် မမှန်ပါ (ဥပမာ H1, A2)။",
@@ -547,7 +605,20 @@
     "cancelToHome": "မူလစာမျက်နှာသို့ ပြန်မည်",
     "guestSession": "ဧည့်သည် session · Table {{table}}",
     "noAccessTitle": "ခွင့်ပြုချက်မရှိပါ",
-    "noAccessDesc": "သင့် role ဖြင့် ဤစာမျက်နှာကို ဝင်မရနိုင်ပါ။"
+    "noAccessDesc": "သင့် role ဖြင့် ဤစာမျက်နှာကို ဝင်မရနိုင်ပါ။",
+    "passwordChange": {
+      "title": "ယာယီစကားဝှက် ပြောင်းမည်",
+      "desc": "လုံခြုံရေးအတွက် ဆက်မလုပ်ခင် စကားဝှက်အသစ် သတ်မှတ်ပေးပါ။",
+      "newPassword": "စကားဝှက်အသစ်",
+      "confirmPassword": "စကားဝှက်အသစ် ထပ်ထည့်ပါ",
+      "submit": "စကားဝှက်ပြောင်းမည်",
+      "success": "စကားဝှက်ပြောင်းပြီးပါပြီ",
+      "failed": "စကားဝှက်ပြောင်းမရပါ",
+      "invalidTitle": "စကားဝှက် မမှန်ပါ",
+      "invalidDesc": "စကားဝှက်အသစ်သည် အနည်းဆုံး ၆ လုံး ရှိရပါမည်။",
+      "mismatchTitle": "စကားဝှက် မတူပါ",
+      "mismatchDesc": "အသစ်နှင့် အတည်ပြုစကားဝှက် မတူပါ။"
+    }
   },
   "staff": {
     "title": "ဝန်ထမ်းနှင့် User စီမံခန့်ခွဲမှု",
@@ -567,6 +638,42 @@
     "contact": "ဆက်သွယ်ရန်",
     "empty": "ဝန်ထမ်း user မရှိသေးပါ။",
     "rolesTitle": "Role လုပ်ပိုင်ခွင့်",
+    "customers": {
+      "title": "Customer အကောင့်များ",
+      "subtitle": "Customer delivery accounts များကို approve/deny/terminate/reset လုပ်နိုင်သည်။",
+      "loadFailed": "Customer accounts မဖွင့်နိုင်ပါ",
+      "statusUpdated": "Customer account status ပြင်ပြီးပါပြီ",
+      "actionFailed": "Customer account ပြင်မရပါ",
+      "resetDone": "{{name}} ၏ စကားဝှက် reset ပြီးပါပြီ",
+      "resetFailed": "Customer စကားဝှက် reset မအောင်မြင်ပါ",
+      "tempPassword": "ယာယီစကားဝှက်: {{password}}",
+      "empty": "Customer account မတွေ့ပါ။",
+      "name": "Customer",
+      "phones": "ဖုန်းများ",
+      "address": "လိပ်စာ",
+      "orders": "Delivery orders",
+      "statusLabel": "အခြေအနေ",
+      "totalOrders": "စုစုပေါင်း: {{count}}",
+      "latestStatus": "နောက်ဆုံး: {{status}}",
+      "filters": {
+        "allStatus": "အခြေအနေအားလုံး",
+        "region": "တိုင်း/ပြည်နယ် စစ်ထုတ်",
+        "township": "မြို့နယ် စစ်ထုတ်",
+        "street": "လမ်း စစ်ထုတ်"
+      },
+      "status": {
+        "pending": "စောင့်ဆိုင်း",
+        "approved": "အတည်ပြုပြီး",
+        "denied": "ငြင်းပယ်",
+        "terminated": "ရပ်ဆိုင်း"
+      },
+      "actions": {
+        "approve": "Approve",
+        "deny": "Deny",
+        "terminate": "Terminate",
+        "resetPassword": "Reset Password"
+      }
+    },
     "created": "User အသစ်ထည့်ပြီး",
     "updated": "User {{name}} ကို ပြင်ပြီး",
     "deleted": "User {{name}} ကို ဖျက်ပြီး",

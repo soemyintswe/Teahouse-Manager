@@ -6,6 +6,7 @@ import {
   useDeleteStaffMember,
   getListStaffQueryKey,
 } from "@workspace/api-client-react";
+import { customFetch } from "@workspace/api-client-react";
 import type { StaffMember, CreateStaffMemberBody, UpdateStaffMemberBody } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Pencil, Plus, Shield, Trash2, UserCog } from "lucide-react";
@@ -62,6 +63,29 @@ const STAFF_ROLE_OPTIONS = [
 
 type StaffRole = (typeof STAFF_ROLE_OPTIONS)[number];
 
+type CustomerStatus = "pending" | "approved" | "denied" | "terminated";
+
+type CustomerAccount = {
+  id: number;
+  fullName: string;
+  status: CustomerStatus;
+  mustChangePassword: boolean;
+  createdAt: string;
+  phones: string[];
+  address: {
+    unitNo: string | null;
+    street: string | null;
+    ward: string | null;
+    township: string | null;
+    region: string | null;
+    mapLink: string | null;
+  } | null;
+  totalDeliveryOrders: number;
+  latestDeliveryStatus: string | null;
+};
+
+type CustomerStatusAction = "approve" | "deny" | "terminate";
+
 type StaffFormState = {
   name: string;
   role: StaffRole;
@@ -96,6 +120,19 @@ function getRoleBadgeClass(role: string): string {
   if (role === "cleaner") return "bg-sky-100 text-sky-700 border-sky-300";
   if (role === "kitchen") return "bg-emerald-100 text-emerald-700 border-emerald-300";
   return "bg-slate-100 text-slate-700 border-slate-300";
+}
+
+function getCustomerStatusBadgeClass(status: CustomerStatus): string {
+  if (status === "approved") return "bg-emerald-100 text-emerald-700 border-emerald-300";
+  if (status === "pending") return "bg-amber-100 text-amber-700 border-amber-300";
+  if (status === "denied") return "bg-rose-100 text-rose-700 border-rose-300";
+  return "bg-slate-200 text-slate-700 border-slate-400";
+}
+
+function formatAddress(address: CustomerAccount["address"]): string {
+  if (!address) return "-";
+  const values = [address.unitNo, address.street, address.ward, address.township, address.region].filter(Boolean);
+  return values.length > 0 ? values.join(", ") : "-";
 }
 
 function StaffDialog({
@@ -230,6 +267,13 @@ export default function StaffPage() {
 
   const [dialog, setDialog] = useState<{ open: boolean; member?: StaffMember }>({ open: false });
   const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
+  const [customers, setCustomers] = useState<CustomerAccount[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(false);
+  const [customerActionLoadingId, setCustomerActionLoadingId] = useState<number | null>(null);
+  const [customerStatusFilter, setCustomerStatusFilter] = useState<"all" | CustomerStatus>("all");
+  const [regionFilter, setRegionFilter] = useState("");
+  const [townshipFilter, setTownshipFilter] = useState("");
+  const [streetFilter, setStreetFilter] = useState("");
 
   const sortedStaff = useMemo(
     () => [...staff].sort((a, b) => a.name.localeCompare(b.name)),
@@ -238,6 +282,31 @@ export default function StaffPage() {
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: getListStaffQueryKey() });
+  };
+
+  const loadCustomers = async () => {
+    setCustomersLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (customerStatusFilter !== "all") params.set("status", customerStatusFilter);
+      if (regionFilter.trim()) params.set("region", regionFilter.trim());
+      if (townshipFilter.trim()) params.set("township", townshipFilter.trim());
+      if (streetFilter.trim()) params.set("street", streetFilter.trim());
+      const query = params.toString();
+      const response = await customFetch<CustomerAccount[]>(`/api/customers${query ? `?${query}` : ""}`, {
+        method: "GET",
+        responseType: "json",
+      });
+      setCustomers(response);
+    } catch (error) {
+      toast({
+        title: t("staff.customers.loadFailed"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setCustomersLoading(false);
+    }
   };
 
   const handleSave = async (payload: CreateStaffMemberBody | UpdateStaffMemberBody) => {
@@ -275,6 +344,55 @@ export default function StaffPage() {
       });
     }
   };
+
+  const updateCustomerStatus = async (id: number, action: CustomerStatusAction) => {
+    setCustomerActionLoadingId(id);
+    try {
+      await customFetch(`/api/customers/${id}/status`, {
+        method: "PATCH",
+        responseType: "json",
+        body: JSON.stringify({ action }),
+      });
+      toast({ title: t("staff.customers.statusUpdated") });
+      await loadCustomers();
+    } catch (error) {
+      toast({
+        title: t("staff.customers.actionFailed"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setCustomerActionLoadingId(null);
+    }
+  };
+
+  const resetCustomerPassword = async (id: number) => {
+    setCustomerActionLoadingId(id);
+    try {
+      const response = await customFetch<{ temporaryPassword: string; fullName: string }>(`/api/customers/${id}/reset-password`, {
+        method: "POST",
+        responseType: "json",
+      });
+      toast({
+        title: t("staff.customers.resetDone", { name: response.fullName }),
+        description: t("staff.customers.tempPassword", { password: response.temporaryPassword }),
+      });
+      await loadCustomers();
+    } catch (error) {
+      toast({
+        title: t("staff.customers.resetFailed"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setCustomerActionLoadingId(null);
+    }
+  };
+
+  useEffect(() => {
+    void loadCustomers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerStatusFilter, regionFilter, townshipFilter, streetFilter]);
 
   if (isLoading) {
     return (
@@ -368,6 +486,144 @@ export default function StaffPage() {
               <p>{t(`staff.roleDesc.${role}`)}</p>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="space-y-3 rounded-lg border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-semibold">{t("staff.customers.title")}</h2>
+            <p className="text-xs text-muted-foreground">{t("staff.customers.subtitle")}</p>
+          </div>
+          <Button variant="outline" onClick={() => void loadCustomers()}>
+            {t("common.retry")}
+          </Button>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-4">
+          <Select value={customerStatusFilter} onValueChange={(value) => setCustomerStatusFilter(value as "all" | CustomerStatus)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("staff.customers.filters.allStatus")}</SelectItem>
+              <SelectItem value="pending">{t("staff.customers.status.pending")}</SelectItem>
+              <SelectItem value="approved">{t("staff.customers.status.approved")}</SelectItem>
+              <SelectItem value="denied">{t("staff.customers.status.denied")}</SelectItem>
+              <SelectItem value="terminated">{t("staff.customers.status.terminated")}</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)} placeholder={t("staff.customers.filters.region")} />
+          <Input value={townshipFilter} onChange={(event) => setTownshipFilter(event.target.value)} placeholder={t("staff.customers.filters.township")} />
+          <Input value={streetFilter} onChange={(event) => setStreetFilter(event.target.value)} placeholder={t("staff.customers.filters.street")} />
+        </div>
+
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("common.id")}</TableHead>
+                <TableHead>{t("staff.customers.name")}</TableHead>
+                <TableHead>{t("staff.customers.phones")}</TableHead>
+                <TableHead>{t("staff.customers.address")}</TableHead>
+                <TableHead>{t("staff.customers.orders")}</TableHead>
+                <TableHead>{t("staff.customers.statusLabel")}</TableHead>
+                <TableHead className="text-right">{t("tableSettings.columns.actions")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {customersLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24">
+                    <div className="flex items-center justify-center text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : customers.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                    {t("staff.customers.empty")}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                customers.map((customer) => (
+                  <TableRow key={customer.id}>
+                    <TableCell>#{customer.id}</TableCell>
+                    <TableCell>
+                      <div className="font-semibold">{customer.fullName}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(customer.createdAt).toLocaleDateString()}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      <div className="flex flex-wrap gap-1">
+                        {customer.phones.length > 0 ? customer.phones.map((phone) => (
+                          <a
+                            key={`${customer.id}-${phone}`}
+                            href={`tel:${phone}`}
+                            className="rounded border px-2 py-0.5 hover:bg-muted/40"
+                          >
+                            {phone}
+                          </a>
+                        )) : "-"}
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-[320px] text-xs text-muted-foreground">
+                      {formatAddress(customer.address)}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      <div>{t("staff.customers.totalOrders", { count: customer.totalDeliveryOrders })}</div>
+                      <div className="text-muted-foreground">
+                        {t("staff.customers.latestStatus", { status: customer.latestDeliveryStatus ?? "-" })}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={getCustomerStatusBadgeClass(customer.status)}>
+                        {t(`staff.customers.status.${customer.status}`)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap justify-end gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={customerActionLoadingId === customer.id}
+                          onClick={() => void updateCustomerStatus(customer.id, "approve")}
+                        >
+                          {t("staff.customers.actions.approve")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={customerActionLoadingId === customer.id}
+                          onClick={() => void updateCustomerStatus(customer.id, "deny")}
+                        >
+                          {t("staff.customers.actions.deny")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={customerActionLoadingId === customer.id}
+                          onClick={() => void updateCustomerStatus(customer.id, "terminate")}
+                        >
+                          {t("staff.customers.actions.terminate")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={customerActionLoadingId === customer.id}
+                          onClick={() => void resetCustomerPassword(customer.id)}
+                        >
+                          {t("staff.customers.actions.resetPassword")}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </div>
       </div>
 

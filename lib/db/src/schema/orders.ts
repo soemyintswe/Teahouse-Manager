@@ -6,12 +6,23 @@ export const ordersTable = pgTable("orders", {
   id: serial("id").primaryKey(),
   tableId: integer("table_id").notNull(),
   tableNumber: text("table_number").notNull(),
+  orderSource: text("order_source").notNull().default("dine_in"), // dine_in, delivery
   status: text("status").notNull().default("open"), // open, ready_to_pay, paid, cancelled
   subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
   airconFee: numeric("aircon_fee", { precision: 10, scale: 2 }).notNull().default("0"),
   taxAmount: numeric("tax_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   paymentMethod: text("payment_method"),
+  customerId: integer("customer_id"),
+  customerName: text("customer_name"),
+  customerPhones: text("customer_phones"), // JSON array string
+  deliveryUnitNo: text("delivery_unit_no"),
+  deliveryStreet: text("delivery_street"),
+  deliveryWard: text("delivery_ward"),
+  deliveryTownship: text("delivery_township"),
+  deliveryRegion: text("delivery_region"),
+  deliveryMapLink: text("delivery_map_link"),
+  deliveryStatus: text("delivery_status"), // received, preparing, out_for_delivery, delivered, cancelled
   notes: text("notes"),
   staffId: integer("staff_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

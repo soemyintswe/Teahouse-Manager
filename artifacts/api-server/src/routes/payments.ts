@@ -96,6 +96,10 @@ router.get("/payments/orders/:orderId/qr", requireAuth, async (req, res): Promis
     res.status(403).json({ error: "Permission denied." });
     return;
   }
+  if (req.auth?.role === "customer" && req.auth.customerId !== order.customerId) {
+    res.status(403).json({ error: "Permission denied." });
+    return;
+  }
 
   const amount = order.totalAmount.toString();
   const nowIso = new Date().toISOString();
@@ -129,6 +133,10 @@ router.post("/payments", requireAuth, async (req, res): Promise<void> => {
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, parsed.data.orderId));
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
   if (req.auth?.role === "guest" && !canAccessTable(req, order.tableId)) {
+    res.status(403).json({ error: "Permission denied." });
+    return;
+  }
+  if (req.auth?.role === "customer" && req.auth.customerId !== order.customerId) {
     res.status(403).json({ error: "Permission denied." });
     return;
   }

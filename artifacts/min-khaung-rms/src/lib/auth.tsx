@@ -3,6 +3,7 @@ import { customFetch, setAuthTokenGetter } from "@workspace/api-client-react";
 
 export const APP_ROLES = [
   "guest",
+  "customer",
   "waiter",
   "kitchen",
   "cashier",
@@ -16,6 +17,7 @@ export const APP_ROLES = [
 export type AppRole = (typeof APP_ROLES)[number];
 
 type AppPermission =
+  | "publicMenu"
   | "dashboard"
   | "floorPlan"
   | "tableSettings"
@@ -26,14 +28,17 @@ type AppPermission =
   | "inventory"
   | "staff"
   | "finance"
-  | "settings";
+  | "settings"
+  | "deliveryOrders";
 
 export type AuthUser = {
   role: AppRole;
   name?: string;
   staffId?: number | null;
+  customerId?: number | null;
   tableId?: number | null;
   tableNumber?: string | null;
+  mustChangePassword?: boolean;
   exp: number;
 };
 
@@ -47,6 +52,16 @@ type GuestLoginPayload = {
   tableNumber?: string;
 };
 
+type CustomerLoginPayload = {
+  phone: string;
+  password: string;
+};
+
+type CustomerChangePasswordPayload = {
+  oldPassword: string;
+  newPassword: string;
+};
+
 type AuthApiResponse = {
   token: string;
   user: AuthUser;
@@ -58,6 +73,8 @@ type AuthContextValue = {
   token: string | null;
   loginStaff: (payload: StaffLoginPayload) => Promise<AuthUser>;
   loginGuest: (payload: GuestLoginPayload) => Promise<AuthUser>;
+  loginCustomer: (payload: CustomerLoginPayload) => Promise<AuthUser>;
+  changeCustomerPassword: (payload: CustomerChangePasswordPayload) => Promise<AuthUser>;
   logout: () => void;
   hasPermission: (permission: AppPermission) => boolean;
   getDefaultPath: () => string;
@@ -66,15 +83,16 @@ type AuthContextValue = {
 const AUTH_STORAGE_KEY = "teahouse_auth_token";
 
 const ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
+  customer: ["publicMenu", "deliveryOrders"],
   guest: ["orders"],
-  waiter: ["dashboard", "floorPlan", "orders"],
+  waiter: ["dashboard", "floorPlan", "orders", "deliveryOrders"],
   kitchen: ["kds", "orders"],
-  cashier: ["dashboard", "orders", "cashier", "finance"],
+  cashier: ["dashboard", "orders", "cashier", "finance", "deliveryOrders"],
   cleaner: ["floorPlan", "orders"],
-  room_supervisor: ["dashboard", "floorPlan", "orders", "kds"],
-  supervisor: ["dashboard", "floorPlan", "tableSettings", "orders", "kds", "cashier", "menu", "inventory", "finance"],
-  manager: ["dashboard", "floorPlan", "tableSettings", "orders", "kds", "cashier", "menu", "inventory", "staff", "finance", "settings"],
-  owner: ["dashboard", "floorPlan", "tableSettings", "orders", "kds", "cashier", "menu", "inventory", "staff", "finance", "settings"],
+  room_supervisor: ["dashboard", "floorPlan", "orders", "kds", "deliveryOrders"],
+  supervisor: ["dashboard", "floorPlan", "tableSettings", "orders", "kds", "cashier", "menu", "inventory", "finance", "deliveryOrders"],
+  manager: ["dashboard", "floorPlan", "tableSettings", "orders", "kds", "cashier", "menu", "inventory", "staff", "finance", "settings", "deliveryOrders"],
+  owner: ["dashboard", "floorPlan", "tableSettings", "orders", "kds", "cashier", "menu", "inventory", "staff", "finance", "settings", "deliveryOrders"],
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -91,8 +109,10 @@ function normalizeUser(input: unknown): AuthUser | null {
     role: raw.role,
     name: typeof raw.name === "string" ? raw.name : undefined,
     staffId: typeof raw.staffId === "number" ? raw.staffId : null,
+    customerId: typeof raw.customerId === "number" ? raw.customerId : null,
     tableId: typeof raw.tableId === "number" ? raw.tableId : null,
     tableNumber: typeof raw.tableNumber === "string" ? raw.tableNumber : null,
+    mustChangePassword: typeof raw.mustChangePassword === "boolean" ? raw.mustChangePassword : false,
     exp: raw.exp,
   };
 }
@@ -179,6 +199,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [applyAuth],
   );
 
+  const loginCustomer = useCallback(
+    async (payload: CustomerLoginPayload): Promise<AuthUser> => {
+      const response = await customFetch<AuthApiResponse>("/api/auth/customer-login", {
+        method: "POST",
+        responseType: "json",
+        body: JSON.stringify(payload),
+      });
+      const normalized = normalizeUser(response.user);
+      if (!normalized) {
+        throw new Error("Invalid auth response.");
+      }
+      applyAuth(response.token, normalized);
+      return normalized;
+    },
+    [applyAuth],
+  );
+
+  const changeCustomerPassword = useCallback(
+    async (payload: CustomerChangePasswordPayload): Promise<AuthUser> => {
+      const response = await customFetch<AuthApiResponse>("/api/auth/customer-change-password", {
+        method: "POST",
+        responseType: "json",
+        body: JSON.stringify(payload),
+      });
+      const normalized = normalizeUser(response.user);
+      if (!normalized) {
+        throw new Error("Invalid auth response.");
+      }
+      applyAuth(response.token, normalized);
+      return normalized;
+    },
+    [applyAuth],
+  );
+
   const logout = useCallback(() => {
     clearAuth();
     setAuthTokenGetter(null);
@@ -198,6 +252,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user.tableId) return `/orders?tableId=${user.tableId}&scan=1`;
       return "/orders";
     }
+    if (user.role === "customer") return "/";
     if (user.role === "kitchen") return "/kds?station=kitchen";
     if (user.role === "cashier") return "/cashier";
     return "/";
@@ -210,11 +265,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       token,
       loginStaff,
       loginGuest,
+      loginCustomer,
+      changeCustomerPassword,
       logout,
       hasPermission,
       getDefaultPath,
     }),
-    [getDefaultPath, hasPermission, loading, loginGuest, loginStaff, logout, token, user],
+    [changeCustomerPassword, getDefaultPath, hasPermission, loading, loginCustomer, loginGuest, loginStaff, logout, token, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

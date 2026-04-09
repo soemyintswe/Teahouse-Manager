@@ -1,7 +1,17 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray, sql } from "drizzle-orm";
-import { db, ordersTable, orderItemsTable, menuItemsTable, tablesTable, settingsTable } from "@workspace/db";
-import { canAccessTable, requireAuth } from "../lib/auth";
+import {
+  db,
+  ordersTable,
+  orderItemsTable,
+  menuItemsTable,
+  tablesTable,
+  settingsTable,
+  customerAddressesTable,
+  customerPhonesTable,
+  customersTable,
+} from "@workspace/db";
+import { canAccessTable, requireAuth, requireRoles } from "../lib/auth";
 import {
   ListOrdersQueryParams,
   ListOrdersResponse,
@@ -33,14 +43,17 @@ type DeliveryOrderItemInput = {
 };
 
 type DeliveryOrderRequestBody = {
-  customerName?: unknown;
-  customerPhone?: unknown;
-  deliveryAddress?: unknown;
-  googleMapLink?: unknown;
   notes?: unknown;
   paymentMethod?: unknown;
   walletType?: unknown;
   items?: unknown;
+};
+
+const DELIVERY_STATUSES = ["received", "preparing", "out_for_delivery", "delivered", "cancelled"] as const;
+type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
+
+type UpdateDeliveryStatusBody = {
+  status?: unknown;
 };
 
 function isBillableOrderItem(item: typeof orderItemsTable.$inferSelect): boolean {
@@ -94,6 +107,15 @@ function parseDeliveryItems(value: unknown): DeliveryOrderItemInput[] {
       };
     })
     .filter((entry): entry is DeliveryOrderItemInput => Boolean(entry));
+}
+
+function parseDeliveryStatus(value: unknown): DeliveryStatus | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if ((DELIVERY_STATUSES as readonly string[]).includes(normalized)) {
+    return normalized as DeliveryStatus;
+  }
+  return null;
 }
 
 function formatOrder(order: typeof ordersTable.$inferSelect) {
@@ -161,11 +183,12 @@ async function syncOrderAfterItemChange(orderId: number, executor: any = db): Pr
       .update(ordersTable)
       .set({ status: "cancelled" })
       .where(eq(ordersTable.id, orderId));
-
-    await executor
-      .update(tablesTable)
-      .set({ occupancyStatus: "available", currentOrderId: null })
-      .where(eq(tablesTable.id, order.tableId));
+    if (order.tableId > 0) {
+      await executor
+        .update(tablesTable)
+        .set({ occupancyStatus: "available", currentOrderId: null })
+        .where(eq(tablesTable.id, order.tableId));
+    }
   }
 }
 
@@ -180,6 +203,9 @@ router.get("/orders", requireAuth, async (req, res): Promise<void> => {
   }
 
   const conditions: any[] = [];
+  if (req.auth?.role === "customer" && req.auth.customerId) {
+    conditions.push(eq(ordersTable.customerId, req.auth.customerId));
+  }
   if (qp.success && qp.data.status) conditions.push(eq(ordersTable.status, qp.data.status));
   if (qp.success && qp.data.tableId != null) conditions.push(eq(ordersTable.tableId, qp.data.tableId));
   if (qp.success && qp.data.date) {
@@ -198,6 +224,10 @@ router.get("/orders", requireAuth, async (req, res): Promise<void> => {
 router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreateOrderBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (req.auth?.role === "customer") {
+    res.status(403).json({ error: "Customer account cannot create dine-in table orders." });
+    return;
+  }
   if (req.auth?.role === "guest" && !canAccessTable(req, parsed.data.tableId)) {
     res.status(403).json({ error: "Permission denied." });
     return;
@@ -236,6 +266,8 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
       const [order] = await tx.insert(ordersTable).values({
         tableId: parsed.data.tableId,
         tableNumber: table.tableNumber,
+        orderSource: "dine_in",
+        deliveryStatus: null,
         notes: parsed.data.notes ?? null,
         staffId: parsed.data.staffId ?? null,
       }).returning();
@@ -279,21 +311,18 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
-router.post("/orders/delivery-request", async (req, res): Promise<void> => {
+router.post("/orders/delivery-request", requireAuth, async (req, res): Promise<void> => {
+  if (req.auth?.role !== "customer" || !req.auth.customerId) {
+    res.status(403).json({ error: "Customer login is required for delivery order." });
+    return;
+  }
+
   const body = (req.body ?? {}) as DeliveryOrderRequestBody;
-  const customerName = normalizeText(body.customerName);
-  const customerPhone = normalizeText(body.customerPhone);
-  const deliveryAddress = normalizeText(body.deliveryAddress);
-  const googleMapLink = normalizeText(body.googleMapLink);
   const notes = normalizeText(body.notes);
   const items = parseDeliveryItems(body.items);
   const paymentMethod = parseDeliveryPaymentMethod(body.paymentMethod);
   const walletType = parseDeliveryWalletType(body.walletType);
 
-  if (!customerName || !customerPhone || !deliveryAddress) {
-    res.status(400).json({ error: "customerName, customerPhone, and deliveryAddress are required." });
-    return;
-  }
   if (items.length === 0) {
     res.status(400).json({ error: "At least one menu item is required." });
     return;
@@ -305,9 +334,42 @@ router.post("/orders/delivery-request", async (req, res): Promise<void> => {
 
   try {
     const createdOrderId = await db.transaction(async (tx) => {
+      const [customer] = await tx.select().from(customersTable).where(eq(customersTable.id, req.auth!.customerId!));
+      if (!customer) {
+        const error = new Error("Customer account not found.") as Error & { statusCode?: number };
+        error.statusCode = 404;
+        throw error;
+      }
+      if (customer.status !== "approved") {
+        const error = new Error("Customer account is not approved.") as Error & { statusCode?: number };
+        error.statusCode = 403;
+        throw error;
+      }
+
+      const phones = await tx
+        .select()
+        .from(customerPhonesTable)
+        .where(eq(customerPhonesTable.customerId, customer.id));
+      const sortedPhones = phones.sort((a, b) => a.sortOrder - b.sortOrder).map((row) => row.phone);
+      if (sortedPhones.length === 0) {
+        const error = new Error("Customer phone number is missing.") as Error & { statusCode?: number };
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const addresses = await tx
+        .select()
+        .from(customerAddressesTable)
+        .where(eq(customerAddressesTable.customerId, customer.id));
+      const defaultAddress = addresses.find((row) => row.isDefault) ?? addresses[0];
+      if (!defaultAddress) {
+        const error = new Error("Customer delivery address is missing.") as Error & { statusCode?: number };
+        error.statusCode = 400;
+        throw error;
+      }
+
       const [settings] = await tx.select().from(settingsTable).limit(1);
       const taxRate = settings ? parseFloat(settings.taxRate.toString()) / 100 : 0.05;
-      const mapUrl = googleMapLink.length > 0 ? googleMapLink : null;
       const paymentLabel = paymentMethod === "wallet" ? `wallet:${walletType}` : "cash";
 
       const menuIds = [...new Set(items.map((item) => item.menuItemId))];
@@ -331,29 +393,29 @@ router.post("/orders/delivery-request", async (req, res): Promise<void> => {
       const taxAmount = subtotal * taxRate;
       const totalAmount = subtotal + taxAmount;
 
-      const deliveryNotes = [
-        "[DELIVERY]",
-        `name=${customerName}`,
-        `phone=${customerPhone}`,
-        `address=${deliveryAddress}`,
-        mapUrl ? `map=${mapUrl}` : "",
-        notes ? `notes=${notes}` : "",
-      ]
-        .filter(Boolean)
-        .join(" | ");
-
       const [order] = await tx
         .insert(ordersTable)
         .values({
           tableId: 0,
           tableNumber: "DELIVERY",
+          orderSource: "delivery",
           status: paymentMethod === "wallet" ? "ready_to_pay" : "open",
           subtotal: subtotal.toFixed(2),
           airconFee: "0.00",
           taxAmount: taxAmount.toFixed(2),
           totalAmount: totalAmount.toFixed(2),
           paymentMethod: paymentLabel,
-          notes: deliveryNotes,
+          customerId: customer.id,
+          customerName: customer.fullName,
+          customerPhones: JSON.stringify(sortedPhones),
+          deliveryUnitNo: defaultAddress.unitNo,
+          deliveryStreet: defaultAddress.street,
+          deliveryWard: defaultAddress.ward,
+          deliveryTownship: defaultAddress.township,
+          deliveryRegion: defaultAddress.region,
+          deliveryMapLink: defaultAddress.mapLink,
+          deliveryStatus: "received",
+          notes: notes || null,
           staffId: null,
         })
         .returning();
@@ -399,6 +461,10 @@ router.get("/orders/:id", requireAuth, async (req, res): Promise<void> => {
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
   if (req.auth?.role === "guest" && !canAccessTable(req, order.tableId)) { res.status(403).json({ error: "Permission denied." }); return; }
+  if (req.auth?.role === "customer" && req.auth.customerId !== order.customerId) {
+    res.status(403).json({ error: "Permission denied." });
+    return;
+  }
   const items = await db.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, params.data.id));
   res.json(GetOrderResponse.parse({
     ...formatOrder(order),
@@ -421,12 +487,16 @@ router.patch("/orders/:id", requireAuth, async (req, res): Promise<void> => {
       return;
     }
   }
+  if (req.auth?.role === "customer" && req.auth.customerId !== targetOrder.customerId) {
+    res.status(403).json({ error: "Permission denied." });
+    return;
+  }
 
   const [order] = await db.update(ordersTable).set(parsed.data).where(eq(ordersTable.id, params.data.id)).returning();
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
 
   // Paid table should stay occupied until manual checkout.
-  if (parsed.data.status === "paid") {
+  if (order.tableId > 0 && parsed.data.status === "paid") {
     await db
       .update(tablesTable)
       .set({ occupancyStatus: "paid", currentOrderId: order.id })
@@ -434,16 +504,16 @@ router.patch("/orders/:id", requireAuth, async (req, res): Promise<void> => {
   }
 
   // Cancelled order can free table immediately.
-  if (parsed.data.status === "cancelled") {
+  if (order.tableId > 0 && parsed.data.status === "cancelled") {
     await db
       .update(tablesTable)
       .set({ occupancyStatus: "available", currentOrderId: null })
       .where(eq(tablesTable.id, order.tableId));
   }
-  if (parsed.data.status === "ready_to_pay") {
+  if (order.tableId > 0 && parsed.data.status === "ready_to_pay") {
     await db.update(tablesTable).set({ occupancyStatus: "payment_pending" }).where(eq(tablesTable.id, order.tableId));
   }
-  if (parsed.data.status === "open") {
+  if (order.tableId > 0 && parsed.data.status === "open") {
     await db.update(tablesTable).set({ occupancyStatus: "occupied", currentOrderId: order.id }).where(eq(tablesTable.id, order.tableId));
   }
 
@@ -460,6 +530,7 @@ router.post("/orders/:id/items", requireAuth, async (req, res): Promise<void> =>
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
   if (!isOrderModifiable(order.status)) { res.status(409).json({ error: "This order can no longer be modified." }); return; }
   if (req.auth?.role === "guest" && !canAccessTable(req, order.tableId)) { res.status(403).json({ error: "Permission denied." }); return; }
+  if (req.auth?.role === "customer" && req.auth.customerId !== order.customerId) { res.status(403).json({ error: "Permission denied." }); return; }
   const [menuItem] = await db.select().from(menuItemsTable).where(eq(menuItemsTable.id, parsed.data.menuItemId));
   if (!menuItem) { res.status(404).json({ error: "Menu item not found" }); return; }
 
@@ -490,6 +561,7 @@ router.patch("/orders/:id/items/:itemId", requireAuth, async (req, res): Promise
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
   if (!isOrderModifiable(order.status)) { res.status(409).json({ error: "This order can no longer be modified." }); return; }
   if (req.auth?.role === "guest" && !canAccessTable(req, order.tableId)) { res.status(403).json({ error: "Permission denied." }); return; }
+  if (req.auth?.role === "customer" && req.auth.customerId !== order.customerId) { res.status(403).json({ error: "Permission denied." }); return; }
   const [existingItem] = await db.select().from(orderItemsTable).where(
     and(eq(orderItemsTable.id, params.data.itemId), eq(orderItemsTable.orderId, params.data.id))
   );
@@ -524,6 +596,7 @@ router.delete("/orders/:id/items/:itemId", requireAuth, async (req, res): Promis
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
   if (!isOrderModifiable(order.status)) { res.status(409).json({ error: "This order can no longer be modified." }); return; }
   if (req.auth?.role === "guest" && !canAccessTable(req, order.tableId)) { res.status(403).json({ error: "Permission denied." }); return; }
+  if (req.auth?.role === "customer" && req.auth.customerId !== order.customerId) { res.status(403).json({ error: "Permission denied." }); return; }
   const [item] = await db.delete(orderItemsTable).where(
     and(eq(orderItemsTable.id, params.data.itemId), eq(orderItemsTable.orderId, params.data.id))
   ).returning();
@@ -531,5 +604,84 @@ router.delete("/orders/:id/items/:itemId", requireAuth, async (req, res): Promis
   await syncOrderAfterItemChange(params.data.id);
   res.sendStatus(204);
 });
+
+router.get("/delivery-orders", requireAuth, async (req, res): Promise<void> => {
+  const statusFilter = normalizeText(req.query.status).toLowerCase();
+  const regionFilter = normalizeText(req.query.region).toLowerCase();
+  const townshipFilter = normalizeText(req.query.township).toLowerCase();
+  const streetFilter = normalizeText(req.query.street).toLowerCase();
+
+  const conditions: any[] = [eq(ordersTable.orderSource, "delivery")];
+  if (statusFilter) conditions.push(eq(ordersTable.deliveryStatus, statusFilter));
+  if (req.auth?.role === "customer" && req.auth.customerId) {
+    conditions.push(eq(ordersTable.customerId, req.auth.customerId));
+  }
+
+  const orders = await db
+    .select()
+    .from(ordersTable)
+    .where(and(...conditions))
+    .orderBy(sql`${ordersTable.createdAt} desc`);
+
+  const filtered = orders.filter((order) =>
+    regionFilter ? (order.deliveryRegion ?? "").toLowerCase().includes(regionFilter) : true,
+  ).filter((order) =>
+    townshipFilter ? (order.deliveryTownship ?? "").toLowerCase().includes(townshipFilter) : true,
+  ).filter((order) =>
+    streetFilter ? (order.deliveryStreet ?? "").toLowerCase().includes(streetFilter) : true,
+  );
+
+  res.json(
+    filtered.map((order) => ({
+      ...formatOrder(order),
+      customerPhones: (() => {
+        try {
+          return order.customerPhones ? (JSON.parse(order.customerPhones) as string[]) : [];
+        } catch {
+          return [];
+        }
+      })(),
+    })),
+  );
+});
+
+router.patch(
+  "/delivery-orders/:id/status",
+  requireRoles(["waiter", "cashier", "supervisor", "manager", "owner"]),
+  async (req, res): Promise<void> => {
+    const id = Number.parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+    if (!Number.isFinite(id) || id <= 0) {
+      res.status(400).json({ error: "Invalid delivery order id." });
+      return;
+    }
+    const body = (req.body ?? {}) as UpdateDeliveryStatusBody;
+    const nextStatus = parseDeliveryStatus(body.status);
+    if (!nextStatus) {
+      res.status(400).json({ error: "Invalid delivery status." });
+      return;
+    }
+
+    const [existing] = await db.select().from(ordersTable).where(eq(ordersTable.id, id));
+    if (!existing || existing.orderSource !== "delivery") {
+      res.status(404).json({ error: "Delivery order not found." });
+      return;
+    }
+
+    const [updated] = await db
+      .update(ordersTable)
+      .set({
+        deliveryStatus: nextStatus,
+        status: nextStatus === "cancelled" ? "cancelled" : existing.status,
+      })
+      .where(eq(ordersTable.id, id))
+      .returning();
+    if (!updated) {
+      res.status(404).json({ error: "Delivery order not found." });
+      return;
+    }
+
+    res.json(formatOrder(updated));
+  },
+);
 
 export default router;

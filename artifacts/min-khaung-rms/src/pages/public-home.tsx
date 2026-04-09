@@ -9,7 +9,7 @@ import {
   useListMenuItems,
 } from "@workspace/api-client-react";
 import type { MenuItem } from "@workspace/api-client-react";
-import { Expand, ImageIcon, Languages, Loader2, Plus, ShoppingCart, Trash2 } from "lucide-react";
+import { Expand, ImageIcon, Languages, Loader2, LogIn, Plus, ShoppingCart, Trash2, UserPlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,18 +24,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import { resolveMenuImageUrl } from "@/lib/menu-image";
 
 type PublicViewMode = "table" | "cards" | "thumbnails" | "list" | "details";
 type DeliveryPaymentMethod = "cash" | "wallet";
 type DeliveryWalletType = "wave_pay" | "kbz_pay" | "aya_pay" | "cb_pay";
-
-type DeliveryProfile = {
-  fullName: string;
-  phone: string;
-  address: string;
-  mapLink: string;
-};
 
 type CartEntry = {
   menuItemId: number;
@@ -53,6 +47,44 @@ type DeliveryOrderResponse = {
   message: string;
 };
 
+type CustomerAddress = {
+  id: number;
+  unitNo: string | null;
+  street: string;
+  ward: string | null;
+  township: string;
+  region: string;
+  mapLink: string | null;
+  isDefault: boolean;
+};
+
+type CustomerMeResponse = {
+  id: number;
+  fullName: string;
+  status: string;
+  mustChangePassword: boolean;
+  phones: string[];
+  addresses: CustomerAddress[];
+};
+
+type CustomerRegisterResponse = {
+  customerId: number;
+  status: string;
+  temporaryPassword: string;
+  message: string;
+};
+
+type RegisterFormState = {
+  fullName: string;
+  phones: string[];
+  unitNo: string;
+  street: string;
+  ward: string;
+  township: string;
+  region: string;
+  mapLink: string;
+};
+
 const VIEW_OPTIONS: Array<{ value: PublicViewMode; labelKey: string }> = [
   { value: "cards", labelKey: "menu.viewMode.cards" },
   { value: "thumbnails", labelKey: "menu.viewMode.thumbnails" },
@@ -60,8 +92,6 @@ const VIEW_OPTIONS: Array<{ value: PublicViewMode; labelKey: string }> = [
   { value: "details", labelKey: "orders.viewMode.details" },
   { value: "table", labelKey: "menu.viewMode.table" },
 ];
-
-const STORAGE_KEY_DELIVERY_PROFILE = "teahouse_delivery_profile_v1";
 
 function getGridClass(viewMode: PublicViewMode): string {
   if (viewMode === "thumbnails") return "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5";
@@ -76,10 +106,23 @@ function isMyanmarText(value: string | null | undefined): boolean {
   return Boolean(value && /[\u1000-\u109f]/.test(value));
 }
 
+function normalizePhone(value: string): string {
+  return value.trim().replace(/\s+/g, "");
+}
+
+function makeAddressLine(address: CustomerAddress | null | undefined): string {
+  if (!address) return "";
+  return [address.unitNo, address.street, address.ward, address.township, address.region]
+    .filter(Boolean)
+    .join(", ");
+}
+
 export default function PublicHomePage() {
   const { t, i18n } = useTranslation();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isCustomer = user?.role === "customer";
   const isMyanmar = i18n.resolvedLanguage === "mm";
   const nextLanguageLabel = isMyanmar ? t("language.english") : t("language.myanmar");
 
@@ -90,18 +133,31 @@ export default function PublicHomePage() {
 
   const [registerOpen, setRegisterOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [registering, setRegistering] = useState(false);
   const [placingOrder, setPlacingOrder] = useState(false);
   const [deliveryNotes, setDeliveryNotes] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<DeliveryPaymentMethod>("cash");
   const [walletType, setWalletType] = useState<DeliveryWalletType>("kbz_pay");
 
-  const [deliveryProfile, setDeliveryProfile] = useState<DeliveryProfile | null>(null);
-  const [registerForm, setRegisterForm] = useState<DeliveryProfile>({
+  const [registeredAccount, setRegisteredAccount] = useState<{
+    primaryPhone: string;
+    temporaryPassword: string;
+    customerId: number;
+  } | null>(null);
+
+  const [registerForm, setRegisterForm] = useState<RegisterFormState>({
     fullName: "",
-    phone: "",
-    address: "",
+    phones: [""],
+    unitNo: "",
+    street: "",
+    ward: "",
+    township: "",
+    region: "",
     mapLink: "",
   });
+
+  const [customerProfile, setCustomerProfile] = useState<CustomerMeResponse | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
 
   const [cart, setCart] = useState<CartEntry[]>([]);
 
@@ -114,32 +170,36 @@ export default function PublicHomePage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const raw = window.localStorage.getItem(STORAGE_KEY_DELIVERY_PROFILE);
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as Partial<DeliveryProfile>;
-      if (!parsed || typeof parsed !== "object") return;
-      const profile: DeliveryProfile = {
-        fullName: (parsed.fullName ?? "").toString(),
-        phone: (parsed.phone ?? "").toString(),
-        address: (parsed.address ?? "").toString(),
-        mapLink: (parsed.mapLink ?? "").toString(),
-      };
-      if (!profile.fullName || !profile.phone || !profile.address) return;
-      setDeliveryProfile(profile);
-      setRegisterForm(profile);
-    } catch {
-      // Ignore malformed cached profile.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("register") === "1") {
+      setRegisteredAccount(null);
+      setRegisterOpen(true);
     }
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("register") === "1") {
-      setRegisterOpen(true);
+    if (!isCustomer) {
+      setCustomerProfile(null);
+      return;
     }
-  }, []);
+
+    setLoadingProfile(true);
+    void customFetch<CustomerMeResponse>("/api/customers/me", {
+      method: "GET",
+      responseType: "json",
+    })
+      .then((data) => {
+        setCustomerProfile(data);
+      })
+      .catch((error) => {
+        toast({
+          title: t("public.profile.loadFailed"),
+          description: error instanceof Error ? error.message : t("common.unknownError"),
+          variant: "destructive",
+        });
+      })
+      .finally(() => setLoadingProfile(false));
+  }, [isCustomer, t, toast]);
 
   const filteredMenu = useMemo(() => {
     const available = menuItems.filter((item) => item.available !== "false" && item.available !== "0");
@@ -162,8 +222,31 @@ export default function PublicHomePage() {
     [cart],
   );
 
+  const defaultAddress = useMemo(
+    () => customerProfile?.addresses.find((item) => item.isDefault) ?? customerProfile?.addresses[0] ?? null,
+    [customerProfile],
+  );
+
   const toggleLanguage = () => {
     void i18n.changeLanguage(isMyanmar ? "en" : "mm");
+  };
+
+  const addPhoneField = () => {
+    setRegisterForm((prev) => ({ ...prev, phones: [...prev.phones, ""] }));
+  };
+
+  const removePhoneField = (index: number) => {
+    setRegisterForm((prev) => {
+      if (prev.phones.length <= 1) return prev;
+      return { ...prev, phones: prev.phones.filter((_value, idx) => idx !== index) };
+    });
+  };
+
+  const updatePhoneField = (index: number, value: string) => {
+    setRegisterForm((prev) => ({
+      ...prev,
+      phones: prev.phones.map((phone, idx) => (idx === index ? value : phone)),
+    }));
   };
 
   const addToCart = (item: MenuItem) => {
@@ -202,8 +285,20 @@ export default function PublicHomePage() {
     setCart((prev) => prev.filter((entry) => entry.menuItemId !== menuItemId));
   };
 
-  const saveRegisterProfile = () => {
-    if (!registerForm.fullName.trim() || !registerForm.phone.trim() || !registerForm.address.trim()) {
+  const saveRegisterProfile = async () => {
+    const fullName = registerForm.fullName.trim();
+    const phones = registerForm.phones
+      .map((phone) => normalizePhone(phone))
+      .filter((phone) => phone.length >= 7)
+      .filter((phone, index, arr) => arr.indexOf(phone) === index);
+    const unitNo = registerForm.unitNo.trim();
+    const street = registerForm.street.trim();
+    const ward = registerForm.ward.trim();
+    const township = registerForm.township.trim();
+    const region = registerForm.region.trim();
+    const mapLink = registerForm.mapLink.trim();
+
+    if (!fullName || phones.length === 0 || !street || !township || !region) {
       toast({
         title: t("public.register.requiredTitle"),
         description: t("public.register.requiredDesc"),
@@ -211,18 +306,43 @@ export default function PublicHomePage() {
       });
       return;
     }
-    const next: DeliveryProfile = {
-      fullName: registerForm.fullName.trim(),
-      phone: registerForm.phone.trim(),
-      address: registerForm.address.trim(),
-      mapLink: registerForm.mapLink.trim(),
-    };
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY_DELIVERY_PROFILE, JSON.stringify(next));
+
+    setRegistering(true);
+    try {
+      const response = await customFetch<CustomerRegisterResponse>("/api/auth/customer-register", {
+        method: "POST",
+        responseType: "json",
+        body: JSON.stringify({
+          fullName,
+          phones,
+          address: {
+            unitNo: unitNo || undefined,
+            street,
+            ward: ward || undefined,
+            township,
+            region,
+            mapLink: mapLink || undefined,
+          },
+        }),
+      });
+      setRegisteredAccount({
+        primaryPhone: phones[0],
+        temporaryPassword: response.temporaryPassword,
+        customerId: response.customerId,
+      });
+      toast({
+        title: t("public.register.saved"),
+        description: t("public.register.pendingApproval"),
+      });
+    } catch (error) {
+      toast({
+        title: t("public.register.failedTitle"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setRegistering(false);
     }
-    setDeliveryProfile(next);
-    setRegisterOpen(false);
-    toast({ title: t("public.register.saved") });
   };
 
   const placeDeliveryOrder = async () => {
@@ -234,13 +354,13 @@ export default function PublicHomePage() {
       });
       return;
     }
-    if (!deliveryProfile) {
+    if (!isCustomer) {
       setCheckoutOpen(false);
-      setRegisterOpen(true);
       toast({
-        title: t("public.register.requiredTitle"),
-        description: t("public.register.deliveryRequired"),
+        title: t("public.checkout.customerLoginRequiredTitle"),
+        description: t("public.checkout.customerLoginRequiredDesc"),
       });
+      setLocation("/login?mode=customer");
       return;
     }
 
@@ -250,10 +370,6 @@ export default function PublicHomePage() {
         method: "POST",
         responseType: "json",
         body: JSON.stringify({
-          customerName: deliveryProfile.fullName,
-          customerPhone: deliveryProfile.phone,
-          deliveryAddress: deliveryProfile.address,
-          googleMapLink: deliveryProfile.mapLink || undefined,
           notes: deliveryNotes.trim() || undefined,
           paymentMethod,
           walletType: paymentMethod === "wallet" ? walletType : undefined,
@@ -296,20 +412,40 @@ export default function PublicHomePage() {
               <p className="max-w-xl text-sm text-emerald-50 md:text-base">{t("public.subtitle")}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="secondary"
-                className="bg-white text-emerald-700 hover:bg-emerald-50"
-                onClick={() => setLocation("/login?mode=staff")}
-              >
-                {t("public.loginButton")}
-              </Button>
-              <Button
-                variant="outline"
-                className="border-white/30 text-white hover:bg-white/10"
-                onClick={() => setLocation("/login?mode=guest")}
-              >
-                {t("public.guestButton")}
-              </Button>
+              {!isCustomer ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    className="bg-white text-emerald-700 hover:bg-emerald-50"
+                    onClick={() => setLocation("/login?mode=staff")}
+                  >
+                    {t("public.loginButton")}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-white/30 text-white hover:bg-white/10"
+                    onClick={() => setLocation("/login?mode=guest")}
+                  >
+                    {t("public.guestButton")}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-white/30 text-white hover:bg-white/10"
+                    onClick={() => setLocation("/login?mode=customer")}
+                  >
+                    <LogIn className="mr-1.5 h-4 w-4" />
+                    {t("public.customerLogin")}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="secondary"
+                  className="bg-white text-emerald-700 hover:bg-emerald-50"
+                  onClick={() => setLocation("/delivery-orders")}
+                >
+                  {t("public.myDeliveryOrders")}
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -327,21 +463,67 @@ export default function PublicHomePage() {
 
       <main className="mx-auto max-w-7xl space-y-4 px-4 py-5 md:px-8 md:py-8">
         <div className="rounded-xl border bg-card p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="font-semibold text-foreground">{t("public.deliveryNotice.title")}</p>
-              <p className="text-sm text-muted-foreground">{t("public.deliveryNotice.desc")}</p>
+          {isCustomer ? (
+            <div className="space-y-2">
+              <p className="font-semibold text-foreground">{t("public.deliveryNotice.customerTitle")}</p>
+              {loadingProfile ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t("common.loading")}
+                </div>
+              ) : customerProfile ? (
+                <div className="space-y-1 text-sm">
+                  <p className="font-semibold">{customerProfile.fullName}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {customerProfile.phones.map((phone) => (
+                      <a
+                        key={phone}
+                        href={`tel:${phone}`}
+                        className="rounded border px-2 py-0.5 text-xs hover:bg-muted/40"
+                      >
+                        {phone}
+                      </a>
+                    ))}
+                  </div>
+                  <p className="text-muted-foreground">{makeAddressLine(defaultAddress)}</p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t("public.profile.notFound")}</p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => setCheckoutOpen(true)} disabled={cart.length === 0}>
+                  <ShoppingCart className="mr-1.5 h-4 w-4" />
+                  {t("public.cart.checkoutButton", { count: cartCount })}
+                </Button>
+                <Button variant="outline" onClick={() => setLocation("/delivery-orders")}>
+                  {t("public.myDeliveryOrders")}
+                </Button>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => setRegisterOpen(true)}>
-                {t("public.register.button")}
-              </Button>
-              <Button onClick={() => setCheckoutOpen(true)} disabled={cart.length === 0}>
-                <ShoppingCart className="mr-1.5 h-4 w-4" />
-                {t("public.cart.checkoutButton", { count: cartCount })}
-              </Button>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-foreground">{t("public.deliveryNotice.title")}</p>
+                <p className="text-sm text-muted-foreground">{t("public.deliveryNotice.desc")}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setRegisteredAccount(null);
+                    setRegisterOpen(true);
+                  }}
+                >
+                  <UserPlus className="mr-1.5 h-4 w-4" />
+                  {t("public.register.button")}
+                </Button>
+                <Button variant="outline" onClick={() => setLocation("/login?mode=customer")}>
+                  <LogIn className="mr-1.5 h-4 w-4" />
+                  {t("public.customerLogin")}
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="rounded-xl border bg-card p-3 shadow-sm">
@@ -568,12 +750,25 @@ export default function PublicHomePage() {
       </Dialog>
 
       <Dialog open={registerOpen} onOpenChange={setRegisterOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{t("public.register.title")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">{t("public.register.subtitle")}</p>
+            {registeredAccount ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                <p className="font-semibold">{t("public.register.tempPasswordReady")}</p>
+                <p>{t("public.register.tempPasswordHint")}</p>
+                <p className="mt-2">
+                  {t("public.register.loginPhone")} <span className="font-semibold">{registeredAccount.primaryPhone}</span>
+                </p>
+                <p>
+                  {t("public.register.loginPassword")}{" "}
+                  <code className="rounded bg-white px-1.5 py-0.5">{registeredAccount.temporaryPassword}</code>
+                </p>
+              </div>
+            ) : null}
             <div className="space-y-1">
               <Label>{t("public.register.fullName")}</Label>
               <Input
@@ -581,35 +776,91 @@ export default function PublicHomePage() {
                 onChange={(event) => setRegisterForm((prev) => ({ ...prev, fullName: event.target.value }))}
               />
             </div>
-            <div className="space-y-1">
-              <Label>{t("public.register.phone")}</Label>
-              <Input
-                value={registerForm.phone}
-                onChange={(event) => setRegisterForm((prev) => ({ ...prev, phone: event.target.value }))}
-              />
+            <div className="space-y-2">
+              <Label>{t("public.register.phoneList")}</Label>
+              {registerForm.phones.map((phone, index) => (
+                <div key={`phone-${index}`} className="flex gap-2">
+                  <Input
+                    value={phone}
+                    onChange={(event) => updatePhoneField(index, event.target.value)}
+                    placeholder="09xxxxxxxxx"
+                  />
+                  <Button type="button" variant="outline" onClick={() => removePhoneField(index)} disabled={registerForm.phones.length <= 1}>
+                    {t("public.register.removePhone")}
+                  </Button>
+                </div>
+              ))}
+              <Button type="button" variant="outline" onClick={addPhoneField}>
+                <Plus className="mr-1 h-4 w-4" />
+                {t("public.register.addPhone")}
+              </Button>
             </div>
-            <div className="space-y-1">
-              <Label>{t("public.register.address")}</Label>
-              <Textarea
-                value={registerForm.address}
-                onChange={(event) => setRegisterForm((prev) => ({ ...prev, address: event.target.value }))}
-                rows={3}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>{t("public.register.mapLinkOptional")}</Label>
-              <Input
-                value={registerForm.mapLink}
-                onChange={(event) => setRegisterForm((prev) => ({ ...prev, mapLink: event.target.value }))}
-                placeholder="https://maps.google.com/..."
-              />
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1">
+                <Label>{t("public.register.addressUnit")}</Label>
+                <Input
+                  value={registerForm.unitNo}
+                  onChange={(event) => setRegisterForm((prev) => ({ ...prev, unitNo: event.target.value }))}
+                  placeholder={t("public.register.addressUnitPlaceholder")}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>{t("public.register.addressStreet")}</Label>
+                <Input
+                  value={registerForm.street}
+                  onChange={(event) => setRegisterForm((prev) => ({ ...prev, street: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>{t("public.register.addressWard")}</Label>
+                <Input
+                  value={registerForm.ward}
+                  onChange={(event) => setRegisterForm((prev) => ({ ...prev, ward: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>{t("public.register.addressTownship")}</Label>
+                <Input
+                  value={registerForm.township}
+                  onChange={(event) => setRegisterForm((prev) => ({ ...prev, township: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>{t("public.register.addressRegion")}</Label>
+                <Input
+                  value={registerForm.region}
+                  onChange={(event) => setRegisterForm((prev) => ({ ...prev, region: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>{t("public.register.mapLinkOptional")}</Label>
+                <Input
+                  value={registerForm.mapLink}
+                  onChange={(event) => setRegisterForm((prev) => ({ ...prev, mapLink: event.target.value }))}
+                  placeholder="https://maps.google.com/..."
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRegisterOpen(false)}>
               {t("common.cancel")}
             </Button>
-            <Button onClick={saveRegisterProfile}>{t("public.register.saveButton")}</Button>
+            {!registeredAccount ? (
+              <Button onClick={() => void saveRegisterProfile()} disabled={registering}>
+                {registering ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {t("public.register.saveButton")}
+              </Button>
+            ) : (
+              <Button
+                onClick={() => {
+                  setRegisterOpen(false);
+                  setLocation("/login?mode=customer");
+                }}
+              >
+                {t("public.register.goLogin")}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -620,27 +871,52 @@ export default function PublicHomePage() {
             <DialogTitle>{t("public.checkout.title")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            {!deliveryProfile ? (
+            {!isCustomer ? (
               <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-                <p className="font-semibold">{t("public.register.requiredTitle")}</p>
-                <p>{t("public.register.deliveryRequired")}</p>
-                <Button
-                  variant="outline"
-                  className="mt-2"
-                  onClick={() => {
-                    setCheckoutOpen(false);
-                    setRegisterOpen(true);
-                  }}
-                >
-                  {t("public.register.button")}
-                </Button>
+                <p className="font-semibold">{t("public.checkout.customerLoginRequiredTitle")}</p>
+                <p>{t("public.checkout.customerLoginRequiredDesc")}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setCheckoutOpen(false);
+                      setRegisteredAccount(null);
+                      setRegisterOpen(true);
+                    }}
+                  >
+                    {t("public.register.button")}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setCheckoutOpen(false);
+                      setLocation("/login?mode=customer");
+                    }}
+                  >
+                    {t("public.customerLogin")}
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="rounded-md border bg-muted/30 p-3 text-sm">
-                <p className="font-semibold">{deliveryProfile.fullName}</p>
-                <p>{deliveryProfile.phone}</p>
-                <p>{deliveryProfile.address}</p>
-                {deliveryProfile.mapLink ? <p className="text-xs text-muted-foreground">{deliveryProfile.mapLink}</p> : null}
+                <p className="font-semibold">{customerProfile?.fullName || user?.name || "-"}</p>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {(customerProfile?.phones ?? []).map((phone) => (
+                    <a
+                      key={`checkout-${phone}`}
+                      href={`tel:${phone}`}
+                      className="rounded border px-2 py-0.5 text-xs hover:bg-muted/40"
+                    >
+                      {phone}
+                    </a>
+                  ))}
+                </div>
+                <p className="mt-1">{makeAddressLine(defaultAddress)}</p>
+                {defaultAddress?.mapLink ? (
+                  <a href={defaultAddress.mapLink} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+                    {defaultAddress.mapLink}
+                  </a>
+                ) : null}
               </div>
             )}
 

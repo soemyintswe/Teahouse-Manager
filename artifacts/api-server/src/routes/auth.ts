@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, staffTable, tablesTable } from "@workspace/db";
+import { db, staffTable, tablesTable, customersTable, customerPhonesTable, customerAddressesTable } from "@workspace/db";
 import { APP_ROLES, issueAuthToken, requireAuth, type AppRole, type AuthPrincipal, isStaffRole } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -13,6 +13,22 @@ type StaffLoginBody = {
 type GuestLoginBody = {
   tableId?: unknown;
   tableNumber?: unknown;
+};
+
+type CustomerRegisterBody = {
+  fullName?: unknown;
+  phones?: unknown;
+  address?: unknown;
+};
+
+type CustomerLoginBody = {
+  phone?: unknown;
+  password?: unknown;
+};
+
+type CustomerChangePasswordBody = {
+  oldPassword?: unknown;
+  newPassword?: unknown;
 };
 
 const STAFF_ALLOWED_ROLES: AppRole[] = [
@@ -54,8 +70,10 @@ function sanitizePrincipal(principal: AuthPrincipal) {
     role: principal.role,
     name: principal.name,
     staffId: principal.staffId ?? null,
+    customerId: principal.customerId ?? null,
     tableId: principal.tableId ?? null,
     tableNumber: principal.tableNumber ?? null,
+    mustChangePassword: principal.mustChangePassword ?? false,
     exp: principal.exp,
   };
 }
@@ -67,6 +85,29 @@ function isStaffActive(value: string | null | undefined): boolean {
 
 function normalizedText(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase();
+}
+
+function normalizePhone(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.trim().replace(/\s+/g, "");
+}
+
+function normalizeDisplayText(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.trim();
+}
+
+function parsePhoneList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => normalizePhone(entry))
+    .filter((entry) => entry.length >= 7)
+    .filter((entry, index, arr) => arr.indexOf(entry) === index);
+}
+
+function createTemporaryPassword(): string {
+  const random = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `TH-${random}`;
 }
 
 async function getActiveStaffMembers(): Promise<Array<typeof staffTable.$inferSelect>> {
@@ -157,6 +198,174 @@ router.post("/auth/staff-login", async (req, res): Promise<void> => {
     user: principal,
     roles: STAFF_ALLOWED_ROLES,
   });
+});
+
+router.post("/auth/customer-register", async (req, res): Promise<void> => {
+  const body = (req.body ?? {}) as CustomerRegisterBody;
+  const fullName = normalizeDisplayText(body.fullName);
+  const phones = parsePhoneList(body.phones);
+  const rawAddress = body.address && typeof body.address === "object" ? (body.address as Record<string, unknown>) : null;
+  const unitNo = normalizeDisplayText(rawAddress?.unitNo);
+  const street = normalizeDisplayText(rawAddress?.street);
+  const ward = normalizeDisplayText(rawAddress?.ward);
+  const township = normalizeDisplayText(rawAddress?.township);
+  const region = normalizeDisplayText(rawAddress?.region);
+  const mapLink = normalizeDisplayText(rawAddress?.mapLink);
+
+  if (!fullName || phones.length === 0 || !street || !township || !region) {
+    res.status(400).json({
+      error: "fullName, phones, street, township, and region are required.",
+    });
+    return;
+  }
+
+  const existingPhoneRows = await db.select().from(customerPhonesTable);
+  const hasDuplicatePhone = phones.some((phone) => existingPhoneRows.some((row) => row.phone === phone));
+  if (hasDuplicatePhone) {
+    res.status(409).json({ error: "One or more phone numbers are already registered." });
+    return;
+  }
+
+  const temporaryPassword = createTemporaryPassword();
+  const [customer] = await db
+    .insert(customersTable)
+    .values({
+      fullName,
+      password: temporaryPassword,
+      status: "pending",
+      mustChangePassword: true,
+    })
+    .returning();
+
+  for (let i = 0; i < phones.length; i += 1) {
+    await db.insert(customerPhonesTable).values({
+      customerId: customer.id,
+      phone: phones[i],
+      sortOrder: i,
+    });
+  }
+
+  await db.insert(customerAddressesTable).values({
+    customerId: customer.id,
+    unitNo: unitNo || null,
+    street,
+    ward: ward || null,
+    township,
+    region,
+    mapLink: mapLink || null,
+    isDefault: true,
+  });
+
+  res.status(201).json({
+    customerId: customer.id,
+    status: customer.status,
+    temporaryPassword,
+    message: "Customer account created. Waiting for admin approval.",
+  });
+});
+
+router.post("/auth/customer-login", async (req, res): Promise<void> => {
+  const body = (req.body ?? {}) as CustomerLoginBody;
+  const phone = normalizePhone(body.phone);
+  const password = normalizeDisplayText(body.password);
+
+  if (!phone || !password) {
+    res.status(400).json({ error: "phone and password are required." });
+    return;
+  }
+
+  const [phoneRow] = await db.select().from(customerPhonesTable).where(eq(customerPhonesTable.phone, phone));
+  if (!phoneRow) {
+    res.status(401).json({ error: "Invalid phone or password." });
+    return;
+  }
+
+  const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, phoneRow.customerId));
+  if (!customer || customer.password !== password) {
+    res.status(401).json({ error: "Invalid phone or password." });
+    return;
+  }
+  if (customer.status === "pending") {
+    res.status(403).json({ error: "Account is pending admin approval." });
+    return;
+  }
+  if (customer.status === "denied") {
+    res.status(403).json({ error: "Account has been denied by admin." });
+    return;
+  }
+  if (customer.status === "terminated") {
+    res.status(403).json({ error: "Account has been terminated." });
+    return;
+  }
+
+  const token = issueAuthToken({
+    role: "customer",
+    customerId: customer.id,
+    name: customer.fullName,
+    mustChangePassword: customer.mustChangePassword,
+    expiresInSec: 60 * 60 * 24 * 30,
+  });
+
+  const principal = sanitizePrincipal({
+    role: "customer",
+    customerId: customer.id,
+    name: customer.fullName,
+    mustChangePassword: customer.mustChangePassword,
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
+  });
+
+  res.json({ token, user: principal });
+});
+
+router.post("/auth/customer-change-password", requireAuth, async (req, res): Promise<void> => {
+  if (req.auth?.role !== "customer" || !req.auth.customerId) {
+    res.status(403).json({ error: "Only customer account can change customer password." });
+    return;
+  }
+
+  const body = (req.body ?? {}) as CustomerChangePasswordBody;
+  const oldPassword = normalizeDisplayText(body.oldPassword);
+  const newPassword = normalizeDisplayText(body.newPassword);
+  if (!oldPassword || !newPassword || newPassword.length < 6) {
+    res.status(400).json({ error: "oldPassword and newPassword (min 6 chars) are required." });
+    return;
+  }
+
+  const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, req.auth.customerId));
+  if (!customer) {
+    res.status(404).json({ error: "Customer account not found." });
+    return;
+  }
+  if (customer.password !== oldPassword) {
+    res.status(401).json({ error: "Current password is incorrect." });
+    return;
+  }
+
+  await db
+    .update(customersTable)
+    .set({
+      password: newPassword,
+      mustChangePassword: false,
+    })
+    .where(eq(customersTable.id, customer.id));
+
+  const token = issueAuthToken({
+    role: "customer",
+    customerId: customer.id,
+    name: customer.fullName,
+    mustChangePassword: false,
+    expiresInSec: 60 * 60 * 24 * 30,
+  });
+
+  const principal = sanitizePrincipal({
+    role: "customer",
+    customerId: customer.id,
+    name: customer.fullName,
+    mustChangePassword: false,
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
+  });
+
+  res.json({ token, user: principal, message: "Password changed successfully." });
 });
 
 router.post("/auth/guest-login", async (req, res): Promise<void> => {

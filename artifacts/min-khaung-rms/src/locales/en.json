@@ -10,6 +10,7 @@
     "toggleLabel": "Language"
   },
   "nav": {
+    "publicMenu": "Public Menu",
     "dashboard": "Dashboard",
     "floorPlan": "Floor Plan",
     "tableSettings": "Table Settings",
@@ -19,6 +20,7 @@
     "menu": "Menu",
     "inventory": "Inventory",
     "staff": "Staff",
+    "deliveryOrders": "Delivery Orders",
     "finance": "Finance",
     "settings": "Settings"
   },
@@ -111,13 +113,20 @@
     "subtitle": "Browse menu previews, prices, and QR codes. Staff and customers can sign in from here.",
     "loginButton": "User Login",
     "guestButton": "Table Guest Access",
+    "customerLogin": "Customer Login",
+    "myDeliveryOrders": "My Delivery Orders",
     "allCategories": "All Items",
     "preview": {
       "noDescription": "No description provided."
     },
     "deliveryNotice": {
       "title": "Online Delivery Orders",
-      "desc": "For parcel/delivery orders, please register customer delivery details first."
+      "desc": "For parcel/delivery orders, please register customer delivery details first.",
+      "customerTitle": "Your Delivery Account"
+    },
+    "profile": {
+      "loadFailed": "Failed to load customer profile",
+      "notFound": "Customer profile not found. Please contact staff."
     },
     "cart": {
       "itemAdded": "Item added to cart",
@@ -129,10 +138,26 @@
       "subtitle": "Please provide your delivery details before placing an online order.",
       "fullName": "Full Name",
       "phone": "Phone Number",
+      "phoneList": "Phone Numbers",
+      "addPhone": "Add Phone",
+      "removePhone": "Remove",
       "address": "Full Delivery Address",
+      "addressUnit": "House/Unit/Floor",
+      "addressUnitPlaceholder": "e.g. No.12, Room A, 2nd Floor",
+      "addressStreet": "Street",
+      "addressWard": "Ward",
+      "addressTownship": "Township",
+      "addressRegion": "Region / State",
       "mapLinkOptional": "Google Map Link (optional)",
       "saveButton": "Save Registration",
+      "goLogin": "Go to Login",
       "saved": "Delivery profile saved",
+      "pendingApproval": "Account created. Wait for admin approval before login.",
+      "failedTitle": "Registration failed",
+      "tempPasswordReady": "Temporary password generated",
+      "tempPasswordHint": "Use these credentials for first customer login.",
+      "loginPhone": "Login Phone:",
+      "loginPassword": "Temporary Password:",
       "requiredTitle": "Registration required",
       "requiredDesc": "Please fill full name, phone number, and delivery address.",
       "deliveryRequired": "Delivery orders require registered contact and address information."
@@ -146,9 +171,38 @@
       "paymentWallet": "Mobile Wallet",
       "walletType": "Wallet Type",
       "placeOrder": "Place Delivery Order",
+      "customerLoginRequiredTitle": "Customer login required",
+      "customerLoginRequiredDesc": "Please login as customer before placing delivery orders.",
       "successTitle": "Order #{{id}} created",
       "successDesc": "Delivery order submitted. Total: {{total}} ks.",
       "failedTitle": "Failed to place delivery order"
+    }
+  },
+  "deliveryOrders": {
+    "title": "Delivery Orders",
+    "summary": "{{count}} orders · Total {{total}} ks",
+    "loadFailed": "Failed to load delivery orders",
+    "statusUpdated": "Delivery status updated",
+    "updateFailed": "Failed to update delivery status",
+    "empty": "No delivery orders found.",
+    "unknownCustomer": "Unknown customer",
+    "labels": {
+      "phones": "Phones",
+      "payment": "Payment",
+      "address": "Delivery Address"
+    },
+    "filter": {
+      "region": "Filter by region",
+      "township": "Filter by township",
+      "street": "Filter by street"
+    },
+    "status": {
+      "all": "All",
+      "received": "Received",
+      "preparing": "Preparing",
+      "out_for_delivery": "Out for Delivery",
+      "delivered": "Delivered",
+      "cancelled": "Cancelled"
     }
   },
   "kitchen": {
@@ -524,11 +578,15 @@
     "subtitle": "Login with staff account or enter as table guest.",
     "staffLogin": "Staff Login",
     "guestAccess": "Guest Access",
+    "customerLogin": "Customer",
     "identifier": "User Name",
     "identifierPlaceholder": "User name / email / phone",
     "pin": "Password",
     "loginButton": "Login",
     "guestHint": "Guests can scan table QR or enter table code manually (e.g. H1, A2).",
+    "customerHint": "For online delivery orders, login with your customer phone and password.",
+    "customerPhone": "Phone Number",
+    "customerPassword": "Password",
     "tableCode": "Table Code",
     "guestConnectButton": "Connect to Table",
     "invalidTableCode": "Invalid table code (example: H1, A2).",
@@ -547,7 +605,20 @@
     "cancelToHome": "Cancel",
     "guestSession": "Guest Session · Table {{table}}",
     "noAccessTitle": "No Access",
-    "noAccessDesc": "Your account role cannot open this page."
+    "noAccessDesc": "Your account role cannot open this page.",
+    "passwordChange": {
+      "title": "Change Temporary Password",
+      "desc": "For security, set a new password before continuing.",
+      "newPassword": "New Password",
+      "confirmPassword": "Confirm Password",
+      "submit": "Update Password",
+      "success": "Password updated successfully",
+      "failed": "Failed to update password",
+      "invalidTitle": "Invalid password",
+      "invalidDesc": "New password must be at least 6 characters.",
+      "mismatchTitle": "Password mismatch",
+      "mismatchDesc": "New password and confirm password do not match."
+    }
   },
   "staff": {
     "title": "Staff & User Management",
@@ -567,6 +638,42 @@
     "contact": "Contact",
     "empty": "No staff users yet.",
     "rolesTitle": "Role Permissions",
+    "customers": {
+      "title": "Customer Accounts",
+      "subtitle": "Approve, deny, terminate, and reset customer delivery accounts.",
+      "loadFailed": "Failed to load customer accounts",
+      "statusUpdated": "Customer account status updated",
+      "actionFailed": "Failed to update customer account",
+      "resetDone": "{{name}} password reset",
+      "resetFailed": "Failed to reset customer password",
+      "tempPassword": "Temporary password: {{password}}",
+      "empty": "No customer accounts found.",
+      "name": "Customer",
+      "phones": "Phones",
+      "address": "Address",
+      "orders": "Delivery Orders",
+      "statusLabel": "Status",
+      "totalOrders": "Total: {{count}}",
+      "latestStatus": "Latest: {{status}}",
+      "filters": {
+        "allStatus": "All statuses",
+        "region": "Filter by region",
+        "township": "Filter by township",
+        "street": "Filter by street"
+      },
+      "status": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "denied": "Denied",
+        "terminated": "Terminated"
+      },
+      "actions": {
+        "approve": "Approve",
+        "deny": "Deny",
+        "terminate": "Terminate",
+        "resetPassword": "Reset Password"
+      }
+    },
     "created": "User created",
     "updated": "User {{name}} updated",
     "deleted": "User {{name}} deleted",

@@ -11,6 +11,7 @@ import staffRouter from "./staff";
 import financeRouter from "./finance";
 import settingsRouter from "./settings";
 import dashboardRouter from "./dashboard";
+import customersRouter from "./customers";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(staffRouter);
 router.use(financeRouter);
 router.use(settingsRouter);
 router.use(dashboardRouter);
+router.use(customersRouter);
 
 export default router;

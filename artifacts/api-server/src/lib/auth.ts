@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const APP_ROLES = [
   "guest",
+  "customer",
   "waiter",
   "kitchen",
   "cashier",
@@ -20,8 +21,10 @@ export type AuthPrincipal = {
   exp: number;
   name?: string;
   staffId?: number;
+  customerId?: number;
   tableId?: number;
   tableNumber?: string;
+  mustChangePassword?: boolean;
 };
 
 type AuthTokenPayload = {
@@ -30,8 +33,10 @@ type AuthTokenPayload = {
   exp: number;
   name?: string;
   staffId?: number;
+  customerId?: number;
   tableId?: number;
   tableNumber?: string;
+  mustChangePassword?: boolean;
 };
 
 declare global {
@@ -71,8 +76,10 @@ export function issueAuthToken(principal: Omit<AuthPrincipal, "exp"> & { expires
     exp: Math.floor(Date.now() / 1000) + expiresInSec,
     name: principal.name,
     staffId: principal.staffId,
+    customerId: principal.customerId,
     tableId: principal.tableId,
     tableNumber: principal.tableNumber,
+    mustChangePassword: principal.mustChangePassword,
   };
 
   const payloadSegment = toBase64Url(JSON.stringify(payload));
@@ -105,8 +112,10 @@ export function verifyAuthToken(token: string): AuthPrincipal | null {
       exp: parsed.exp,
       name: typeof parsed.name === "string" ? parsed.name : undefined,
       staffId: typeof parsed.staffId === "number" ? parsed.staffId : undefined,
+      customerId: typeof parsed.customerId === "number" ? parsed.customerId : undefined,
       tableId: typeof parsed.tableId === "number" ? parsed.tableId : undefined,
       tableNumber: typeof parsed.tableNumber === "string" ? parsed.tableNumber : undefined,
+      mustChangePassword: typeof parsed.mustChangePassword === "boolean" ? parsed.mustChangePassword : undefined,
     };
   } catch {
     return null;
@@ -149,7 +158,7 @@ export function requireRoles(roles: readonly AppRole[]) {
 }
 
 export function isStaffRole(role: AppRole): boolean {
-  return role !== "guest";
+  return role !== "guest" && role !== "customer";
 }
 
 export function canAccessTable(req: Request, tableId: number): boolean {

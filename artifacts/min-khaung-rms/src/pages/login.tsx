@@ -1,19 +1,27 @@
 import { useEffect, useMemo, useState, type FormEventHandler } from "react";
 import { useLocation } from "wouter";
-import { Loader2, LogIn, QrCode } from "lucide-react";
+import { Loader2, LogIn, QrCode, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useTranslation } from "react-i18next";
 
-type LoginMode = "staff" | "guest";
+type LoginMode = "staff" | "guest" | "customer";
 
 function parseModeFromSearch(search: string): LoginMode | null {
   const params = new URLSearchParams(search);
   const mode = params.get("mode");
-  if (mode === "staff" || mode === "guest") return mode;
+  if (mode === "staff" || mode === "guest" || mode === "customer") return mode;
   return null;
 }
 
@@ -59,13 +67,20 @@ export default function LoginPage() {
   const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { loginStaff, loginGuest } = useAuth();
+  const { loginStaff, loginGuest, loginCustomer, changeCustomerPassword, logout } = useAuth();
 
   const modeFromSearch = useMemo(() => parseModeFromSearch(window.location.search), []);
   const [mode, setMode] = useState<LoginMode>(modeFromSearch ?? "staff");
   const [identifier, setIdentifier] = useState("");
   const [pin, setPin] = useState("");
   const [tableCodeInput, setTableCodeInput] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerPassword, setCustomerPassword] = useState("");
+  const [passwordChangeOpen, setPasswordChangeOpen] = useState(false);
+  const [pendingOldPassword, setPendingOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const queryTableId = useMemo(() => parseTableIdFromSearch(window.location.search), []);
   const queryTableCode = useMemo(() => parseTableCodeFromSearch(window.location.search), []);
@@ -151,6 +166,77 @@ export default function LoginPage() {
     }
   };
 
+  const handleCustomerLogin = async () => {
+    const phone = customerPhone.trim();
+    const password = customerPassword.trim();
+    if (!phone || !password) return;
+
+    setLoading(true);
+    try {
+      const user = await loginCustomer({ phone, password });
+      toast({ title: t("auth.loginSuccess") });
+      if (user.mustChangePassword) {
+        setPendingOldPassword(password);
+        setNewPassword("");
+        setConfirmPassword("");
+        setPasswordChangeOpen(true);
+      } else {
+        setLocation("/");
+      }
+    } catch (error) {
+      toast({
+        title: t("auth.loginFailed"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCustomerPasswordChange = async () => {
+    const trimmedNew = newPassword.trim();
+    const trimmedConfirm = confirmPassword.trim();
+    if (!trimmedNew || trimmedNew.length < 6) {
+      toast({
+        title: t("auth.passwordChange.invalidTitle"),
+        description: t("auth.passwordChange.invalidDesc"),
+        variant: "destructive",
+      });
+      return;
+    }
+    if (trimmedNew !== trimmedConfirm) {
+      toast({
+        title: t("auth.passwordChange.mismatchTitle"),
+        description: t("auth.passwordChange.mismatchDesc"),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      await changeCustomerPassword({
+        oldPassword: pendingOldPassword,
+        newPassword: trimmedNew,
+      });
+      setPasswordChangeOpen(false);
+      setPendingOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast({ title: t("auth.passwordChange.success") });
+      setLocation("/");
+    } catch (error) {
+      toast({
+        title: t("auth.passwordChange.failed"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   const onStaffSubmit: FormEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault();
     void handleStaffLogin();
@@ -161,13 +247,18 @@ export default function LoginPage() {
     void handleGuestLogin();
   };
 
+  const onCustomerSubmit: FormEventHandler<HTMLFormElement> = (event) => {
+    event.preventDefault();
+    void handleCustomerLogin();
+  };
+
   return (
     <div className="min-h-screen bg-background px-4 py-8">
       <div className="mx-auto w-full max-w-md rounded-xl border bg-card p-6 shadow-md">
         <h1 className="text-2xl font-black">{t("auth.title")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{t("auth.subtitle")}</p>
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="mt-4 grid grid-cols-3 gap-2">
           <Button variant={mode === "staff" ? "default" : "outline"} onClick={() => setMode("staff")} disabled={loading}>
             <LogIn className="mr-1.5 h-4 w-4" />
             {t("auth.staffLogin")}
@@ -175,6 +266,10 @@ export default function LoginPage() {
           <Button variant={mode === "guest" ? "default" : "outline"} onClick={() => setMode("guest")} disabled={loading}>
             <QrCode className="mr-1.5 h-4 w-4" />
             {t("auth.guestAccess")}
+          </Button>
+          <Button variant={mode === "customer" ? "default" : "outline"} onClick={() => setMode("customer")} disabled={loading}>
+            <UserRound className="mr-1.5 h-4 w-4" />
+            {t("auth.customerLogin")}
           </Button>
         </div>
 
@@ -210,7 +305,7 @@ export default function LoginPage() {
               </Button>
             </div>
           </form>
-        ) : (
+        ) : mode === "guest" ? (
           <form className="mt-4 space-y-3" onSubmit={onGuestSubmit}>
             <p className="text-sm text-muted-foreground">{t("auth.guestHint")}</p>
             <div className="space-y-1">
@@ -236,8 +331,97 @@ export default function LoginPage() {
               </Button>
             </div>
           </form>
+        ) : (
+          <form className="mt-4 space-y-3" onSubmit={onCustomerSubmit}>
+            <p className="text-sm text-muted-foreground">{t("auth.customerHint")}</p>
+            <div className="space-y-1">
+              <Label>{t("auth.customerPhone")}</Label>
+              <Input
+                value={customerPhone}
+                onChange={(event) => setCustomerPhone(event.target.value)}
+                placeholder="09xxxxxxxxx"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>{t("auth.customerPassword")}</Label>
+              <Input
+                type="password"
+                value={customerPassword}
+                onChange={(event) => setCustomerPassword(event.target.value)}
+                placeholder="••••••"
+              />
+            </div>
+            <Button type="submit" disabled={loading || !customerPhone.trim() || !customerPassword.trim()} className="w-full">
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {t("auth.loginButton")}
+            </Button>
+            <div className="grid grid-cols-3 gap-2">
+              <Button type="button" variant="outline" onClick={() => setLocation("/")}>
+                {t("auth.cancelToHome")}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setLocation("/?register=1")}>
+                {t("public.register.button")}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setMode("staff")}>
+                {t("auth.staffLogin")}
+              </Button>
+            </div>
+          </form>
         )}
       </div>
+
+      <Dialog
+        open={passwordChangeOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            logout();
+            setPasswordChangeOpen(false);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("auth.passwordChange.title")}</DialogTitle>
+            <DialogDescription>{t("auth.passwordChange.desc")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>{t("auth.passwordChange.newPassword")}</Label>
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                placeholder="******"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>{t("auth.passwordChange.confirmPassword")}</Label>
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                placeholder="******"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                logout();
+                setPasswordChangeOpen(false);
+              }}
+              disabled={changingPassword}
+            >
+              {t("auth.logout")}
+            </Button>
+            <Button onClick={() => void handleCustomerPasswordChange()} disabled={changingPassword}>
+              {changingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {t("auth.passwordChange.submit")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

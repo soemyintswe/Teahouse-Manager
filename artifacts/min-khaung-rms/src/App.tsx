@@ -28,6 +28,7 @@ import {
   LineChart,
   Settings,
   Armchair,
+  Truck,
   Languages,
   LogOut,
   Loader2,
@@ -44,6 +45,7 @@ import CashierPage from "@/pages/cashier";
 import StaffPage from "@/pages/staff";
 import LoginPage from "@/pages/login";
 import PublicHomePage from "@/pages/public-home";
+import DeliveryOrdersPage from "@/pages/delivery-orders";
 import NotFound from "@/pages/not-found";
 import { setupAutoUpdate } from "@/lib/mobile-updater";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -54,6 +56,7 @@ const baseUrl = import.meta.env.BASE_URL ?? "/";
 const routerBase = baseUrl.startsWith("/") ? (baseUrl.replace(/\/$/, "") || "/") : "/";
 
 type AppPermission =
+  | "publicMenu"
   | "dashboard"
   | "floorPlan"
   | "tableSettings"
@@ -64,9 +67,11 @@ type AppPermission =
   | "inventory"
   | "staff"
   | "finance"
-  | "settings";
+  | "settings"
+  | "deliveryOrders";
 
 const NAV_ITEMS: Array<{ href: string; labelKey: string; icon: React.ComponentType<{ className?: string }>; permission: AppPermission }> = [
+  { href: "/", labelKey: "nav.publicMenu", icon: MenuIcon, permission: "publicMenu" },
   { href: "/", labelKey: "nav.dashboard", icon: LayoutDashboard, permission: "dashboard" },
   { href: "/floor-plan", labelKey: "nav.floorPlan", icon: MapIcon, permission: "floorPlan" },
   { href: "/table-settings", labelKey: "nav.tableSettings", icon: Armchair, permission: "tableSettings" },
@@ -76,6 +81,7 @@ const NAV_ITEMS: Array<{ href: string; labelKey: string; icon: React.ComponentTy
   { href: "/menu", labelKey: "nav.menu", icon: MenuIcon, permission: "menu" },
   { href: "/inventory", labelKey: "nav.inventory", icon: Package, permission: "inventory" },
   { href: "/staff", labelKey: "nav.staff", icon: Users, permission: "staff" },
+  { href: "/delivery-orders", labelKey: "nav.deliveryOrders", icon: Truck, permission: "deliveryOrders" },
   { href: "/finance", labelKey: "nav.finance", icon: LineChart, permission: "finance" },
   { href: "/settings", labelKey: "nav.settings", icon: Settings, permission: "settings" },
 ];
@@ -305,7 +311,10 @@ function RouterContent() {
   return (
     <Layout>
       <Switch>
-        <Route path="/" component={guard("dashboard", Dashboard)} />
+        <Route
+          path="/"
+          component={() => (user?.role === "customer" ? <PublicHomePage /> : guard("dashboard", Dashboard)())}
+        />
         <Route path="/floor-plan" component={guard("floorPlan", FloorPlan)} />
         <Route path="/table-settings" component={guard("tableSettings", TableSettingsPage)} />
         <Route path="/orders" component={guard("orders", OrdersPage)} />
@@ -317,6 +326,7 @@ function RouterContent() {
         <Route path="/menu" component={guard("menu", MenuPage)} />
         <Route path="/inventory" component={guard("inventory", () => <StubPage title={t("nav.inventory")} />)} />
         <Route path="/staff" component={guard("staff", StaffPage)} />
+        <Route path="/delivery-orders" component={guard("deliveryOrders", DeliveryOrdersPage)} />
         <Route path="/finance" component={guard("finance", () => <StubPage title={t("nav.finance")} />)} />
         <Route path="/settings" component={guard("settings", () => <StubPage title={t("nav.settings")} />)} />
         <Route path="/login" component={() => <AccessDenied />} />
