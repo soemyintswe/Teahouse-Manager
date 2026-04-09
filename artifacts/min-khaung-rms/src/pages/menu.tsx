@@ -16,7 +16,19 @@ import type {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Plus, Pencil, Trash2, Loader2, UtensilsCrossed, QrCode, Printer, ExternalLink, UploadCloud } from "lucide-react";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Loader2,
+  UtensilsCrossed,
+  QrCode,
+  Printer,
+  ExternalLink,
+  UploadCloud,
+  ImageIcon,
+  Expand,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -62,6 +74,14 @@ const STATION_OPTIONS = ["salad", "tea-coffee", "juice", "kitchen"] as const;
 
 type StationCode = (typeof STATION_OPTIONS)[number];
 type StationFilter = "all" | StationCode;
+type MenuViewMode = "table" | "cards" | "thumbnails";
+
+const MENU_VIEW_STORAGE_KEY = "teahouse_menu_view_mode";
+const MENU_VIEW_OPTIONS: Array<{ value: MenuViewMode; labelKey: string }> = [
+  { value: "table", labelKey: "menu.viewMode.table" },
+  { value: "cards", labelKey: "menu.viewMode.cards" },
+  { value: "thumbnails", labelKey: "menu.viewMode.thumbnails" },
+];
 
 const MYANMAR_TEXT_REGEX = /[\u1000-\u109f]/;
 
@@ -234,6 +254,13 @@ function buildInitialItemForm(item: MenuItem | undefined, categories: MenuCatego
     ingredients: meta.ingredients ?? "",
     available: item ? item.available !== "false" && item.available !== "0" : true,
   };
+}
+
+function getCardGridClass(viewMode: MenuViewMode): string {
+  if (viewMode === "thumbnails") {
+    return "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6";
+  }
+  return "grid-cols-1 md:grid-cols-2 xl:grid-cols-3";
 }
 
 function ItemDialog({
@@ -540,9 +567,26 @@ export default function MenuPage() {
   const deleteItem = useDeleteMenuItem();
 
   const [stationFilter, setStationFilter] = useState<StationFilter>("all");
+  const [viewMode, setViewMode] = useState<MenuViewMode>("table");
   const [itemDialog, setItemDialog] = useState<{ open: boolean; item?: MenuItem }>({ open: false });
   const [deleteTarget, setDeleteTarget] = useState<MenuItem | null>(null);
   const [qrTarget, setQrTarget] = useState<MenuItem | null>(null);
+  const [imagePreview, setImagePreview] = useState<{ name: string; url: string } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.localStorage.getItem(MENU_VIEW_STORAGE_KEY);
+    if (!raw) return;
+    const allowed = MENU_VIEW_OPTIONS.some((option) => option.value === raw);
+    if (allowed) {
+      setViewMode(raw as MenuViewMode);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(MENU_VIEW_STORAGE_KEY, viewMode);
+  }, [viewMode]);
 
   const categoryById = useMemo(() => {
     return new Map(categories.map((category) => [category.id, category]));
@@ -552,6 +596,45 @@ export default function MenuPage() {
     if (stationFilter === "all") return menuItems;
     return menuItems.filter((item) => item.station === stationFilter);
   }, [menuItems, stationFilter]);
+
+  const buildItemDisplay = (item: MenuItem) => {
+    const available = item.available !== "false" && item.available !== "0";
+    const category = categoryById.get(item.categoryId);
+    const itemPrimaryName = isMyanmar
+      ? resolveMyanmarLabel(item.name, item.nameMyanmar, ITEM_MM_FALLBACK)
+      : item.name;
+    const itemSecondaryName = isMyanmar
+      ? item.name
+      : resolveMyanmarLabel(item.name, item.nameMyanmar, ITEM_MM_FALLBACK);
+    const categoryLabel = category
+      ? (isMyanmar
+          ? resolveMyanmarLabel(category.name, category.nameMyanmar, CATEGORY_MM_FALLBACK)
+          : category.name)
+      : t("menu.unknownCategory", { id: item.categoryId });
+    const metadata = getItemMetadata(item);
+    const discountPriceValue = metadata.discountPrice ? Number(metadata.discountPrice) : null;
+    const hasValidDiscount =
+      discountPriceValue != null &&
+      Number.isFinite(discountPriceValue) &&
+      discountPriceValue > 0 &&
+      discountPriceValue < Number(item.price);
+    const imageSrc = item.imageUrl?.trim() ? resolveMenuImageUrl(item.imageUrl) : "";
+    return {
+      available,
+      categoryLabel,
+      itemPrimaryName,
+      itemSecondaryName,
+      metadata,
+      discountPriceValue,
+      hasValidDiscount,
+      imageSrc,
+    };
+  };
+
+  const openItemPreview = (name: string, url: string) => {
+    if (!url) return;
+    setImagePreview({ name, url });
+  };
 
   const menuQrLink = qrTarget ? buildMenuItemScanLink(qrTarget.id) : "";
   const menuQrImage = menuQrLink ? buildQrImageUrl(menuQrLink, 320) : "";
@@ -617,9 +700,9 @@ export default function MenuPage() {
             {t("menu.itemsCount", { count: menuItems.length })}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <Select value={stationFilter} onValueChange={(value) => setStationFilter(value as StationFilter)}>
-            <SelectTrigger className="w-44">
+            <SelectTrigger className="w-full sm:w-44">
               <SelectValue placeholder={t("menu.filterStation")} />
             </SelectTrigger>
             <SelectContent>
@@ -631,9 +714,22 @@ export default function MenuPage() {
               ))}
             </SelectContent>
           </Select>
+          <Select value={viewMode} onValueChange={(value) => setViewMode(value as MenuViewMode)}>
+            <SelectTrigger className="w-full sm:w-44">
+              <SelectValue placeholder={t("menu.viewMode.label")} />
+            </SelectTrigger>
+            <SelectContent>
+              {MENU_VIEW_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {t(option.labelKey)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
             onClick={() => setItemDialog({ open: true })}
             disabled={categories.length === 0}
+            className="w-full sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4" />
             {t("menu.addNewItem")}
@@ -648,12 +744,20 @@ export default function MenuPage() {
             <p>{t("menu.noCategory")}</p>
           </div>
         </div>
-      ) : (
-        <div className="rounded-lg border bg-card">
-          <Table>
+      ) : filteredItems.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed text-muted-foreground">
+          <div className="text-center">
+            <UtensilsCrossed className="mx-auto mb-2 h-10 w-10 opacity-30" />
+            <p>{t("menu.noItemsForFilter")}</p>
+          </div>
+        </div>
+      ) : viewMode === "table" ? (
+        <div className="overflow-x-auto rounded-lg border bg-card">
+          <Table className="min-w-[960px]">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("tableSettings.columns.id")}</TableHead>
+                <TableHead>{t("orders.menuTable.photo")}</TableHead>
                 <TableHead>{t("menu.itemName")}</TableHead>
                 <TableHead>{t("menu.category")}</TableHead>
                 <TableHead>{t("menu.station")}</TableHead>
@@ -663,105 +767,232 @@ export default function MenuPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredItems.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                    {t("menu.noItemsForFilter")}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredItems.map((item) => {
-                  const available = item.available !== "false" && item.available !== "0";
-                  const category = categoryById.get(item.categoryId);
-                  const itemPrimaryName = isMyanmar
-                    ? resolveMyanmarLabel(item.name, item.nameMyanmar, ITEM_MM_FALLBACK)
-                    : item.name;
-                  const itemSecondaryName = isMyanmar
-                    ? item.name
-                    : resolveMyanmarLabel(item.name, item.nameMyanmar, ITEM_MM_FALLBACK);
-                  const categoryLabel = category
-                    ? (isMyanmar
-                      ? resolveMyanmarLabel(category.name, category.nameMyanmar, CATEGORY_MM_FALLBACK)
-                      : category.name)
-                    : t("menu.unknownCategory", { id: item.categoryId });
-                  const metadata = getItemMetadata(item);
-                  const discountPriceValue = metadata.discountPrice ? Number(metadata.discountPrice) : null;
-                  const hasValidDiscount =
-                    discountPriceValue != null &&
-                    Number.isFinite(discountPriceValue) &&
-                    discountPriceValue > 0 &&
-                    discountPriceValue < Number(item.price);
-                  return (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">#{item.id}</TableCell>
-                      <TableCell>
-                        <div className="font-semibold">{itemPrimaryName}</div>
-                        <div className="text-xs text-muted-foreground">{itemSecondaryName}</div>
-                        <div className="mt-1 text-[11px] text-muted-foreground">
-                          {metadata.weightGrams ? `${metadata.weightGrams}g` : ""}
-                          {metadata.calories ? `${metadata.weightGrams ? " · " : ""}${metadata.calories} kcal` : ""}
-                          {metadata.ingredients ? `${metadata.weightGrams || metadata.calories ? " · " : ""}${metadata.ingredients}` : ""}
+              {filteredItems.map((item) => {
+                const display = buildItemDisplay(item);
+                return (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">#{item.id}</TableCell>
+                    <TableCell>
+                      {display.imageSrc ? (
+                        <button
+                          type="button"
+                          onClick={() => openItemPreview(display.itemPrimaryName, display.imageSrc)}
+                          className="overflow-hidden rounded-md border"
+                          title={t("menu.previewImage")}
+                        >
+                          <img
+                            src={display.imageSrc}
+                            alt={display.itemPrimaryName}
+                            className="h-14 w-14 object-cover"
+                          />
+                        </button>
+                      ) : (
+                        <div className="flex h-14 w-14 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
+                          <ImageIcon className="h-4 w-4" />
                         </div>
-                      </TableCell>
-                      <TableCell>{categoryLabel}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{getStationLabel(item.station, t)}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-semibold">
-                        {hasValidDiscount ? (
-                          <div className="space-y-0.5">
-                            <div className="text-xs text-muted-foreground line-through">
-                              {Number(item.price).toLocaleString()} {t("menu.currencySuffix")}
-                            </div>
-                            <div className="text-emerald-700">
-                              {discountPriceValue.toLocaleString()} {t("menu.currencySuffix")}
-                            </div>
-                          </div>
-                        ) : (
-                          <span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-semibold">{display.itemPrimaryName}</div>
+                      <div className="text-xs text-muted-foreground">{display.itemSecondaryName}</div>
+                      <div className="mt-1 text-[11px] text-muted-foreground">
+                        {display.metadata.weightGrams ? `${display.metadata.weightGrams}g` : ""}
+                        {display.metadata.calories
+                          ? `${display.metadata.weightGrams ? " · " : ""}${display.metadata.calories} kcal`
+                          : ""}
+                        {display.metadata.ingredients
+                          ? `${display.metadata.weightGrams || display.metadata.calories ? " · " : ""}${display.metadata.ingredients}`
+                          : ""}
+                      </div>
+                    </TableCell>
+                    <TableCell>{display.categoryLabel}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{getStationLabel(item.station, t)}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {display.hasValidDiscount ? (
+                        <div className="space-y-0.5">
+                          <div className="text-xs text-muted-foreground line-through">
                             {Number(item.price).toLocaleString()} {t("menu.currencySuffix")}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={available ? "secondary" : "outline"}>
-                          {available ? t("menu.available") : t("menu.unavailable")}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setQrTarget(item)}
-                            title={t("menu.qr.openQr")}
-                          >
-                            <QrCode className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setItemDialog({ open: true, item })}
-                            title={t("menu.editItem")}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setDeleteTarget(item)}
-                            title={t("menu.deleteItem")}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-600" />
-                          </Button>
+                          </div>
+                          <div className="text-emerald-700">
+                            {display.discountPriceValue?.toLocaleString()} {t("menu.currencySuffix")}
+                          </div>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
+                      ) : (
+                        <span>
+                          {Number(item.price).toLocaleString()} {t("menu.currencySuffix")}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={display.available ? "secondary" : "outline"}>
+                        {display.available ? t("menu.available") : t("menu.unavailable")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openItemPreview(display.itemPrimaryName, display.imageSrc)}
+                          title={t("menu.previewImage")}
+                          disabled={!display.imageSrc}
+                        >
+                          <Expand className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setQrTarget(item)}
+                          title={t("menu.qr.openQr")}
+                        >
+                          <QrCode className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setItemDialog({ open: true, item })}
+                          title={t("menu.editItem")}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeleteTarget(item)}
+                          title={t("menu.deleteItem")}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
+        </div>
+      ) : (
+        <div className={`grid gap-4 ${getCardGridClass(viewMode)}`}>
+          {filteredItems.map((item) => {
+            const display = buildItemDisplay(item);
+            return (
+              <div key={item.id} className="overflow-hidden rounded-lg border bg-card">
+                <button
+                  type="button"
+                  onClick={() => openItemPreview(display.itemPrimaryName, display.imageSrc)}
+                  className={`relative block w-full overflow-hidden border-b bg-muted/20 ${
+                    viewMode === "thumbnails" ? "aspect-square" : "aspect-[16/10]"
+                  }`}
+                  disabled={!display.imageSrc}
+                >
+                  {display.imageSrc ? (
+                    <img src={display.imageSrc} alt={display.itemPrimaryName} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                      <div className="flex flex-col items-center gap-1 text-xs">
+                        <ImageIcon className="h-5 w-5" />
+                        <span>{t("menu.noImage")}</span>
+                      </div>
+                    </div>
+                  )}
+                  {display.imageSrc ? (
+                    <span className="absolute right-2 top-2 inline-flex items-center rounded-full bg-black/60 px-2 py-1 text-[11px] font-semibold text-white">
+                      <Expand className="mr-1 h-3 w-3" />
+                      {t("menu.previewImage")}
+                    </span>
+                  ) : null}
+                </button>
+
+                <div className={viewMode === "thumbnails" ? "space-y-2 p-2.5" : "space-y-3 p-3"}>
+                  <div className="space-y-1">
+                    <div className={`${viewMode === "thumbnails" ? "text-sm" : "text-base"} font-semibold leading-tight`}>
+                      {display.itemPrimaryName}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{display.itemSecondaryName}</div>
+                    {viewMode === "cards" ? (
+                      <div className="text-[11px] text-muted-foreground">
+                        {display.metadata.weightGrams ? `${display.metadata.weightGrams}g` : ""}
+                        {display.metadata.calories
+                          ? `${display.metadata.weightGrams ? " · " : ""}${display.metadata.calories} kcal`
+                          : ""}
+                        {display.metadata.ingredients
+                          ? `${display.metadata.weightGrams || display.metadata.calories ? " · " : ""}${display.metadata.ingredients}`
+                          : ""}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      {display.hasValidDiscount ? (
+                        <>
+                          <div className="text-[11px] text-muted-foreground line-through">
+                            {Number(item.price).toLocaleString()} {t("menu.currencySuffix")}
+                          </div>
+                          <div className="font-semibold text-emerald-700">
+                            {display.discountPriceValue?.toLocaleString()} {t("menu.currencySuffix")}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="font-semibold text-primary">
+                          {Number(item.price).toLocaleString()} {t("menu.currencySuffix")}
+                        </div>
+                      )}
+                    </div>
+                    <Badge variant={display.available ? "secondary" : "outline"}>
+                      {display.available ? t("menu.available") : t("menu.unavailable")}
+                    </Badge>
+                  </div>
+
+                  {viewMode === "cards" ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge variant="outline">#{item.id}</Badge>
+                      <Badge variant="outline">{display.categoryLabel}</Badge>
+                      <Badge variant="outline">{getStationLabel(item.station, t)}</Badge>
+                    </div>
+                  ) : null}
+
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => openItemPreview(display.itemPrimaryName, display.imageSrc)}
+                      title={t("menu.previewImage")}
+                      disabled={!display.imageSrc}
+                    >
+                      <Expand className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setQrTarget(item)}
+                      title={t("menu.qr.openQr")}
+                    >
+                      <QrCode className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setItemDialog({ open: true, item })}
+                      title={t("menu.editItem")}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setDeleteTarget(item)}
+                      title={t("menu.deleteItem")}
+                    >
+                      <Trash2 className="h-4 w-4 text-red-600" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -825,6 +1056,19 @@ export default function MenuPage() {
                   {t("menu.qr.print")}
                 </Button>
               </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(imagePreview)} onOpenChange={(open) => !open && setImagePreview(null)}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{t("menu.previewTitle", { name: imagePreview?.name ?? "" })}</DialogTitle>
+          </DialogHeader>
+          {imagePreview ? (
+            <div className="overflow-hidden rounded-lg border bg-muted/20">
+              <img src={imagePreview.url} alt={imagePreview.name} className="max-h-[70vh] w-full object-contain" />
             </div>
           ) : null}
         </DialogContent>

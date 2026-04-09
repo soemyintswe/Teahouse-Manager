@@ -130,6 +130,12 @@
     "pageTitle": "မီနူးစီမံခန့်ခွဲမှု",
     "itemsCount": "Database ထဲတွင် {{count}} ခု",
     "filterStation": "ဌာနအလိုက်စစ်ထုတ်",
+    "viewMode": {
+      "label": "ကြည့်ရှုပုံစံ",
+      "table": "ဇယား",
+      "cards": "ကတ်များ",
+      "thumbnails": "ပုံအသေးများ"
+    },
     "allStations": "ဌာနအားလုံး",
     "addNewItem": "မီနူးအသစ်ထည့်မည်",
     "noCategory": "မီနူးအမျိုးအစားမရှိသေးပါ။ အမျိုးအစားကို အရင်ဖန်တီးပါ။",
@@ -145,6 +151,9 @@
     "descriptionOptional": "ဖော်ပြချက် (optional)",
     "descriptionPlaceholder": "အတိုချုံးဖော်ပြချက်",
     "imageUrlOptional": "ပုံ URL (optional)",
+    "previewImage": "ချဲ့ကြည့်",
+    "previewTitle": "ပုံကြည့်ရန် · {{name}}",
+    "noImage": "ပုံမရှိ",
     "uploadImage": "ပုံတင်မည်",
     "uploadHint": "ပုံဖိုင်တင်ပါ သို့မဟုတ် ပုံ URL ထည့်ပါ",
     "uploadSuccess": "ပုံတင်ပြီးပါပြီ",

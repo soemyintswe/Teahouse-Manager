@@ -130,6 +130,12 @@
     "pageTitle": "Menu Management",
     "itemsCount": "{{count}} items in database",
     "filterStation": "Filter station",
+    "viewMode": {
+      "label": "View mode",
+      "table": "Table",
+      "cards": "Cards",
+      "thumbnails": "Thumbnails"
+    },
     "allStations": "All Stations",
     "addNewItem": "Add New Item",
     "noCategory": "No menu category found. Create category first.",
@@ -145,6 +151,9 @@
     "descriptionOptional": "Description (optional)",
     "descriptionPlaceholder": "Short description",
     "imageUrlOptional": "Image URL (optional)",
+    "previewImage": "Preview",
+    "previewTitle": "Image Preview · {{name}}",
+    "noImage": "No image",
     "uploadImage": "Upload Image",
     "uploadHint": "Upload image file or paste image URL",
     "uploadSuccess": "Image uploaded successfully",
