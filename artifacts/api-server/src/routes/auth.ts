@@ -15,7 +15,16 @@ type GuestLoginBody = {
   tableNumber?: unknown;
 };
 
-const STAFF_ALLOWED_ROLES: AppRole[] = ["waiter", "kitchen", "cashier", "supervisor", "manager", "owner"];
+const STAFF_ALLOWED_ROLES: AppRole[] = [
+  "waiter",
+  "kitchen",
+  "cashier",
+  "cleaner",
+  "room_supervisor",
+  "supervisor",
+  "manager",
+  "owner",
+];
 const DEFAULT_BOOTSTRAP_STAFF = [
   { name: "Owner", role: "owner", phone: "09990000001", email: "owner@teahouse.local", pin: "1111" },
   { name: "Manager", role: "manager", phone: "09990000002", email: "manager@teahouse.local", pin: "2222" },
@@ -23,6 +32,8 @@ const DEFAULT_BOOTSTRAP_STAFF = [
   { name: "Cashier", role: "cashier", phone: "09990000004", email: "cashier@teahouse.local", pin: "4444" },
   { name: "Kitchen", role: "kitchen", phone: "09990000005", email: "kitchen@teahouse.local", pin: "5555" },
   { name: "Waiter", role: "waiter", phone: "09990000006", email: "waiter@teahouse.local", pin: "6666" },
+  { name: "Cleaner", role: "cleaner", phone: "09990000007", email: "cleaner@teahouse.local", pin: "7777" },
+  { name: "Room Supervisor", role: "room_supervisor", phone: "09990000008", email: "room-supervisor@teahouse.local", pin: "8888" },
 ] as const;
 
 function normalizeIdentifier(value: unknown): string {

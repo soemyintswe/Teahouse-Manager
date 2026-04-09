@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import {
   useListMenuCategories,
   useListMenuItems,
   useCreateMenuItem,
   useUpdateMenuItem,
   useDeleteMenuItem,
+  customFetch,
   getListMenuCategoriesQueryKey,
   getListMenuItemsQueryKey,
 } from "@workspace/api-client-react";
@@ -16,7 +17,7 @@ import type {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Plus, Pencil, Trash2, Loader2, UtensilsCrossed, QrCode, Printer, ExternalLink } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, UtensilsCrossed, QrCode, Printer, ExternalLink, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -123,6 +124,43 @@ function parseCustomizationPayload(raw: string | null | undefined): Customizatio
   return {};
 }
 
+function normalizeGoogleDriveImageUrl(input: string): string {
+  const raw = input.trim();
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw);
+    if (url.hostname.includes("drive.google.com")) {
+      const openId = url.searchParams.get("id");
+      if (openId) return `https://drive.google.com/uc?export=view&id=${openId}`;
+
+      const matched = url.pathname.match(/\/file\/d\/([^/]+)/);
+      if (matched?.[1]) return `https://drive.google.com/uc?export=view&id=${matched[1]}`;
+    }
+  } catch {
+    return raw;
+  }
+
+  return raw;
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Unable to read selected file."));
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      const base64 = result.includes(",") ? result.split(",")[1] : result;
+      if (!base64) {
+        reject(new Error("Invalid image file."));
+        return;
+      }
+      resolve(base64);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function getItemMetadata(item: Pick<MenuItem, "customizationOptions">): MenuItemMetadata {
   const payload = parseCustomizationPayload(item.customizationOptions);
   if (payload.meta && typeof payload.meta === "object") {
@@ -173,6 +211,7 @@ function ItemDialog({
   item,
   categories,
   saving,
+  onUploadImage,
   onOpenChange,
   onSubmit,
 }: {
@@ -180,12 +219,15 @@ function ItemDialog({
   item?: MenuItem;
   categories: MenuCategory[];
   saving: boolean;
+  onUploadImage: (file: File) => Promise<string>;
   onOpenChange: (open: boolean) => void;
   onSubmit: (payload: CreateMenuItemBody | UpdateMenuItemBody) => void;
 }) {
   const { t, i18n } = useTranslation();
+  const { toast } = useToast();
   const isMyanmar = i18n.resolvedLanguage === "mm";
   const [form, setForm] = useState<ItemFormState>(() => buildInitialItemForm(item, categories));
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -232,11 +274,30 @@ function ItemDialog({
       station: form.station,
       price: form.price.trim(),
       description: form.description.trim() || undefined,
-      imageUrl: form.imageUrl.trim() || undefined,
+      imageUrl: normalizeGoogleDriveImageUrl(form.imageUrl) || undefined,
       customizationOptions,
       available: form.available ? "true" : "false",
     };
     onSubmit(payload);
+  };
+
+  const handleUploadImage = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = "";
+    setUploadingImage(true);
+    try {
+      const imageUrl = await onUploadImage(file);
+      setForm((prev) => ({ ...prev, imageUrl }));
+    } catch (error) {
+      toast({
+        title: t("menu.uploadFailed"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   return (
@@ -329,11 +390,40 @@ function ItemDialog({
 
           <div className="space-y-1.5">
             <Label>{t("menu.imageUrlOptional")}</Label>
-            <Input
-              value={form.imageUrl}
-              onChange={(e) => setForm((prev) => ({ ...prev, imageUrl: e.target.value }))}
-              placeholder="https://..."
-            />
+            <div className="space-y-2">
+              <Input
+                value={form.imageUrl}
+                onChange={(e) => setForm((prev) => ({ ...prev, imageUrl: e.target.value }))}
+                placeholder="https://drive.google.com/file/d/..."
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Label
+                  htmlFor="menu-image-upload"
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted/40"
+                >
+                  {uploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                  {t("menu.uploadImage")}
+                </Label>
+                <input
+                  id="menu-image-upload"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleUploadImage}
+                  disabled={uploadingImage}
+                />
+                <span className="text-xs text-muted-foreground">{t("menu.uploadHint")}</span>
+              </div>
+              {form.imageUrl.trim().length > 0 ? (
+                <div className="overflow-hidden rounded-md border bg-muted/20 p-1">
+                  <img
+                    src={normalizeGoogleDriveImageUrl(form.imageUrl)}
+                    alt="Menu preview"
+                    className="h-28 w-28 rounded object-cover"
+                  />
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -438,6 +528,25 @@ export default function MenuPage() {
 
   const invalidateItems = () => {
     queryClient.invalidateQueries({ queryKey: getListMenuItemsQueryKey() });
+  };
+
+  const handleUploadImage = async (file: File): Promise<string> => {
+    const base64Data = await fileToBase64(file);
+    const response = await customFetch<{ imageUrl: string; webViewLink?: string }>("/api/menu-images/upload", {
+      method: "POST",
+      responseType: "json",
+      body: JSON.stringify({
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        base64Data,
+      }),
+    });
+    const normalized = normalizeGoogleDriveImageUrl(response.imageUrl || response.webViewLink || "");
+    if (!normalized) {
+      throw new Error("Upload succeeded but image URL is missing.");
+    }
+    toast({ title: t("menu.uploadSuccess") });
+    return normalized;
   };
 
   const handleSaveItem = async (payload: CreateMenuItemBody | UpdateMenuItemBody) => {
@@ -641,6 +750,7 @@ export default function MenuPage() {
         item={itemDialog.item}
         categories={categories}
         saving={createItem.isPending || updateItem.isPending}
+        onUploadImage={handleUploadImage}
         onOpenChange={(open) => setItemDialog((prev) => ({ ...prev, open, item: open ? prev.item : undefined }))}
         onSubmit={handleSaveItem}
       />

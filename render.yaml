@@ -14,12 +14,20 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        value: postgresql://neondb_owner:npg_Bc1YNlDmyX5p@ep-blue-scene-ancrv0zj-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+        sync: false
+      - key: AUTH_SECRET
+        sync: false
       - key: CORS_ORIGINS
         fromService:
           type: web
           name: teahouse-web
           envVarKey: RENDER_EXTERNAL_URL
+      - key: GOOGLE_DRIVE_CLIENT_EMAIL
+        sync: false
+      - key: GOOGLE_DRIVE_PRIVATE_KEY
+        sync: false
+      - key: GOOGLE_DRIVE_FOLDER_ID
+        sync: false
 
   - type: web
     name: teahouse-web

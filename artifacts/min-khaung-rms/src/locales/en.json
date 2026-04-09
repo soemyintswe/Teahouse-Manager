@@ -105,6 +105,13 @@
     "noHallTables": "No tables in hall zone",
     "noAirconTables": "No tables in air-con room"
   },
+  "public": {
+    "badge": "Public Menu",
+    "title": "Taste First, Then Order Fast",
+    "subtitle": "Browse menu previews, prices, and QR codes. Staff and customers can sign in from here.",
+    "loginButton": "User Login",
+    "guestButton": "Table Guest Access"
+  },
   "kitchen": {
     "title": "Kitchen Display System",
     "station": "Station: {{station}}",
@@ -138,6 +145,10 @@
     "descriptionOptional": "Description (optional)",
     "descriptionPlaceholder": "Short description",
     "imageUrlOptional": "Image URL (optional)",
+    "uploadImage": "Upload to Google Drive",
+    "uploadHint": "Upload image file or paste Drive link",
+    "uploadSuccess": "Image uploaded successfully",
+    "uploadFailed": "Image upload failed",
     "discountPriceOptional": "Discount Price (optional)",
     "weightGramsOptional": "Weight (g, optional)",
     "caloriesOptional": "Calories (optional)",
@@ -518,6 +529,8 @@
       "waiter": "Waiter",
       "kitchen": "Kitchen Staff",
       "cashier": "Cashier",
+      "cleaner": "Cleaner",
+      "room_supervisor": "Room Supervisor",
       "supervisor": "Supervisor",
       "manager": "Manager",
       "owner": "Owner"
@@ -526,6 +539,8 @@
       "waiter": "Can manage floor plan and customer orders.",
       "kitchen": "Can view KDS and update kitchen item status.",
       "cashier": "Can process payments and view finance records.",
+      "cleaner": "Can manage dirty/clean table turnover and housekeeping tasks.",
+      "room_supervisor": "Can supervise assigned room operations and service quality.",
       "supervisor": "Can oversee daily operations and menu/inventory updates.",
       "manager": "Can manage staff, settings, and operational modules.",
       "owner": "Full access to all features and user management."

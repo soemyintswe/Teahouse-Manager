@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
 import { db, menuCategoriesTable, menuItemsTable } from "@workspace/db";
 import { requireRoles } from "../lib/auth";
+import { uploadMenuImageToDrive } from "../lib/google-drive";
 import {
   CreateMenuCategoryBody,
   UpdateMenuCategoryParams,
@@ -21,6 +22,33 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+
+type UploadMenuImageBody = {
+  fileName?: unknown;
+  mimeType?: unknown;
+  base64Data?: unknown;
+};
+
+router.post("/menu-images/upload", requireRoles(["supervisor", "manager", "owner"]), async (req, res): Promise<void> => {
+  const body = (req.body ?? {}) as UploadMenuImageBody;
+  const fileName = typeof body.fileName === "string" ? body.fileName.trim() : "";
+  const mimeType = typeof body.mimeType === "string" ? body.mimeType.trim() : "application/octet-stream";
+  const base64Data = typeof body.base64Data === "string" ? body.base64Data.trim() : "";
+
+  if (!fileName || !base64Data) {
+    res.status(400).json({ error: "fileName and base64Data are required." });
+    return;
+  }
+
+  try {
+    const uploaded = await uploadMenuImageToDrive({ fileName, mimeType, base64Data });
+    res.status(201).json(uploaded);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to upload image to Google Drive.",
+    });
+  }
+});
 
 // ─── Categories ───────────────────────────────────────────────────────────────
 router.get("/menu-categories", async (_req, res): Promise<void> => {

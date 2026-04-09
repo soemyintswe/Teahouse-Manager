@@ -351,19 +351,19 @@ export default function OrdersPage() {
   }, [tableIdFromQuery]);
 
   useEffect(() => {
-    if (!isGuest || typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
     const raw = window.localStorage.getItem(GUEST_MENU_VIEW_STORAGE_KEY);
     if (!raw) return;
     const allowed = GUEST_MENU_VIEW_OPTIONS.some((option) => option.value === raw);
     if (allowed) {
       setMenuViewMode(raw as MenuViewMode);
     }
-  }, [isGuest]);
+  }, []);
 
   useEffect(() => {
-    if (!isGuest || typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
     window.localStorage.setItem(GUEST_MENU_VIEW_STORAGE_KEY, menuViewMode);
-  }, [isGuest, menuViewMode]);
+  }, [menuViewMode]);
 
   const historyQueryParams = useMemo(() => {
     if (historyFilter === "today") return { date: todayDate };
@@ -465,7 +465,6 @@ export default function OrdersPage() {
   }, [filteredItems, selectedMenuItemId]);
 
   useEffect(() => {
-    if (!isGuest) return;
     if (filteredItems.length === 0) {
       setSelectedMenuItemId(null);
       return;
@@ -473,7 +472,7 @@ export default function OrdersPage() {
     if (!filteredItems.some((item) => item.id === selectedMenuItemId)) {
       setSelectedMenuItemId(filteredItems[0].id);
     }
-  }, [filteredItems, isGuest, selectedMenuItemId]);
+  }, [filteredItems, selectedMenuItemId]);
 
   const addToCart = (menuItem: MenuItem) => {
     setCart((prev) => {
@@ -762,7 +761,7 @@ export default function OrdersPage() {
 
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-h-0 flex-col gap-3">
-          {isGuest && selectedMenuItem ? (
+          {selectedMenuItem ? (
             <div className="rounded-lg border bg-card p-3">
               <div className="grid gap-3 sm:grid-cols-[168px_minmax(0,1fr)]">
                 <button
@@ -863,22 +862,20 @@ export default function OrdersPage() {
                 </button>
               ))}
             </div>
-            {isGuest ? (
-              <div className="w-full md:w-56">
-                <Select value={menuViewMode} onValueChange={(value) => setMenuViewMode(value as MenuViewMode)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={t("orders.viewMode.label")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {GUEST_MENU_VIEW_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {t(option.labelKey)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
+            <div className="w-full md:w-56">
+              <Select value={menuViewMode} onValueChange={(value) => setMenuViewMode(value as MenuViewMode)}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t("orders.viewMode.label")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {GUEST_MENU_VIEW_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {t(option.labelKey)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="relative">
@@ -901,7 +898,7 @@ export default function OrdersPage() {
                 <UtensilsCrossed className="mb-2 h-10 w-10 opacity-30" />
                 <p>{t("orders.noItemsFound")}</p>
               </div>
-            ) : isGuest && menuViewMode === "details" ? (
+            ) : menuViewMode === "details" ? (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -984,7 +981,7 @@ export default function OrdersPage() {
                   </TableBody>
                 </Table>
               </div>
-            ) : isGuest && menuViewMode === "list" ? (
+            ) : menuViewMode === "list" ? (
               <div className="space-y-2">
                 {filteredItems.map((item) => {
                   const names = getLocalizedMenuNames(item, isMyanmar);
@@ -1040,7 +1037,7 @@ export default function OrdersPage() {
                 })}
               </div>
             ) : (
-              <div className={`grid gap-3 ${isGuest ? getGuestGridClass(menuViewMode) : "md:grid-cols-2 xl:grid-cols-3"}`}>
+              <div className={`grid gap-3 ${getGuestGridClass(menuViewMode)}`}>
                 {filteredItems.map((item) => {
                   const names = getLocalizedMenuNames(item, isMyanmar);
                   const quantityInCart = cart.find((cartItem) => cartItem.menuItemId === item.id)?.quantity ?? 0;

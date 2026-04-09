@@ -43,6 +43,7 @@ import OrderDetailPage from "@/pages/order-detail";
 import CashierPage from "@/pages/cashier";
 import StaffPage from "@/pages/staff";
 import LoginPage from "@/pages/login";
+import PublicHomePage from "@/pages/public-home";
 import NotFound from "@/pages/not-found";
 import { setupAutoUpdate } from "@/lib/mobile-updater";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -287,7 +288,15 @@ function RouterContent() {
   }
 
   if (!user) {
-    return <LoginPage />;
+    return (
+      <Switch>
+        <Route path="/" component={PublicHomePage} />
+        <Route path="/public" component={PublicHomePage} />
+        <Route path="/login" component={LoginPage} />
+        <Route path="/orders" component={LoginPage} />
+        <Route component={LoginPage} />
+      </Switch>
+    );
   }
 
   const guard = (permission: AppPermission, Component: React.ComponentType) => () =>

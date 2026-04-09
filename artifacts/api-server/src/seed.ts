@@ -51,7 +51,7 @@ type MenuItemSeed = {
 
 type StaffSeed = {
   name: string;
-  role: "waiter" | "kitchen" | "cashier" | "supervisor" | "manager" | "owner";
+  role: "waiter" | "kitchen" | "cashier" | "cleaner" | "room_supervisor" | "supervisor" | "manager" | "owner";
   phone: string;
   email: string;
   pin: string;
@@ -95,6 +95,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
     nameMyanmar: "မြန်မာလက်ဖက်ရည်ဆိမ့်",
     station: "tea-coffee",
     description: "Traditional strong tea with condensed milk",
+    imageUrl: "https://images.pexels.com/photos/1493080/pexels-photo-1493080.jpeg?auto=compress&cs=tinysrgb&w=1200",
     price: "1800",
     available: "true",
     sortOrder: 1,
@@ -106,6 +107,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
     nameMyanmar: "ကော်ဖီအမည်း",
     station: "tea-coffee",
     description: "Freshly brewed black coffee",
+    imageUrl: "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg?auto=compress&cs=tinysrgb&w=1200",
     price: "2200",
     available: "true",
     sortOrder: 2,
@@ -117,6 +119,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
     nameMyanmar: "သံပုရာလက်ဖက်ရည်အေး",
     station: "juice",
     description: "Refreshing lemon tea over ice",
+    imageUrl: "https://images.pexels.com/photos/162688/cocktail-summer-party-alcohol-162688.jpeg?auto=compress&cs=tinysrgb&w=1200",
     price: "2500",
     available: "true",
     sortOrder: 3,
@@ -127,6 +130,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
     nameMyanmar: "ရှမ်းခေါက်ဆွဲ",
     station: "kitchen",
     description: "Classic Shan-style rice noodle",
+    imageUrl: "https://images.pexels.com/photos/1279330/pexels-photo-1279330.jpeg?auto=compress&cs=tinysrgb&w=1200",
     price: "3800",
     available: "true",
     sortOrder: 1,
@@ -138,6 +142,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
     nameMyanmar: "မုန့်ဟင်းခါး",
     station: "kitchen",
     description: "Rice noodle in fish broth",
+    imageUrl: "https://images.pexels.com/photos/6646034/pexels-photo-6646034.jpeg?auto=compress&cs=tinysrgb&w=1200",
     price: "3200",
     available: "true",
     sortOrder: 2,
@@ -148,6 +153,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
     nameMyanmar: "နန်းကြီးသုပ်",
     station: "salad",
     description: "Thick rice noodle salad with chicken curry",
+    imageUrl: "https://images.pexels.com/photos/11113196/pexels-photo-11113196.jpeg?auto=compress&cs=tinysrgb&w=1200",
     price: "4200",
     available: "true",
     sortOrder: 3,
@@ -158,6 +164,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
     nameMyanmar: "ကြက်သားထမင်းကြော်",
     station: "kitchen",
     description: "Wok-fried rice with chicken and vegetables",
+    imageUrl: "https://images.pexels.com/photos/7438997/pexels-photo-7438997.jpeg?auto=compress&cs=tinysrgb&w=1200",
     price: "5500",
     available: "true",
     sortOrder: 1,
@@ -169,6 +176,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
     nameMyanmar: "ဝက်သားဟင်းနှင့် ထမင်း",
     station: "kitchen",
     description: "Warm steamed rice served with pork curry",
+    imageUrl: "https://images.pexels.com/photos/674574/pexels-photo-674574.jpeg?auto=compress&cs=tinysrgb&w=1200",
     price: "6200",
     available: "true",
     sortOrder: 2,
@@ -179,6 +187,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
     nameMyanmar: "ဆမူဆာ",
     station: "kitchen",
     description: "Crispy pastry filled with potato",
+    imageUrl: "https://images.pexels.com/photos/9792477/pexels-photo-9792477.jpeg?auto=compress&cs=tinysrgb&w=1200",
     price: "1200",
     available: "true",
     sortOrder: 1,
@@ -189,6 +198,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
     nameMyanmar: "စပရင်းရိုး",
     station: "kitchen",
     description: "Deep-fried vegetable spring roll",
+    imageUrl: "https://images.pexels.com/photos/6646214/pexels-photo-6646214.jpeg?auto=compress&cs=tinysrgb&w=1200",
     price: "1500",
     available: "true",
     sortOrder: 2,
@@ -199,6 +209,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
     nameMyanmar: "အုန်းနို့ကျောက်ကျော",
     station: "juice",
     description: "Chilled coconut jelly dessert",
+    imageUrl: "https://images.pexels.com/photos/4958792/pexels-photo-4958792.jpeg?auto=compress&cs=tinysrgb&w=1200",
     price: "2000",
     available: "true",
     sortOrder: 1,
@@ -209,6 +220,7 @@ const MENU_ITEM_SEEDS: MenuItemSeed[] = [
     nameMyanmar: "သရက်သီးကောက်ညှင်း",
     station: "kitchen",
     description: "Sweet sticky rice served with ripe mango",
+    imageUrl: "https://images.pexels.com/photos/6544379/pexels-photo-6544379.jpeg?auto=compress&cs=tinysrgb&w=1200",
     price: "4500",
     available: "true",
     sortOrder: 2,
@@ -222,6 +234,8 @@ const STAFF_SEEDS: StaffSeed[] = [
   { name: "Cashier", role: "cashier", phone: "09990000004", email: "cashier@teahouse.local", pin: "4444", active: "true" },
   { name: "Kitchen", role: "kitchen", phone: "09990000005", email: "kitchen@teahouse.local", pin: "5555", active: "true" },
   { name: "Waiter", role: "waiter", phone: "09990000006", email: "waiter@teahouse.local", pin: "6666", active: "true" },
+  { name: "Cleaner", role: "cleaner", phone: "09990000007", email: "cleaner@teahouse.local", pin: "7777", active: "true" },
+  { name: "Room Supervisor", role: "room_supervisor", phone: "09990000008", email: "room-supervisor@teahouse.local", pin: "8888", active: "true" },
 ];
 
 function slugify(input: string): string {

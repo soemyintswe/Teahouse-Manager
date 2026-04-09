@@ -105,6 +105,13 @@
     "noHallTables": "Hall Zone တွင် စားပွဲမရှိပါ",
     "noAirconTables": "Air-con Room တွင် စားပွဲမရှိပါ"
   },
+  "public": {
+    "badge": "အများပြည်သူ မီနူး",
+    "title": "အရင်ကြည့်ပြီး လွယ်ကူမြန်ဆန်စွာ မှာယူလိုက်ပါ",
+    "subtitle": "အစားအသောက် Preview ပုံများ၊ ဈေးနှုန်းနှင့် QR များကို ကြည့်ရှုနိုင်သည်။ ဝန်ထမ်းနှင့် ဧည့်သည်များက ဒီနေရာမှ စတင်ဝင်နိုင်သည်။",
+    "loginButton": "User Login",
+    "guestButton": "စားပွဲဧည့်သည်ဝင်ရောက်မှု"
+  },
   "kitchen": {
     "title": "Kitchen Display System",
     "station": "ဌာန: {{station}}",
@@ -138,6 +145,10 @@
     "descriptionOptional": "ဖော်ပြချက် (optional)",
     "descriptionPlaceholder": "အတိုချုံးဖော်ပြချက်",
     "imageUrlOptional": "ပုံ URL (optional)",
+    "uploadImage": "Google Drive သို့ ပုံတင်မည်",
+    "uploadHint": "ပုံဖိုင်တင်ပါ သို့မဟုတ် Drive link ထည့်ပါ",
+    "uploadSuccess": "ပုံတင်ပြီးပါပြီ",
+    "uploadFailed": "ပုံတင်မရပါ",
     "discountPriceOptional": "လျှော့ဈေး (optional)",
     "weightGramsOptional": "အလေးချိန် ဂရမ် (optional)",
     "caloriesOptional": "ကယ်လိုရီ (optional)",
@@ -518,6 +529,8 @@
       "waiter": "စားပွဲထိုးဝန်ထမ်း",
       "kitchen": "မီးဖိုခန်းဝန်ထမ်း",
       "cashier": "ငွေကောင်တာ",
+      "cleaner": "သန့်ရှင်းရေးဝန်ထမ်း",
+      "room_supervisor": "အခန်းကြီးကြပ်ရေးမှူး",
       "supervisor": "ကြီးကြပ်သူ",
       "manager": "ဆိုင်မန်နေဂျာ",
       "owner": "လုပ်ငန်းရှင်"
@@ -526,6 +539,8 @@
       "waiter": "Floor plan နှင့် customer order များကို စီမံနိုင်သည်။",
       "kitchen": "KDS ကိုကြည့်ပြီး မီးဖို item အခြေအနေ update လုပ်နိုင်သည်။",
       "cashier": "ငွေရှင်းလုပ်ငန်းနှင့် finance records များကို ကြည့်နိုင်သည်။",
+      "cleaner": "သန့်ရှင်းရေးစောင့်ဆိုင်းနေသော စားပွဲများကို turnover/cleaning စီမံနိုင်သည်။",
+      "room_supervisor": "သတ်မှတ်ထားသော အခန်း (သို့) ဧရိယာအလိုက် လုပ်ငန်းဆောင်ရွက်မှုကို ကြီးကြပ်နိုင်သည်။",
       "supervisor": "နေ့စဉ်လည်ပတ်မှု၊ menu/inventory ပြင်ဆင်မှုများကို ကြီးကြပ်နိုင်သည်။",
       "manager": "staff, settings နှင့် operational modules များကို စီမံနိုင်သည်။",
       "owner": "အင်္ဂါရပ်အားလုံးနှင့် user management အပြည့်အစုံ အသုံးပြုနိုင်သည်။"

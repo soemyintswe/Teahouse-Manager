@@ -64,6 +64,10 @@ This repo now includes [render.yaml](./render.yaml) for one-click Render Bluepri
 `teahouse-api`:
 - `DATABASE_URL` = your Neon connection string
 - `CORS_ORIGINS` = frontend URL (example: `https://teahouse-web.onrender.com`)
+- `AUTH_SECRET` = long random secret for login tokens
+- `GOOGLE_DRIVE_CLIENT_EMAIL` = service account client email (for menu image upload)
+- `GOOGLE_DRIVE_PRIVATE_KEY` = service account private key (keep `\n` line breaks)
+- `GOOGLE_DRIVE_FOLDER_ID` = optional Drive folder id for uploaded menu images
 
 `teahouse-web`:
 - `VITE_API_BASE_URL` = API URL (example: `https://teahouse-api.onrender.com`)
@@ -93,4 +97,3 @@ pnpm -C artifacts/min-khaung-rms exec cap sync android
 cd artifacts/min-khaung-rms/android
 ./gradlew assembleDebug
 ```
-

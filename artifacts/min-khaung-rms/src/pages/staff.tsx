@@ -53,6 +53,8 @@ const STAFF_ROLE_OPTIONS = [
   "waiter",
   "kitchen",
   "cashier",
+  "cleaner",
+  "room_supervisor",
   "supervisor",
   "manager",
   "owner",
@@ -88,8 +90,10 @@ function getInitialForm(member?: StaffMember): StaffFormState {
 function getRoleBadgeClass(role: string): string {
   if (role === "owner") return "bg-purple-100 text-purple-700 border-purple-300";
   if (role === "manager") return "bg-blue-100 text-blue-700 border-blue-300";
+  if (role === "room_supervisor") return "bg-cyan-100 text-cyan-700 border-cyan-300";
   if (role === "supervisor") return "bg-indigo-100 text-indigo-700 border-indigo-300";
   if (role === "cashier") return "bg-amber-100 text-amber-700 border-amber-300";
+  if (role === "cleaner") return "bg-sky-100 text-sky-700 border-sky-300";
   if (role === "kitchen") return "bg-emerald-100 text-emerald-700 border-emerald-300";
   return "bg-slate-100 text-slate-700 border-slate-300";
 }
