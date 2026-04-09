@@ -582,6 +582,7 @@
     "identifier": "User Name",
     "identifierPlaceholder": "User name / email / phone",
     "pin": "Password",
+    "staffHint": "Staff can login with user name/email/phone and password.",
     "loginButton": "Login",
     "guestHint": "Guests can scan table QR or enter table code manually (e.g. H1, A2).",
     "customerHint": "For online delivery orders, login with your customer phone and password.",

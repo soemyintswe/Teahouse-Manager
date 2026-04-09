@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEventHandler } from "react";
 import { useLocation } from "wouter";
-import { Loader2, LogIn, QrCode, UserRound } from "lucide-react";
+import { Languages, Loader2, LogIn, QrCode, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,8 +63,14 @@ function getGuestLoginErrorMessage(error: unknown, t: (key: string) => string): 
   return error.message;
 }
 
+function modeButtonClass(selected: boolean): string {
+  return selected
+    ? "h-auto min-h-11 whitespace-normal rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 shadow-sm"
+    : "h-auto min-h-11 whitespace-normal rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100";
+}
+
 export default function LoginPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { loginStaff, loginGuest, loginCustomer, changeCustomerPassword, logout } = useAuth();
@@ -84,6 +90,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const queryTableId = useMemo(() => parseTableIdFromSearch(window.location.search), []);
   const queryTableCode = useMemo(() => parseTableCodeFromSearch(window.location.search), []);
+
+  const isMyanmar = i18n.resolvedLanguage === "mm";
+  const nextLanguageLabel = isMyanmar ? t("language.english") : t("language.myanmar");
 
   useEffect(() => {
     if (!queryTableId && !queryTableCode) return;
@@ -253,121 +262,148 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background px-4 py-8">
-      <div className="mx-auto w-full max-w-md rounded-xl border bg-card p-6 shadow-md">
-        <h1 className="text-2xl font-black">{t("auth.title")}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t("auth.subtitle")}</p>
-
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <Button variant={mode === "staff" ? "default" : "outline"} onClick={() => setMode("staff")} disabled={loading}>
-            <LogIn className="mr-1.5 h-4 w-4" />
-            {t("auth.staffLogin")}
-          </Button>
-          <Button variant={mode === "guest" ? "default" : "outline"} onClick={() => setMode("guest")} disabled={loading}>
-            <QrCode className="mr-1.5 h-4 w-4" />
-            {t("auth.guestAccess")}
-          </Button>
-          <Button variant={mode === "customer" ? "default" : "outline"} onClick={() => setMode("customer")} disabled={loading}>
-            <UserRound className="mr-1.5 h-4 w-4" />
-            {t("auth.customerLogin")}
-          </Button>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#ecfdf5_0%,#f8fafc_42%,#ffffff_100%)]">
+      <section className="border-b border-emerald-100 bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-600 text-white">
+        <div className="mx-auto max-w-5xl px-4 py-7 md:px-8 md:py-10">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-3xl font-black md:text-4xl">{t("auth.title")}</h1>
+              <p className="mt-1 max-w-2xl text-sm text-emerald-50 md:text-base">{t("auth.subtitle")}</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-white/30 text-white hover:bg-white/10"
+              onClick={() => void i18n.changeLanguage(isMyanmar ? "en" : "mm")}
+              title={t("language.switchTo", { language: nextLanguageLabel })}
+            >
+              <Languages className="mr-1.5 h-4 w-4" />
+              {isMyanmar ? "MM" : "EN"}
+            </Button>
+          </div>
         </div>
+      </section>
 
-        {mode === "staff" ? (
-          <form className="mt-4 space-y-3" onSubmit={onStaffSubmit}>
-            <div className="space-y-1">
-              <Label>{t("auth.identifier")}</Label>
-              <Input
-                value={identifier}
-                onChange={(event) => setIdentifier(event.target.value)}
-                placeholder={t("auth.identifierPlaceholder")}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>{t("auth.pin")}</Label>
-              <Input
-                type="password"
-                value={pin}
-                onChange={(event) => setPin(event.target.value)}
-                placeholder="••••"
-              />
-            </div>
-            <Button type="submit" disabled={loading || !identifier.trim() || !pin.trim()} className="w-full">
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {t("auth.loginButton")}
-            </Button>
-            <div className="grid grid-cols-2 gap-2">
-              <Button type="button" variant="outline" onClick={() => setLocation("/")}>
-                {t("auth.cancelToHome")}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setLocation("/?register=1")}>
-                {t("public.register.button")}
-              </Button>
-            </div>
-          </form>
-        ) : mode === "guest" ? (
-          <form className="mt-4 space-y-3" onSubmit={onGuestSubmit}>
-            <p className="text-sm text-muted-foreground">{t("auth.guestHint")}</p>
-            <div className="space-y-1">
-              <Label>{t("auth.tableCode")}</Label>
-              <Input
-                type="text"
-                value={tableCodeInput}
-                onChange={(event) => setTableCodeInput(normalizeTableCode(event.target.value))}
-                placeholder="H1 / A2"
-                autoCapitalize="characters"
-              />
-            </div>
-            <Button type="submit" disabled={loading || !tableCodeInput.trim()} className="w-full">
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {t("auth.guestConnectButton")}
-            </Button>
-            <div className="grid grid-cols-2 gap-2">
-              <Button type="button" variant="outline" onClick={() => setLocation("/")}>
-                {t("auth.cancelToHome")}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setLocation("/?register=1")}>
-                {t("public.register.button")}
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <form className="mt-4 space-y-3" onSubmit={onCustomerSubmit}>
-            <p className="text-sm text-muted-foreground">{t("auth.customerHint")}</p>
-            <div className="space-y-1">
-              <Label>{t("auth.customerPhone")}</Label>
-              <Input
-                value={customerPhone}
-                onChange={(event) => setCustomerPhone(event.target.value)}
-                placeholder="09xxxxxxxxx"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>{t("auth.customerPassword")}</Label>
-              <Input
-                type="password"
-                value={customerPassword}
-                onChange={(event) => setCustomerPassword(event.target.value)}
-                placeholder="••••••"
-              />
-            </div>
-            <Button type="submit" disabled={loading || !customerPhone.trim() || !customerPassword.trim()} className="w-full">
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {t("auth.loginButton")}
-            </Button>
-            <div className="grid grid-cols-3 gap-2">
-              <Button type="button" variant="outline" onClick={() => setLocation("/")}>
-                {t("auth.cancelToHome")}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setLocation("/?register=1")}>
-                {t("public.register.button")}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setMode("staff")}>
+      <div className="px-4 py-6 md:px-8 md:py-8">
+        <div className="mx-auto w-full max-w-3xl rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm md:p-6">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <button type="button" className={modeButtonClass(mode === "staff")} onClick={() => setMode("staff")} disabled={loading}>
+              <span className="inline-flex items-center justify-center gap-1.5">
+                <LogIn className="h-4 w-4 shrink-0" />
                 {t("auth.staffLogin")}
+              </span>
+            </button>
+            <button type="button" className={modeButtonClass(mode === "guest")} onClick={() => setMode("guest")} disabled={loading}>
+              <span className="inline-flex items-center justify-center gap-1.5">
+                <QrCode className="h-4 w-4 shrink-0" />
+                {t("public.guestButton")}
+              </span>
+            </button>
+            <button type="button" className={modeButtonClass(mode === "customer")} onClick={() => setMode("customer")} disabled={loading}>
+              <span className="inline-flex items-center justify-center gap-1.5">
+                <UserRound className="h-4 w-4 shrink-0" />
+                {t("public.customerLogin")}
+              </span>
+            </button>
+          </div>
+
+          {mode === "staff" ? (
+            <form className="mt-4 space-y-3" onSubmit={onStaffSubmit}>
+              <p className="text-sm text-muted-foreground">{t("auth.staffHint")}</p>
+              <div className="space-y-1">
+                <Label>{t("auth.identifier")}</Label>
+                <Input
+                  value={identifier}
+                  onChange={(event) => setIdentifier(event.target.value)}
+                  placeholder={t("auth.identifierPlaceholder")}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>{t("auth.pin")}</Label>
+                <Input
+                  type="password"
+                  value={pin}
+                  onChange={(event) => setPin(event.target.value)}
+                  placeholder="••••"
+                />
+              </div>
+              <Button type="submit" disabled={loading || !identifier.trim() || !pin.trim()} className="w-full bg-emerald-700 text-white hover:bg-emerald-800">
+                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {t("auth.loginButton")}
               </Button>
-            </div>
-          </form>
-        )}
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant="outline" onClick={() => setLocation("/")}>
+                  {t("auth.cancelToHome")}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setLocation("/?register=1")}>
+                  {t("public.register.button")}
+                </Button>
+              </div>
+            </form>
+          ) : mode === "guest" ? (
+            <form className="mt-4 space-y-3" onSubmit={onGuestSubmit}>
+              <p className="text-sm text-muted-foreground">{t("auth.guestHint")}</p>
+              <div className="space-y-1">
+                <Label>{t("auth.tableCode")}</Label>
+                <Input
+                  type="text"
+                  value={tableCodeInput}
+                  onChange={(event) => setTableCodeInput(normalizeTableCode(event.target.value))}
+                  placeholder="H1 / A2"
+                  autoCapitalize="characters"
+                />
+              </div>
+              <Button type="submit" disabled={loading || !tableCodeInput.trim()} className="w-full bg-emerald-700 text-white hover:bg-emerald-800">
+                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {t("auth.guestConnectButton")}
+              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant="outline" onClick={() => setLocation("/")}>
+                  {t("auth.cancelToHome")}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setLocation("/?register=1")}>
+                  {t("public.register.button")}
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <form className="mt-4 space-y-3" onSubmit={onCustomerSubmit}>
+              <p className="text-sm text-muted-foreground">{t("auth.customerHint")}</p>
+              <div className="space-y-1">
+                <Label>{t("auth.customerPhone")}</Label>
+                <Input
+                  value={customerPhone}
+                  onChange={(event) => setCustomerPhone(event.target.value)}
+                  placeholder="09xxxxxxxxx"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>{t("auth.customerPassword")}</Label>
+                <Input
+                  type="password"
+                  value={customerPassword}
+                  onChange={(event) => setCustomerPassword(event.target.value)}
+                  placeholder="••••••"
+                />
+              </div>
+              <Button type="submit" disabled={loading || !customerPhone.trim() || !customerPassword.trim()} className="w-full bg-emerald-700 text-white hover:bg-emerald-800">
+                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {t("auth.loginButton")}
+              </Button>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <Button type="button" variant="outline" onClick={() => setLocation("/")}>
+                  {t("auth.cancelToHome")}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setLocation("/?register=1")}>
+                  {t("public.register.button")}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setMode("staff")}>
+                  {t("auth.staffLogin")}
+                </Button>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
 
       <Dialog
