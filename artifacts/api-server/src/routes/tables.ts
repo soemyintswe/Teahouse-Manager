@@ -198,6 +198,10 @@ async function normalizeZoneTableNumbers(zoneCode: string): Promise<number> {
 
   const prefix = choosePreferredPrefix(zoneCode, zoneTables.map((row) => row.tableNumber));
   const ordered = [...zoneTables].sort((a, b) => {
+    const archivedRankDiff =
+      (a.status === "Archived" ? 1 : 0) - (b.status === "Archived" ? 1 : 0);
+    if (archivedRankDiff !== 0) return archivedRankDiff;
+
     const byTableNumber = compareTableNumberForRenumber(a.tableNumber, b.tableNumber);
     if (byTableNumber !== 0) return byTableNumber;
     return a.id - b.id;
