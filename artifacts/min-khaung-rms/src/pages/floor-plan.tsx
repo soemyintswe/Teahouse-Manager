@@ -162,6 +162,35 @@ function getNextTableNumber(baseTableNumber: string, existingTableNumbers: Set<s
   return candidate;
 }
 
+function splitTableNumber(value: string): { prefix: string; number: number | null; suffix: string } {
+  const trimmed = value.trim().toUpperCase();
+  const match = /^([A-Z]+)?(\d+)?(.*)$/.exec(trimmed);
+  if (!match) return { prefix: trimmed, number: null, suffix: "" };
+  const prefix = (match[1] ?? "").trim();
+  const number = match[2] ? Number.parseInt(match[2], 10) : null;
+  const suffix = (match[3] ?? "").trim();
+  return { prefix, number: Number.isFinite(number as number) ? number : null, suffix };
+}
+
+function compareTableNumberAsc(a: string, b: string): number {
+  const left = splitTableNumber(a);
+  const right = splitTableNumber(b);
+
+  const prefixDiff = left.prefix.localeCompare(right.prefix);
+  if (prefixDiff !== 0) return prefixDiff;
+
+  if (left.number != null && right.number != null && left.number !== right.number) {
+    return left.number - right.number;
+  }
+  if (left.number != null && right.number == null) return -1;
+  if (left.number == null && right.number != null) return 1;
+
+  const suffixDiff = left.suffix.localeCompare(right.suffix);
+  if (suffixDiff !== 0) return suffixDiff;
+
+  return a.localeCompare(b);
+}
+
 function getCategoryLabel(category: TableData["category"], t: (key: string, options?: Record<string, unknown>) => string) {
   return t(`category.${category}`);
 }
@@ -738,22 +767,33 @@ export default function FloorPlan() {
   const handleAutoArrangeSelectedTables = useCallback(async () => {
     if (selectedLayoutTables.length < 2 || savingLayoutTableId !== null || isAligningLayout) return;
 
-    const ordered = selectedLayoutTables
+    const ordered = [...selectedLayoutTables]
+      .sort((a, b) => compareTableNumberAsc(a.tableNumber, b.tableNumber))
       .map((table) => ({
         table,
         ...getWorkingPosition(table),
-      }))
-      .sort((a, b) => {
-        const yDiff = a.y - b.y;
-        if (Math.abs(yDiff) > 8) return yDiff;
-        return a.x - b.x;
-      });
+      }));
 
     const minX = Math.min(...ordered.map((item) => item.x));
     const minY = Math.min(...ordered.map((item) => item.y));
-    const columns = Math.max(1, Math.ceil(Math.sqrt(ordered.length)));
-    const spacingX = TABLE_CARD_WIDTH + 20;
-    const spacingY = TABLE_CARD_HEIGHT + 20;
+
+    const count = ordered.length;
+    const availableWidth = FLOOR_CANVAS_WIDTH - TABLE_CARD_WIDTH;
+    const availableHeight = FLOOR_CANVAS_HEIGHT - TABLE_CARD_HEIGHT;
+    const maxRowsNoOverlap = Math.max(1, Math.floor(availableHeight / TABLE_CARD_HEIGHT) + 1);
+    const maxColsNoOverlap = Math.max(1, Math.floor(availableWidth / TABLE_CARD_WIDTH) + 1);
+
+    const rows = Math.min(maxRowsNoOverlap, count);
+    const columns = Math.min(maxColsNoOverlap, Math.max(1, Math.ceil(count / rows)));
+    const resolvedRows = Math.max(1, Math.ceil(count / columns));
+
+    const stepX = columns > 1 ? availableWidth / (columns - 1) : 0;
+    const stepY = resolvedRows > 1 ? availableHeight / (resolvedRows - 1) : 0;
+
+    const layoutWidth = columns > 1 ? stepX * (columns - 1) : 0;
+    const layoutHeight = resolvedRows > 1 ? stepY * (resolvedRows - 1) : 0;
+    const startX = Math.max(0, Math.min(minX, availableWidth - layoutWidth));
+    const startY = Math.max(0, Math.min(minY, availableHeight - layoutHeight));
 
     const arrangedById = new Map<number, { x: number; y: number }>();
     ordered.forEach((item, index) => {
@@ -761,7 +801,7 @@ export default function FloorPlan() {
       const col = index % columns;
       arrangedById.set(
         item.table.id,
-        clampPosition(Math.round(minX + col * spacingX), Math.round(minY + row * spacingY)),
+        clampPosition(Math.round(startX + col * stepX), Math.round(startY + row * stepY)),
       );
     });
 
