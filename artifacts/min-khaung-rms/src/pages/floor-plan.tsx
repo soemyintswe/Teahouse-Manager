@@ -414,6 +414,7 @@ export default function FloorPlan() {
   const [draftPositions, setDraftPositions] = useState<Record<number, { x: number; y: number }>>({});
   const [savingLayoutTableId, setSavingLayoutTableId] = useState<number | null>(null);
   const [isAligningLayout, setIsAligningLayout] = useState(false);
+  const [isRenumbering, setIsRenumbering] = useState(false);
   const [selectedLayoutTableIds, setSelectedLayoutTableIds] = useState<number[]>([]);
   const [suppressLayoutClickTableId, setSuppressLayoutClickTableId] = useState<number | null>(null);
 
@@ -1035,6 +1036,36 @@ export default function FloorPlan() {
     await duplicateTablesWithPositions(selectedTables, nextPositions);
   }, [clampPosition, duplicateTablesWithPositions, roomTables, selectedLayoutTableIds, selectedRoomCode]);
 
+  const handleRenumberTables = useCallback(async (scope: "room" | "all") => {
+    if (isRenumbering) return;
+    if (scope === "room" && !selectedRoomCode) return;
+
+    try {
+      setIsRenumbering(true);
+      const payload = scope === "room" ? { zone: selectedRoomCode } : {};
+      const response = await customFetch<{ updated: number; zones: string[] }>("/api/tables/renumber", {
+        method: "POST",
+        responseType: "json",
+        body: JSON.stringify(payload),
+      });
+      await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
+      toast({
+        title:
+          scope === "room"
+            ? t("floorPlan.renumberRoomSuccess", { count: response.updated })
+            : t("floorPlan.renumberAllSuccess", { count: response.updated }),
+      });
+    } catch (error) {
+      toast({
+        title: t("floorPlan.renumberFailedTitle"),
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setIsRenumbering(false);
+    }
+  }, [isRenumbering, queryClient, selectedRoomCode, t, toast]);
+
   const handleSelectAllTablesInRoom = useCallback(() => {
     if (!isLayoutEditMode || selectedRoomTableIds.length === 0) return;
     setSelectedLayoutTableIds((prev) => {
@@ -1330,7 +1361,7 @@ export default function FloorPlan() {
               variant={allTablesSelectedInRoom ? "secondary" : "outline"}
               size="sm"
               onClick={handleSelectAllTablesInRoom}
-              disabled={selectedRoomTableIds.length === 0 || savingLayoutTableId !== null || isAligningLayout}
+              disabled={selectedRoomTableIds.length === 0 || savingLayoutTableId !== null || isAligningLayout || isRenumbering}
             >
               {t("floorPlan.selectAll")}
             </Button>
@@ -1338,9 +1369,27 @@ export default function FloorPlan() {
               variant="outline"
               size="sm"
               onClick={handleClearSelectedTablesInRoom}
-              disabled={selectedLayoutCount === 0 || savingLayoutTableId !== null || isAligningLayout}
+              disabled={selectedLayoutCount === 0 || savingLayoutTableId !== null || isAligningLayout || isRenumbering}
             >
               {t("floorPlan.clearSelection")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { void handleRenumberTables("room"); }}
+              disabled={!selectedRoomCode || savingLayoutTableId !== null || isAligningLayout || isRenumbering}
+            >
+              {isRenumbering ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+              {t("floorPlan.renumberRoom")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { void handleRenumberTables("all"); }}
+              disabled={savingLayoutTableId !== null || isAligningLayout || isRenumbering}
+            >
+              {isRenumbering ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+              {t("floorPlan.renumberAllRooms")}
             </Button>
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-5 xl:grid-cols-9">

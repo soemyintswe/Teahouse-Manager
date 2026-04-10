@@ -26,6 +26,9 @@ type CreateRoomPayload = {
 };
 
 type UpdateRoomPayload = Partial<CreateRoomPayload>;
+type RenumberTablesPayload = {
+  zone?: unknown;
+};
 
 function asObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -137,6 +140,12 @@ function getZonePrefix(zoneCode: string): string {
   return "T";
 }
 
+function getLeadingLetters(value: string): string | null {
+  const match = /^([A-Z]+)/.exec(value.trim().toUpperCase());
+  if (!match) return null;
+  return match[1] ?? null;
+}
+
 function getTailNumber(value: string): number | null {
   const match = /(\d+)$/.exec(value.trim().toUpperCase());
   if (!match) return null;
@@ -144,11 +153,74 @@ function getTailNumber(value: string): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+function choosePreferredPrefix(zoneCode: string, tableNumbers: string[]): string {
+  const fallback = getZonePrefix(zoneCode);
+  const frequency = new Map<string, number>();
+
+  for (const tableNumber of tableNumbers) {
+    const prefix = getLeadingLetters(tableNumber);
+    if (!prefix) continue;
+    frequency.set(prefix, (frequency.get(prefix) ?? 0) + 1);
+  }
+
+  if (frequency.size === 0) return fallback;
+
+  const sorted = [...frequency.entries()].sort((a, b) => {
+    const diff = b[1] - a[1];
+    if (diff !== 0) return diff;
+    return a[0].localeCompare(b[0]);
+  });
+
+  return sorted[0]?.[0] ?? fallback;
+}
+
+function compareTableNumberForRenumber(a: string, b: string): number {
+  const left = getTailNumber(a);
+  const right = getTailNumber(b);
+
+  if (left != null && right != null && left !== right) {
+    return left - right;
+  }
+  if (left != null && right == null) return -1;
+  if (left == null && right != null) return 1;
+
+  const leftPrefix = getLeadingLetters(a) ?? "";
+  const rightPrefix = getLeadingLetters(b) ?? "";
+  const prefixDiff = leftPrefix.localeCompare(rightPrefix);
+  if (prefixDiff !== 0) return prefixDiff;
+
+  return a.localeCompare(b, undefined, { numeric: true });
+}
+
+async function normalizeZoneTableNumbers(zoneCode: string): Promise<number> {
+  const zoneTables = await db.select().from(tablesTable).where(eq(tablesTable.zone, zoneCode));
+  if (zoneTables.length === 0) return 0;
+
+  const prefix = choosePreferredPrefix(zoneCode, zoneTables.map((row) => row.tableNumber));
+  const ordered = [...zoneTables].sort((a, b) => {
+    const byTableNumber = compareTableNumberForRenumber(a.tableNumber, b.tableNumber);
+    if (byTableNumber !== 0) return byTableNumber;
+    return a.id - b.id;
+  });
+
+  let updatedCount = 0;
+  for (let i = 0; i < ordered.length; i += 1) {
+    const row = ordered[i];
+    const nextTableNumber = `${prefix}${i + 1}`;
+    if (row.tableNumber === nextTableNumber) continue;
+    await db.update(tablesTable).set({ tableNumber: nextTableNumber }).where(eq(tablesTable.id, row.id));
+    updatedCount += 1;
+  }
+
+  return updatedCount;
+}
+
 async function resolveAutoTableNumber(zoneCode: string, requested: string | null | undefined, excludeId?: number): Promise<string> {
-  const prefix = getZonePrefix(zoneCode);
   const requestedNumber = requested ? getTailNumber(requested) : null;
 
-  const rows = await db.select({ id: tablesTable.id, tableNumber: tablesTable.tableNumber }).from(tablesTable);
+  const rows = await db.select({ id: tablesTable.id, zone: tablesTable.zone, tableNumber: tablesTable.tableNumber }).from(tablesTable);
+  const sameZoneRows = rows.filter((row) => (excludeId == null || row.id !== excludeId) && row.zone === zoneCode);
+  const prefix = choosePreferredPrefix(zoneCode, sameZoneRows.map((row) => row.tableNumber));
   const usedByPrefix = new Set<number>();
   const usedNumbers = new Set<string>();
 
@@ -239,17 +311,7 @@ router.patch("/rooms/:id", requireRoles(ADMIN_ROLES), async (req, res): Promise<
       .update(tablesTable)
       .set({ zone: payload.code })
       .where(eq(tablesTable.zone, currentRoom.code));
-
-    const movedTables = await db.select().from(tablesTable).where(eq(tablesTable.zone, payload.code));
-    for (const moved of movedTables) {
-      const nextTableNumber = await resolveAutoTableNumber(payload.code, moved.tableNumber, moved.id);
-      if (nextTableNumber !== moved.tableNumber) {
-        await db
-          .update(tablesTable)
-          .set({ tableNumber: nextTableNumber })
-          .where(eq(tablesTable.id, moved.id));
-      }
-    }
+    await normalizeZoneTableNumbers(payload.code);
   }
 
   res.json(toIsoRoom(updated));
@@ -303,6 +365,7 @@ router.post("/tables", requireRoles(ADMIN_ROLES), async (req, res): Promise<void
 
   const qrCode = `table-${tableNumber}-${Date.now()}`;
   const [table] = await db.insert(tablesTable).values({ ...parsed.data, tableNumber, qrCode }).returning();
+  await normalizeZoneTableNumbers(table.zone);
   res.status(201).json(GetTableResponse.parse(toIsoTable(table)));
 });
 
@@ -363,6 +426,10 @@ router.patch("/tables/:id", requireRoles(ADMIN_ROLES), async (req, res): Promise
 
   const [table] = await db.update(tablesTable).set(payload).where(eq(tablesTable.id, params.data.id)).returning();
   if (!table) { res.status(404).json({ error: "Table not found" }); return; }
+  if ((payload.zone ?? currentTable.zone) !== currentTable.zone) {
+    await normalizeZoneTableNumbers(currentTable.zone);
+  }
+  await normalizeZoneTableNumbers(payload.zone ?? currentTable.zone);
   res.json(UpdateTableResponse.parse(toIsoTable(table)));
 });
 
@@ -371,7 +438,31 @@ router.delete("/tables/:id", requireRoles(ADMIN_ROLES), async (req, res): Promis
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const [table] = await db.delete(tablesTable).where(eq(tablesTable.id, params.data.id)).returning();
   if (!table) { res.status(404).json({ error: "Table not found" }); return; }
+  await normalizeZoneTableNumbers(table.zone);
   res.sendStatus(204);
+});
+
+router.post("/tables/renumber", requireRoles(ADMIN_ROLES), async (req, res): Promise<void> => {
+  const body = (req.body ?? {}) as RenumberTablesPayload;
+  const zone = typeof body.zone === "string" ? body.zone.trim() : "";
+
+  if (zone) {
+    if (!(await validateRoomCodeExists(zone))) {
+      res.status(400).json({ error: "Room does not exist for this zone code." });
+      return;
+    }
+    const updated = await normalizeZoneTableNumbers(zone);
+    res.json({ updated, zones: [zone] });
+    return;
+  }
+
+  const all = await db.select({ zone: tablesTable.zone }).from(tablesTable);
+  const uniqueZones = [...new Set(all.map((row) => row.zone))].sort();
+  let totalUpdated = 0;
+  for (const zoneCode of uniqueZones) {
+    totalUpdated += await normalizeZoneTableNumbers(zoneCode);
+  }
+  res.json({ updated: totalUpdated, zones: uniqueZones });
 });
 
 export default router;
