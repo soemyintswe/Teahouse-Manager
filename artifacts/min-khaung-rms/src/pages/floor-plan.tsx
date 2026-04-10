@@ -176,14 +176,14 @@ function compareTableNumberAsc(a: string, b: string): number {
   const left = splitTableNumber(a);
   const right = splitTableNumber(b);
 
-  const prefixDiff = left.prefix.localeCompare(right.prefix);
-  if (prefixDiff !== 0) return prefixDiff;
-
   if (left.number != null && right.number != null && left.number !== right.number) {
     return left.number - right.number;
   }
   if (left.number != null && right.number == null) return -1;
   if (left.number == null && right.number != null) return 1;
+
+  const prefixDiff = left.prefix.localeCompare(right.prefix);
+  if (prefixDiff !== 0) return prefixDiff;
 
   const suffixDiff = left.suffix.localeCompare(right.suffix);
   if (suffixDiff !== 0) return suffixDiff;
