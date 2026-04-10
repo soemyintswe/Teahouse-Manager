@@ -44,6 +44,7 @@ import OrderDetailPage from "@/pages/order-detail";
 import CashierPage from "@/pages/cashier";
 import StaffPage from "@/pages/staff";
 import InventoryPage from "@/pages/inventory";
+import FinancePage from "@/pages/finance";
 import LoginPage from "@/pages/login";
 import PublicHomePage from "@/pages/public-home";
 import DeliveryOrdersPage from "@/pages/delivery-orders";
@@ -328,7 +329,7 @@ function RouterContent() {
         <Route path="/inventory" component={guard("inventory", InventoryPage)} />
         <Route path="/staff" component={guard("staff", StaffPage)} />
         <Route path="/delivery-orders" component={guard("deliveryOrders", DeliveryOrdersPage)} />
-        <Route path="/finance" component={guard("finance", () => <StubPage title={t("nav.finance")} />)} />
+        <Route path="/finance" component={guard("finance", FinancePage)} />
         <Route path="/settings" component={guard("settings", () => <StubPage title={t("nav.settings")} />)} />
         <Route path="/login" component={() => <AccessDenied />} />
         <Route component={NotFound} />

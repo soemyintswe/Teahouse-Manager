@@ -621,6 +621,59 @@
       "cb_pay": "CB Pay"
     }
   },
+  "finance": {
+    "title": "Finance",
+    "subtitle": "Track sales, income, expenses, and cash flow.",
+    "filters": "Filters",
+    "startDate": "Start Date",
+    "endDate": "End Date",
+    "source": "Source",
+    "sourceAll": "All Sources",
+    "sourcePayment": "Payment",
+    "sourceManual": "Manual",
+    "type": "Type",
+    "typeAll": "All Types",
+    "range": {
+      "today": "Today",
+      "last7": "Last 7 Days",
+      "last30": "Last 30 Days"
+    },
+    "cards": {
+      "sales": "Sales Revenue",
+      "manualIncome": "Manual Income",
+      "manualExpense": "Manual Expense",
+      "netCash": "Net Cash Flow"
+    },
+    "addTitle": "Add Manual Transaction",
+    "readOnlyHint": "Your role has view-only access. Ask supervisor/manager/owner to add transactions.",
+    "amount": "Amount",
+    "description": "Description",
+    "reference": "Reference",
+    "referencePlaceholder": "Voucher #, invoice #, note...",
+    "addAction": "Add Transaction",
+    "addSuccess": "Transaction added successfully",
+    "addFailed": "Failed to add transaction",
+    "validation": "Type, amount (>0), and description are required.",
+    "ledgerTitle": "Finance Ledger",
+    "totalRecords": "{{count}} records",
+    "empty": "No finance records for this filter.",
+    "paymentMethod": "Payment",
+    "columns": {
+      "date": "Date/Time",
+      "source": "Source",
+      "type": "Type",
+      "description": "Description",
+      "reference": "Reference",
+      "amount": "Amount"
+    },
+    "types": {
+      "sale": "Sale",
+      "deposit": "Deposit",
+      "income": "Income",
+      "expense": "Expense",
+      "withdrawal": "Withdrawal"
+    }
+  },
   "auth": {
     "title": "Sign In",
     "subtitle": "Login with staff account or enter as table guest.",
