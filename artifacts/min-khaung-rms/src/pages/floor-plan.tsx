@@ -509,6 +509,15 @@ export default function FloorPlan() {
     () => roomTables.filter((table) => selectedLayoutTableIds.includes(table.id)),
     [roomTables, selectedLayoutTableIds],
   );
+  const selectedRoomTableIds = useMemo(
+    () => roomTables.map((table) => table.id),
+    [roomTables],
+  );
+  const allTablesSelectedInRoom = useMemo(() => {
+    if (selectedRoomTableIds.length === 0) return false;
+    const selectedSet = new Set(selectedLayoutTableIds);
+    return selectedRoomTableIds.every((id) => selectedSet.has(id));
+  }, [selectedLayoutTableIds, selectedRoomTableIds]);
 
   const counts = {
     available: activeServiceTables.filter((table) => table.occupancyStatus === "available").length,
@@ -986,6 +995,21 @@ export default function FloorPlan() {
     await duplicateTablesWithPositions(selectedTables, nextPositions);
   }, [clampPosition, duplicateTablesWithPositions, roomTables, selectedLayoutTableIds, selectedRoomCode]);
 
+  const handleSelectAllTablesInRoom = useCallback(() => {
+    if (!isLayoutEditMode || selectedRoomTableIds.length === 0) return;
+    setSelectedLayoutTableIds((prev) => {
+      const next = new Set(prev);
+      for (const id of selectedRoomTableIds) next.add(id);
+      return [...next];
+    });
+  }, [isLayoutEditMode, selectedRoomTableIds]);
+
+  const handleClearSelectedTablesInRoom = useCallback(() => {
+    if (!isLayoutEditMode || selectedRoomTableIds.length === 0) return;
+    const roomSet = new Set(selectedRoomTableIds);
+    setSelectedLayoutTableIds((prev) => prev.filter((id) => !roomSet.has(id)));
+  }, [isLayoutEditMode, selectedRoomTableIds]);
+
   const getLatestTableOrder = useCallback(async (tableId: number, status: string): Promise<SimpleOrder | null> => {
     try {
       const orders = await customFetch<SimpleOrder[]>(
@@ -1261,6 +1285,24 @@ export default function FloorPlan() {
               ? t("floorPlan.layoutSaving")
               : t("floorPlan.layoutEditHint", { count: selectedLayoutCount })}
           </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button
+              variant={allTablesSelectedInRoom ? "secondary" : "outline"}
+              size="sm"
+              onClick={handleSelectAllTablesInRoom}
+              disabled={selectedRoomTableIds.length === 0 || savingLayoutTableId !== null || isAligningLayout}
+            >
+              {t("floorPlan.selectAll")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearSelectedTablesInRoom}
+              disabled={selectedLayoutCount === 0 || savingLayoutTableId !== null || isAligningLayout}
+            >
+              {t("floorPlan.clearSelection")}
+            </Button>
+          </div>
           <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-5 xl:grid-cols-9">
             {(
               [
@@ -1278,7 +1320,7 @@ export default function FloorPlan() {
                 key={action}
                 variant="outline"
                 size="sm"
-                className="w-full"
+                className="h-auto w-full whitespace-normal px-2 py-1.5 text-xs leading-tight"
                 onClick={() => {
                   void handleAlignSelectedTables(action);
                 }}
@@ -1298,7 +1340,7 @@ export default function FloorPlan() {
             <Button
               variant="outline"
               size="sm"
-              className="w-full"
+              className="h-auto w-full whitespace-normal px-2 py-1.5 text-xs leading-tight"
               onClick={() => {
                 void handleAutoArrangeSelectedTables();
               }}
