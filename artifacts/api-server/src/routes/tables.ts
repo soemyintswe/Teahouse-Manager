@@ -1,7 +1,16 @@
 import { Router, type IRouter } from "express";
 import { and, count, eq, inArray } from "drizzle-orm";
-import { billingAuditLogsTable, db, ordersTable, roomsTable, tableMergeGroupsTable, tablesTable } from "@workspace/db";
+import {
+  billingAuditLogsTable,
+  db,
+  ordersTable,
+  roomsTable,
+  tableMergeGroupsTable,
+  tableSeatSessionsTable,
+  tablesTable,
+} from "@workspace/db";
 import { canAccessTable, requireAuth, requireRoles } from "../lib/auth";
+import { syncTableOccupancyFromSeatSessions } from "../lib/seat-sessions";
 import {
   CreateTableBody,
   GetTableParams,
@@ -36,6 +45,18 @@ type MergeTablesPayload = {
 };
 type ReleaseMergePayload = {
   staffId?: unknown;
+};
+type CreateSeatSessionPayload = {
+  slotCode?: unknown;
+  groupName?: unknown;
+  notes?: unknown;
+  staffId?: unknown;
+};
+type UpdateSeatSessionPayload = {
+  status?: unknown;
+  currentOrderId?: unknown;
+  notes?: unknown;
+  groupName?: unknown;
 };
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -155,6 +176,34 @@ function computeDistance(left: { posX: number; posY: number }, right: { posX: nu
   const dx = left.posX - right.posX;
   const dy = left.posY - right.posY;
   return Math.sqrt((dx * dx) + (dy * dy));
+}
+
+const SEAT_SESSION_STATUSES = ["active", "payment_pending", "paid", "cleaning", "closed"] as const;
+type SeatSessionStatus = (typeof SEAT_SESSION_STATUSES)[number];
+
+function parseSeatSessionStatus(value: unknown): SeatSessionStatus | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if ((SEAT_SESSION_STATUSES as readonly string[]).includes(normalized)) {
+    return normalized as SeatSessionStatus;
+  }
+  return null;
+}
+
+function resolveNextSlotCode(existing: string[]): string {
+  const used = new Set(
+    existing
+      .map((slot) => {
+        const match = /^S(\d+)$/i.exec(slot.trim());
+        if (!match) return null;
+        const parsed = Number.parseInt(match[1], 10);
+        return Number.isFinite(parsed) ? parsed : null;
+      })
+      .filter((value): value is number => value != null),
+  );
+  let next = 1;
+  while (used.has(next)) next += 1;
+  return `S${next}`;
 }
 
 function toIsoTable(table: typeof tablesTable.$inferSelect) {
@@ -421,7 +470,7 @@ router.post("/tables", requireRoles(ADMIN_ROLES), async (req, res): Promise<void
 
 router.get(
   "/tables/merge-groups",
-  requireRoles(["waiter", "cashier", "supervisor", "manager", "owner"]),
+  requireRoles(["waiter", "cashier", "cleaner", "supervisor", "manager", "owner"]),
   async (req, res): Promise<void> => {
     const status = typeof req.query.status === "string" ? req.query.status.trim().toLowerCase() : "";
     const groups = status
@@ -683,6 +732,276 @@ router.post(
       const message = error instanceof Error ? error.message : "Failed to release merge group.";
       res.status(statusCode).json({ error: message });
     }
+  },
+);
+
+router.get(
+  "/tables/seat-sessions",
+  requireRoles(["waiter", "cashier", "cleaner", "supervisor", "manager", "owner"]),
+  async (req, res): Promise<void> => {
+    const tableId = parseInteger(req.query.tableId);
+    const status = parseSeatSessionStatus(req.query.status);
+    const limit = parseInteger(req.query.limit);
+
+    const conditions = [];
+    if (tableId && tableId > 0) conditions.push(eq(tableSeatSessionsTable.tableId, tableId));
+    if (status) conditions.push(eq(tableSeatSessionsTable.status, status));
+
+    const rows = await (conditions.length > 0
+      ? db
+          .select()
+          .from(tableSeatSessionsTable)
+          .where(and(...conditions))
+          .orderBy(tableSeatSessionsTable.createdAt)
+          .limit(limit && limit > 0 ? Math.min(limit, 500) : 200)
+      : db
+          .select()
+          .from(tableSeatSessionsTable)
+          .orderBy(tableSeatSessionsTable.createdAt)
+          .limit(limit && limit > 0 ? Math.min(limit, 500) : 200));
+
+    res.json(rows.map((row) => ({
+      ...row,
+      openedAt: row.openedAt.toISOString(),
+      closedAt: row.closedAt?.toISOString() ?? null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    })));
+  },
+);
+
+router.get(
+  "/tables/:id/seat-sessions",
+  requireRoles(["waiter", "cashier", "cleaner", "supervisor", "manager", "owner"]),
+  async (req, res): Promise<void> => {
+    const tableId = parseId(req.params.id);
+    if (!Number.isFinite(tableId) || tableId <= 0) {
+      res.status(400).json({ error: "Invalid table id." });
+      return;
+    }
+
+    const [table] = await db.select().from(tablesTable).where(eq(tablesTable.id, tableId));
+    if (!table) {
+      res.status(404).json({ error: "Table not found." });
+      return;
+    }
+
+    const sessions = await db
+      .select()
+      .from(tableSeatSessionsTable)
+      .where(eq(tableSeatSessionsTable.tableId, table.id))
+      .orderBy(tableSeatSessionsTable.openedAt);
+
+    res.json(sessions.map((session) => ({
+      ...session,
+      openedAt: session.openedAt.toISOString(),
+      closedAt: session.closedAt?.toISOString() ?? null,
+      createdAt: session.createdAt.toISOString(),
+      updatedAt: session.updatedAt.toISOString(),
+    })));
+  },
+);
+
+router.post(
+  "/tables/:id/seat-sessions",
+  requireRoles(["waiter", "cashier", "supervisor", "manager", "owner"]),
+  async (req, res): Promise<void> => {
+    const tableId = parseId(req.params.id);
+    if (!Number.isFinite(tableId) || tableId <= 0) {
+      res.status(400).json({ error: "Invalid table id." });
+      return;
+    }
+    const body = (req.body ?? {}) as CreateSeatSessionPayload;
+    const explicitSlotCode = typeof body.slotCode === "string" ? body.slotCode.trim().toUpperCase() : "";
+    const groupName = typeof body.groupName === "string" ? body.groupName.trim() : "";
+    const notes = typeof body.notes === "string" ? body.notes.trim() : "";
+    const staffId = parseInteger(body.staffId) ?? req.auth?.staffId ?? null;
+
+    const [table] = await db.select().from(tablesTable).where(eq(tablesTable.id, tableId));
+    if (!table) {
+      res.status(404).json({ error: "Table not found." });
+      return;
+    }
+    if (table.status !== "Active") {
+      res.status(409).json({ error: "Seat sessions can only be created for active tables." });
+      return;
+    }
+
+    const existing = await db
+      .select()
+      .from(tableSeatSessionsTable)
+      .where(eq(tableSeatSessionsTable.tableId, table.id));
+    const activeSessions = existing.filter((session) => session.status !== "closed");
+    if (activeSessions.length >= 8) {
+      res.status(409).json({ error: "Maximum 8 active seat sessions per table." });
+      return;
+    }
+
+    const slotCode = explicitSlotCode || resolveNextSlotCode(existing.map((session) => session.slotCode));
+    const duplicateSlot = activeSessions.some((session) => session.slotCode.toUpperCase() === slotCode.toUpperCase());
+    if (duplicateSlot) {
+      res.status(409).json({ error: "Seat slot code is already in use for this table." });
+      return;
+    }
+
+    const [created] = await db
+      .insert(tableSeatSessionsTable)
+      .values({
+        tableId: table.id,
+        slotCode,
+        groupName: groupName || null,
+        status: "active",
+        notes: notes || null,
+        autoManaged: true,
+      })
+      .returning();
+
+    await syncTableOccupancyFromSeatSessions(table.id);
+    await db.insert(billingAuditLogsTable).values({
+      operation: "seat_session_open",
+      tableIds: JSON.stringify([table.id]),
+      detail: JSON.stringify({
+        sessionId: created.id,
+        slotCode: created.slotCode,
+        groupName: created.groupName,
+      }),
+      staffId,
+    });
+
+    res.status(201).json({
+      ...created,
+      openedAt: created.openedAt.toISOString(),
+      closedAt: created.closedAt?.toISOString() ?? null,
+      createdAt: created.createdAt.toISOString(),
+      updatedAt: created.updatedAt.toISOString(),
+    });
+  },
+);
+
+router.patch(
+  "/tables/:id/seat-sessions/:sessionId",
+  requireRoles(["waiter", "cashier", "supervisor", "manager", "owner"]),
+  async (req, res): Promise<void> => {
+    const tableId = parseId(req.params.id);
+    const sessionId = parseId(req.params.sessionId);
+    if (!Number.isFinite(tableId) || tableId <= 0 || !Number.isFinite(sessionId) || sessionId <= 0) {
+      res.status(400).json({ error: "Invalid table/session id." });
+      return;
+    }
+
+    const body = (req.body ?? {}) as UpdateSeatSessionPayload;
+    const [existing] = await db
+      .select()
+      .from(tableSeatSessionsTable)
+      .where(and(eq(tableSeatSessionsTable.id, sessionId), eq(tableSeatSessionsTable.tableId, tableId)));
+    if (!existing) {
+      res.status(404).json({ error: "Seat session not found." });
+      return;
+    }
+
+    const status = body.status === undefined ? undefined : parseSeatSessionStatus(body.status);
+    if (body.status !== undefined && !status) {
+      res.status(400).json({ error: "Invalid seat session status." });
+      return;
+    }
+
+    const payload: Partial<typeof tableSeatSessionsTable.$inferInsert> = {};
+    if (status) payload.status = status;
+    if (body.currentOrderId !== undefined) {
+      const currentOrderId = parseInteger(body.currentOrderId);
+      if (currentOrderId != null && currentOrderId <= 0) {
+        res.status(400).json({ error: "currentOrderId must be null or a positive number." });
+        return;
+      }
+      payload.currentOrderId = currentOrderId ?? null;
+    }
+    if (typeof body.notes === "string") payload.notes = body.notes.trim() || null;
+    if (typeof body.groupName === "string") payload.groupName = body.groupName.trim() || null;
+    if (status === "closed") {
+      payload.closedAt = new Date();
+      payload.currentOrderId = payload.currentOrderId ?? null;
+    }
+
+    if (Object.keys(payload).length === 0) {
+      res.status(400).json({ error: "At least one field is required." });
+      return;
+    }
+
+    const [updated] = await db
+      .update(tableSeatSessionsTable)
+      .set(payload)
+      .where(eq(tableSeatSessionsTable.id, existing.id))
+      .returning();
+
+    await syncTableOccupancyFromSeatSessions(tableId);
+    await db.insert(billingAuditLogsTable).values({
+      operation: "seat_session_update",
+      tableIds: JSON.stringify([tableId]),
+      detail: JSON.stringify({
+        sessionId: updated.id,
+        status: updated.status,
+        currentOrderId: updated.currentOrderId,
+      }),
+      staffId: req.auth?.staffId ?? null,
+    });
+
+    res.json({
+      ...updated,
+      openedAt: updated.openedAt.toISOString(),
+      closedAt: updated.closedAt?.toISOString() ?? null,
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString(),
+    });
+  },
+);
+
+router.post(
+  "/tables/:id/seat-sessions/:sessionId/mark-clean",
+  requireRoles(["cleaner", "waiter", "supervisor", "manager", "owner"]),
+  async (req, res): Promise<void> => {
+    const tableId = parseId(req.params.id);
+    const sessionId = parseId(req.params.sessionId);
+    if (!Number.isFinite(tableId) || tableId <= 0 || !Number.isFinite(sessionId) || sessionId <= 0) {
+      res.status(400).json({ error: "Invalid table/session id." });
+      return;
+    }
+
+    const [existing] = await db
+      .select()
+      .from(tableSeatSessionsTable)
+      .where(and(eq(tableSeatSessionsTable.id, sessionId), eq(tableSeatSessionsTable.tableId, tableId)));
+    if (!existing) {
+      res.status(404).json({ error: "Seat session not found." });
+      return;
+    }
+
+    const [updated] = await db
+      .update(tableSeatSessionsTable)
+      .set({
+        status: "closed",
+        closedAt: new Date(),
+        currentOrderId: null,
+      })
+      .where(eq(tableSeatSessionsTable.id, existing.id))
+      .returning();
+
+    await syncTableOccupancyFromSeatSessions(tableId);
+    await db.insert(billingAuditLogsTable).values({
+      operation: "seat_session_clean",
+      tableIds: JSON.stringify([tableId]),
+      detail: JSON.stringify({
+        sessionId: updated.id,
+        slotCode: updated.slotCode,
+      }),
+      staffId: req.auth?.staffId ?? null,
+    });
+    res.json({
+      ...updated,
+      openedAt: updated.openedAt.toISOString(),
+      closedAt: updated.closedAt?.toISOString() ?? null,
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString(),
+    });
   },
 );
 

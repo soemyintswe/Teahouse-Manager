@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray, sql } from "drizzle-orm";
-import { db, paymentsTable, ordersTable, tableMergeGroupsTable, tablesTable } from "@workspace/db";
+import { db, paymentsTable, ordersTable, tableMergeGroupsTable, tableSeatSessionsTable, tablesTable } from "@workspace/db";
 import { canAccessTable, requireAuth, requireRoles } from "../lib/auth";
 import {
   ListPaymentsQueryParams,
@@ -9,6 +9,7 @@ import {
   GetPaymentParams,
   GetPaymentResponse,
 } from "@workspace/api-zod";
+import { syncTableOccupancyFromSeatSessions } from "../lib/seat-sessions";
 
 const router: IRouter = Router();
 const SUPPORTED_WALLETS = ["wave_pay", "kbz_pay", "aya_pay", "cb_pay"] as const;
@@ -201,9 +202,10 @@ router.post("/payments", requireAuth, async (req, res): Promise<void> => {
       ...splitChildren,
     ];
     const hasSplitFamily = splitFamily.length > 1 || Boolean(parentOrder?.splitLabel === "split_parent");
+    let hasUnpaidSplit = false;
 
     if (hasSplitFamily) {
-      const hasUnpaidSplit = splitFamily.some((entry) => {
+      hasUnpaidSplit = splitFamily.some((entry) => {
         const totalAmount = Number(entry.totalAmount.toString());
         if (!Number.isFinite(totalAmount) || totalAmount <= 0) return false;
         return entry.status !== "paid" && entry.status !== "cancelled";
@@ -221,6 +223,26 @@ router.post("/payments", requireAuth, async (req, res): Promise<void> => {
         .set({ occupancyStatus: "paid", currentOrderId: parsed.data.orderId })
         .where(inArray(tablesTable.id, tableIds));
     }
+
+    if (order.seatSessionId && order.tableId > 0) {
+      await db
+        .update(tableSeatSessionsTable)
+        .set({
+          status: hasUnpaidSplit ? "payment_pending" : "paid",
+          currentOrderId: hasUnpaidSplit ? order.splitParentOrderId ?? order.id : order.id,
+        })
+        .where(eq(tableSeatSessionsTable.id, order.seatSessionId));
+      await syncTableOccupancyFromSeatSessions(order.tableId);
+    }
+  } else if (order.seatSessionId && order.tableId > 0) {
+    await db
+      .update(tableSeatSessionsTable)
+      .set({
+        status: "paid",
+        currentOrderId: order.id,
+      })
+      .where(eq(tableSeatSessionsTable.id, order.seatSessionId));
+    await syncTableOccupancyFromSeatSessions(order.tableId);
   }
 
   res.status(201).json(GetPaymentResponse.parse(formatPayment(payment)));

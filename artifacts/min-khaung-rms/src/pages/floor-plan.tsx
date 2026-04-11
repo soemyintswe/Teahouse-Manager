@@ -59,6 +59,20 @@ type TableMergeGroupRecord = {
   updatedAt: string;
 };
 
+type TableSeatSessionRecord = {
+  id: number;
+  tableId: number;
+  slotCode: string;
+  groupName: string | null;
+  status: "active" | "payment_pending" | "paid" | "cleaning" | "closed";
+  currentOrderId: number | null;
+  notes: string | null;
+  openedAt: string;
+  closedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 const OCCUPANCY_CONFIG: Record<
   TableData["occupancyStatus"],
   { labelKey: string; bg: string; border: string; text: string; dot: string }
@@ -228,6 +242,7 @@ function TableCard({
   isLayoutEditMode,
   isDragging,
   isSelected,
+  seatSessionCount,
 }: {
   table: TableData;
   onClick: () => void;
@@ -236,6 +251,7 @@ function TableCard({
   isLayoutEditMode: boolean;
   isDragging: boolean;
   isSelected: boolean;
+  seatSessionCount: number;
 }) {
   const { t } = useTranslation();
   const occupancyConfig = OCCUPANCY_CONFIG[table.occupancyStatus] ?? OCCUPANCY_CONFIG.available;
@@ -274,6 +290,11 @@ function TableCard({
           <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${occupancyConfig.dot}`} />
         </span>
       )}
+      {seatSessionCount > 0 ? (
+        <span className="absolute top-1 left-1/2 -translate-x-1/2 rounded-full bg-black/75 px-1.5 py-0.5 text-[9px] font-bold text-white">
+          {seatSessionCount} groups
+        </span>
+      ) : null}
 
       {isMaintenance ? (
         <Lock className={`absolute top-2 h-3.5 w-3.5 ${isLayoutEditMode && isSelected ? "left-7" : "left-2"}`} />
@@ -321,18 +342,30 @@ function TableCard({
 
 function QuickActionMenu({
   table,
+  seatSessions,
+  sessionBusy,
   roomNameByCode,
   onClose,
   onStartOrder,
   onCheckout,
   onMarkClean,
+  onCreateSeatSession,
+  onOpenSeatSessionOrder,
+  onSetSeatSessionStatus,
+  onMarkSeatSessionClean,
 }: {
   table: TableData;
+  seatSessions: TableSeatSessionRecord[];
+  sessionBusy: boolean;
   roomNameByCode: Map<string, string>;
   onClose: () => void;
   onStartOrder: () => void;
   onCheckout: () => void;
   onMarkClean: () => void;
+  onCreateSeatSession: () => void;
+  onOpenSeatSessionOrder: (session: TableSeatSessionRecord) => void;
+  onSetSeatSessionStatus: (sessionId: number, status: TableSeatSessionRecord["status"]) => void;
+  onMarkSeatSessionClean: (sessionId: number) => void;
 }) {
   const { t } = useTranslation();
   const cfg = OCCUPANCY_CONFIG[table.occupancyStatus] ?? OCCUPANCY_CONFIG.available;
@@ -396,6 +429,57 @@ function QuickActionMenu({
             </Button>
           ) : null}
         </div>
+
+        <div className="mt-4 rounded-lg border bg-muted/20 p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold">Shared Seating Sessions</p>
+            <Button size="sm" variant="outline" onClick={onCreateSeatSession} disabled={sessionBusy}>
+              {sessionBusy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+              Add Session
+            </Button>
+          </div>
+          {seatSessions.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No active seat sessions for this table.</p>
+          ) : (
+            <div className="space-y-2">
+              {seatSessions.map((session) => (
+                <div key={session.id} className="rounded-md border bg-card px-2 py-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold">{session.slotCode}{session.groupName ? ` · ${session.groupName}` : ""}</p>
+                      <p className="text-xs uppercase text-muted-foreground">{session.status}</p>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => onOpenSeatSessionOrder(session)}>
+                      {session.currentOrderId ? `Order #${session.currentOrderId}` : "Open Order"}
+                    </Button>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {session.status === "active" ? (
+                      <Button size="sm" variant="outline" onClick={() => onSetSeatSessionStatus(session.id, "payment_pending")}>
+                        Bill
+                      </Button>
+                    ) : null}
+                    {session.status === "payment_pending" ? (
+                      <Button size="sm" variant="outline" onClick={() => onSetSeatSessionStatus(session.id, "paid")}>
+                        Mark Paid
+                      </Button>
+                    ) : null}
+                    {(session.status === "active" || session.status === "payment_pending" || session.status === "paid") ? (
+                      <Button size="sm" variant="outline" onClick={() => onSetSeatSessionStatus(session.id, "cleaning")}>
+                        Checkout
+                      </Button>
+                    ) : null}
+                    {session.status === "cleaning" ? (
+                      <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => onMarkSeatSessionClean(session.id)}>
+                        Mark Clean
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </>
   );
@@ -423,6 +507,16 @@ export default function FloorPlan() {
     staleTime: 8000,
     refetchInterval: 15000,
   });
+  const { data: allSeatSessions = [] } = useQuery({
+    queryKey: ["table-seat-sessions", "all"],
+    queryFn: () =>
+      customFetch<TableSeatSessionRecord[]>("/api/tables/seat-sessions?limit=500", {
+        method: "GET",
+        responseType: "json",
+      }),
+    staleTime: 6000,
+    refetchInterval: 12000,
+  });
   const updateTable = useUpdateTable();
   const createTable = useCreateTable();
 
@@ -439,6 +533,7 @@ export default function FloorPlan() {
   const [isRenumbering, setIsRenumbering] = useState(false);
   const [isMergingTables, setIsMergingTables] = useState(false);
   const [isReleasingMerge, setIsReleasingMerge] = useState(false);
+  const [isManagingSessions, setIsManagingSessions] = useState(false);
   const [selectedLayoutTableIds, setSelectedLayoutTableIds] = useState<number[]>([]);
   const [suppressLayoutClickTableId, setSuppressLayoutClickTableId] = useState<number | null>(null);
 
@@ -447,6 +542,7 @@ export default function FloorPlan() {
       queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
       queryClient.invalidateQueries({ queryKey: ROOMS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["table-merge-groups", "active"] });
+      queryClient.invalidateQueries({ queryKey: ["table-seat-sessions", "all"] });
       setLastRefreshed(new Date());
     }, 30000);
     return () => clearInterval(interval);
@@ -456,6 +552,7 @@ export default function FloorPlan() {
     queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
     queryClient.invalidateQueries({ queryKey: ROOMS_QUERY_KEY });
     queryClient.invalidateQueries({ queryKey: ["table-merge-groups", "active"] });
+    queryClient.invalidateQueries({ queryKey: ["table-seat-sessions", "all"] });
     setLastRefreshed(new Date());
   }, [queryClient]);
 
@@ -545,11 +642,29 @@ export default function FloorPlan() {
     () => visibleTables.find((table) => table.id === selectedTableId) ?? null,
     [visibleTables, selectedTableId],
   );
+  const { data: selectedTableSessions = [] } = useQuery({
+    queryKey: ["table-seat-sessions", selectedTableId ?? 0],
+    enabled: selectedTableId != null,
+    queryFn: () =>
+      customFetch<TableSeatSessionRecord[]>(`/api/tables/${selectedTableId ?? 0}/seat-sessions`, {
+        method: "GET",
+        responseType: "json",
+      }),
+    staleTime: 5000,
+  });
 
   const activeServiceTables = useMemo(
     () => visibleTables.filter((table) => table.status === "Active"),
     [visibleTables],
   );
+  const seatSessionCountByTableId = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const session of allSeatSessions) {
+      if (session.status === "closed") continue;
+      map.set(session.tableId, (map.get(session.tableId) ?? 0) + 1);
+    }
+    return map;
+  }, [allSeatSessions]);
 
   const roomTables = useMemo(
     () => (selectedRoomCode ? visibleTables.filter((table) => table.zone === selectedRoomCode) : []),
@@ -1166,6 +1281,95 @@ export default function FloorPlan() {
     }
   }, [canReleaseSelectedMerge, isReleasingMerge, queryClient, selectedSingleMergeGroupId, t, toast]);
 
+  const handleCreateSeatSession = useCallback(async (table: TableData) => {
+    if (isManagingSessions) return;
+    try {
+      setIsManagingSessions(true);
+      await customFetch(`/api/tables/${table.id}/seat-sessions`, {
+        method: "POST",
+        responseType: "json",
+        body: JSON.stringify({}),
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: ["table-seat-sessions", "all"] }),
+        queryClient.invalidateQueries({ queryKey: ["table-seat-sessions", table.id] }),
+      ]);
+      toast({ title: `Opened a new seat session for table ${table.tableNumber}.` });
+    } catch (error) {
+      toast({
+        title: "Failed to open seat session",
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setIsManagingSessions(false);
+    }
+  }, [isManagingSessions, queryClient, t, toast]);
+
+  const handleUpdateSeatSession = useCallback(
+    async (tableId: number, sessionId: number, status: TableSeatSessionRecord["status"]) => {
+      if (isManagingSessions) return;
+      try {
+        setIsManagingSessions(true);
+        await customFetch(`/api/tables/${tableId}/seat-sessions/${sessionId}`, {
+          method: "PATCH",
+          responseType: "json",
+          body: JSON.stringify({ status }),
+        });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() }),
+          queryClient.invalidateQueries({ queryKey: ["table-seat-sessions", "all"] }),
+          queryClient.invalidateQueries({ queryKey: ["table-seat-sessions", tableId] }),
+        ]);
+      } catch (error) {
+        toast({
+          title: "Failed to update seat session",
+          description: error instanceof Error ? error.message : t("common.unknownError"),
+          variant: "destructive",
+        });
+      } finally {
+        setIsManagingSessions(false);
+      }
+    },
+    [isManagingSessions, queryClient, t, toast],
+  );
+
+  const handleMarkSeatSessionClean = useCallback(async (tableId: number, sessionId: number) => {
+    if (isManagingSessions) return;
+    try {
+      setIsManagingSessions(true);
+      await customFetch(`/api/tables/${tableId}/seat-sessions/${sessionId}/mark-clean`, {
+        method: "POST",
+        responseType: "json",
+        body: JSON.stringify({}),
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: ["table-seat-sessions", "all"] }),
+        queryClient.invalidateQueries({ queryKey: ["table-seat-sessions", tableId] }),
+      ]);
+    } catch (error) {
+      toast({
+        title: "Failed to mark seat session clean",
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setIsManagingSessions(false);
+    }
+  }, [isManagingSessions, queryClient, t, toast]);
+
+  const handleOpenSeatSessionOrder = useCallback((tableId: number, session: TableSeatSessionRecord) => {
+    if (session.currentOrderId) {
+      setLocation(`/orders/${session.currentOrderId}`);
+      setSelectedTableId(null);
+      return;
+    }
+    setLocation(`/orders?tableId=${tableId}&seatSessionId=${session.id}`);
+    setSelectedTableId(null);
+  }, [setLocation]);
+
   const handleSelectAllTablesInRoom = useCallback(() => {
     if (!isLayoutEditMode || selectedRoomTableIds.length === 0) return;
     setSelectedLayoutTableIds((prev) => {
@@ -1251,6 +1455,19 @@ export default function FloorPlan() {
       return;
     }
 
+    const tableSessions = allSeatSessions
+      .filter((session) => session.tableId === table.id && session.status !== "closed")
+      .sort((a, b) => a.slotCode.localeCompare(b.slotCode, undefined, { numeric: true }));
+    if (tableSessions.length > 0) {
+      const preferred =
+        tableSessions.find((session) => session.status === "active") ??
+        tableSessions.find((session) => session.status === "payment_pending") ??
+        tableSessions.find((session) => session.status === "paid") ??
+        tableSessions[0];
+      handleOpenSeatSessionOrder(table.id, preferred);
+      return;
+    }
+
     if (table.currentOrderId && (table.occupancyStatus === "occupied" || table.occupancyStatus === "paid")) {
       setLocation(`/orders/${table.currentOrderId}`);
       setSelectedTableId(null);
@@ -1275,7 +1492,7 @@ export default function FloorPlan() {
 
     setLocation(`/orders?tableId=${table.id}`);
     setSelectedTableId(null);
-  }, [getLatestTableOrder, queryClient, setLocation, t, toast, updateTable]);
+  }, [allSeatSessions, getLatestTableOrder, handleOpenSeatSessionOrder, queryClient, setLocation, t, toast, updateTable]);
 
   if (isLoading || roomsLoading) {
     return (
@@ -1607,6 +1824,7 @@ export default function FloorPlan() {
                   isLayoutEditMode={isLayoutEditMode}
                   isDragging={dragState?.tableIds.includes(table.id) ?? false}
                   isSelected={selectedLayoutTableIds.includes(table.id)}
+                  seatSessionCount={seatSessionCountByTableId.get(table.id) ?? 0}
                 />
               ))}
               {roomTables.length === 0 && (
@@ -1622,11 +1840,17 @@ export default function FloorPlan() {
       {selectedTable ? (
         <QuickActionMenu
           table={selectedTable}
+          seatSessions={selectedTableSessions.filter((session) => session.status !== "closed")}
+          sessionBusy={isManagingSessions}
           roomNameByCode={roomNameByCode}
           onClose={() => setSelectedTableId(null)}
           onStartOrder={() => handleStartOrder(selectedTable)}
           onCheckout={() => updateOccupancy(selectedTable, "dirty", true)}
           onMarkClean={() => updateOccupancy(selectedTable, "available", true)}
+          onCreateSeatSession={() => { void handleCreateSeatSession(selectedTable); }}
+          onOpenSeatSessionOrder={(session) => handleOpenSeatSessionOrder(selectedTable.id, session)}
+          onSetSeatSessionStatus={(sessionId, status) => { void handleUpdateSeatSession(selectedTable.id, sessionId, status); }}
+          onMarkSeatSessionClean={(sessionId) => { void handleMarkSeatSessionClean(selectedTable.id, sessionId); }}
         />
       ) : null}
     </div>

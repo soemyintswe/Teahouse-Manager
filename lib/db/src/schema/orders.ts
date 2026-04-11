@@ -16,6 +16,7 @@ export const ordersTable = pgTable("orders", {
   billingGroupId: integer("billing_group_id"),
   splitParentOrderId: integer("split_parent_order_id"),
   splitLabel: text("split_label"),
+  seatSessionId: integer("seat_session_id"),
   customerId: integer("customer_id"),
   customerName: text("customer_name"),
   customerPhones: text("customer_phones"), // JSON array string

@@ -12,6 +12,7 @@ import {
   customersTable,
   tableMergeGroupsTable,
   billingAuditLogsTable,
+  tableSeatSessionsTable,
 } from "@workspace/db";
 import { canAccessTable, requireAuth, requireRoles } from "../lib/auth";
 import {
@@ -31,6 +32,7 @@ import {
   RemoveOrderItemParams,
 } from "@workspace/api-zod";
 import { isDatabaseError } from "../lib/db-errors";
+import { syncTableOccupancyFromSeatSessions } from "../lib/seat-sessions";
 
 const router: IRouter = Router();
 const MODIFIABLE_ORDER_STATUSES = ["open", "ready_to_pay"] as const;
@@ -254,6 +256,16 @@ async function syncOrderAfterItemChange(orderId: number, executor: any = db): Pr
       .set({ status: "cancelled" })
       .where(eq(ordersTable.id, orderId));
     await setOrderTablesState(order, { occupancyStatus: "available", currentOrderId: null }, executor);
+    if (order.seatSessionId && order.tableId > 0) {
+      await executor
+        .update(tableSeatSessionsTable)
+        .set({
+          status: "cleaning",
+          currentOrderId: null,
+        })
+        .where(eq(tableSeatSessionsTable.id, order.seatSessionId));
+      await syncTableOccupancyFromSeatSessions(order.tableId, executor);
+    }
   }
 }
 
@@ -298,6 +310,7 @@ router.get("/orders", requireAuth, async (req, res): Promise<void> => {
 router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreateOrderBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const requestedSeatSessionId = parseInteger((req.body as { seatSessionId?: unknown } | undefined)?.seatSessionId);
   if (req.auth?.role === "customer") {
     res.status(403).json({ error: "Customer account cannot create dine-in table orders." });
     return;
@@ -328,7 +341,7 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
         throw error;
       }
 
-      if (table.currentOrderId) {
+      if (table.currentOrderId && !requestedSeatSessionId) {
         const [activeOrder] = await tx.select().from(ordersTable).where(eq(ordersTable.id, table.currentOrderId));
         if (activeOrder && (activeOrder.status === "open" || activeOrder.status === "ready_to_pay")) {
           const error = new Error(`Table already has active order #${activeOrder.id}`) as Error & { statusCode?: number };
@@ -341,8 +354,14 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
       let orderTableNumber = table.tableNumber;
       let billingGroupId: number | null = null;
       let targetTableIds: number[] = [parsed.data.tableId];
+      let seatSessionId: number | null = requestedSeatSessionId ?? null;
 
       if (table.mergedGroupId) {
+        if (seatSessionId) {
+          const error = new Error("Seat session order is not supported for merged table group.") as Error & { statusCode?: number };
+          error.statusCode = 409;
+          throw error;
+        }
         const [mergeGroup] = await tx
           .select()
           .from(tableMergeGroupsTable)
@@ -393,11 +412,37 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
         targetTableIds = mergedTableIds;
       }
 
+      if (seatSessionId) {
+        const [seatSession] = await tx
+          .select()
+          .from(tableSeatSessionsTable)
+          .where(eq(tableSeatSessionsTable.id, seatSessionId));
+        if (!seatSession || seatSession.tableId !== parsed.data.tableId) {
+          const error = new Error("Seat session was not found for this table.") as Error & { statusCode?: number };
+          error.statusCode = 404;
+          throw error;
+        }
+        if (seatSession.status === "closed") {
+          const error = new Error("Seat session is already closed.") as Error & { statusCode?: number };
+          error.statusCode = 409;
+          throw error;
+        }
+        if (seatSession.currentOrderId) {
+          const [sessionOrder] = await tx.select().from(ordersTable).where(eq(ordersTable.id, seatSession.currentOrderId));
+          if (sessionOrder && (sessionOrder.status === "open" || sessionOrder.status === "ready_to_pay")) {
+            const error = new Error(`Seat session already has active order #${sessionOrder.id}`) as Error & { statusCode?: number };
+            error.statusCode = 409;
+            throw error;
+          }
+        }
+      }
+
       const [order] = await tx.insert(ordersTable).values({
         tableId: orderTableId,
         tableNumber: orderTableNumber,
         orderSource: "dine_in",
         billingGroupId,
+        seatSessionId,
         deliveryStatus: null,
         notes: parsed.data.notes ?? null,
         staffId: parsed.data.staffId ?? null,
@@ -408,6 +453,17 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
           .update(tablesTable)
           .set({ occupancyStatus: "occupied", currentOrderId: order.id })
           .where(eq(tablesTable.id, tableId));
+      }
+
+      if (seatSessionId) {
+        await tx
+          .update(tableSeatSessionsTable)
+          .set({
+            currentOrderId: order.id,
+            status: "active",
+          })
+          .where(eq(tableSeatSessionsTable.id, seatSessionId));
+        await syncTableOccupancyFromSeatSessions(parsed.data.tableId, tx);
       }
 
       if (parsed.data.items && parsed.data.items.length > 0) {
@@ -654,6 +710,27 @@ router.patch("/orders/:id", requireAuth, async (req, res): Promise<void> => {
   if (parsed.data.status === "open") {
     await setOrderTablesState(order, { occupancyStatus: "occupied", currentOrderId: order.id });
   }
+  if (order.seatSessionId && parsed.data.status) {
+    const nextSessionStatus = parsed.data.status === "open"
+      ? "active"
+      : parsed.data.status === "ready_to_pay"
+        ? "payment_pending"
+        : parsed.data.status === "paid"
+          ? "paid"
+          : parsed.data.status === "cancelled"
+            ? "cleaning"
+            : null;
+    if (nextSessionStatus) {
+      await db
+        .update(tableSeatSessionsTable)
+        .set({
+          status: nextSessionStatus,
+          currentOrderId: nextSessionStatus === "cleaning" ? null : order.id,
+        })
+        .where(eq(tableSeatSessionsTable.id, order.seatSessionId));
+      await syncTableOccupancyFromSeatSessions(order.tableId);
+    }
+  }
 
   res.json(UpdateOrderResponse.parse(formatOrder(order)));
 });
@@ -822,6 +899,7 @@ router.post(
               billingGroupId: targetOrder.billingGroupId,
               splitParentOrderId: targetOrder.id,
               splitLabel,
+              seatSessionId: targetOrder.seatSessionId,
               customerId: targetOrder.customerId,
               customerName: targetOrder.customerName,
               customerPhones: targetOrder.customerPhones,
@@ -904,6 +982,16 @@ router.post(
           { occupancyStatus: "payment_pending", currentOrderId: targetOrder.id },
           tx,
         );
+        if (targetOrder.seatSessionId && targetOrder.tableId > 0) {
+          await tx
+            .update(tableSeatSessionsTable)
+            .set({
+              status: "payment_pending",
+              currentOrderId: targetOrder.id,
+            })
+            .where(eq(tableSeatSessionsTable.id, targetOrder.seatSessionId));
+          await syncTableOccupancyFromSeatSessions(targetOrder.tableId, tx);
+        }
 
         await tx.insert(billingAuditLogsTable).values({
           operation: "split_bill",

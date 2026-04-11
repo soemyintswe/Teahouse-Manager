@@ -100,6 +100,13 @@ function parseScanFlagFromSearch(search: string): boolean {
   return value === "1" || value === "true" || value === "yes";
 }
 
+function parseSeatSessionIdFromSearch(search: string): number | null {
+  const value = new URLSearchParams(search).get("seatSessionId");
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 function parseCustomizationPayload(raw: string | null | undefined): Record<string, unknown> {
   if (!raw) return {};
   try {
@@ -313,6 +320,7 @@ export default function OrdersPage() {
 
   const tableIdFromQuery = useMemo(() => parseTableIdFromSearch(search), [search]);
   const menuItemIdFromQuery = useMemo(() => parseMenuItemIdFromSearch(search), [search]);
+  const seatSessionIdFromQuery = useMemo(() => parseSeatSessionIdFromSearch(search), [search]);
   const scanRequested = useMemo(() => parseScanFlagFromSearch(search), [search]);
   const [storedTableId, setStoredTableId] = useState<number | null>(null);
   const tableId =
@@ -412,7 +420,7 @@ export default function OrdersPage() {
     return historyOrdersRaw;
   }, [historyFilter, historyOrdersRaw]);
 
-  const existingOpenOrder = activeOrders[0];
+  const existingOpenOrder = seatSessionIdFromQuery ? undefined : activeOrders[0];
 
   const { data: categories = [], isLoading: categoriesLoading } = useListMenuCategories({
     query: { queryKey: getListMenuCategoriesQueryKey() },
@@ -629,9 +637,10 @@ export default function OrdersPage() {
       const order = await createOrder.mutateAsync({
         data: {
           tableId,
+          seatSessionId: seatSessionIdFromQuery ?? undefined,
           notes: orderNotes.trim() || undefined,
           items: cart.map((item) => ({ menuItemId: item.menuItemId, quantity: item.quantity })),
-        },
+        } as any,
       });
 
       await queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });

@@ -140,6 +140,7 @@ export async function ensureDbCompatibility(): Promise<void> {
           billing_group_id INTEGER,
           split_parent_order_id INTEGER,
           split_label TEXT,
+          seat_session_id INTEGER,
           customer_id INTEGER,
           customer_name TEXT,
           customer_phones TEXT,
@@ -172,6 +173,7 @@ export async function ensureDbCompatibility(): Promise<void> {
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_group_id INTEGER;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS split_parent_order_id INTEGER;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS split_label TEXT;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS seat_session_id INTEGER;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id INTEGER;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name TEXT;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_phones TEXT;
@@ -231,6 +233,41 @@ export async function ensureDbCompatibility(): Promise<void> {
         UPDATE table_merge_groups SET status = COALESCE(status, 'active') WHERE status IS NULL;
         UPDATE table_merge_groups SET created_at = COALESCE(created_at, NOW()) WHERE created_at IS NULL;
         UPDATE table_merge_groups SET updated_at = COALESCE(updated_at, NOW()) WHERE updated_at IS NULL;
+      `,
+    },
+    {
+      name: "table seat sessions table",
+      sql: `
+        CREATE TABLE IF NOT EXISTS table_seat_sessions (
+          id SERIAL PRIMARY KEY,
+          table_id INTEGER NOT NULL,
+          slot_code TEXT NOT NULL,
+          group_name TEXT,
+          status TEXT NOT NULL DEFAULT 'active',
+          current_order_id INTEGER,
+          notes TEXT,
+          auto_managed BOOLEAN NOT NULL DEFAULT TRUE,
+          opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          closed_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        ALTER TABLE table_seat_sessions ADD COLUMN IF NOT EXISTS table_id INTEGER;
+        ALTER TABLE table_seat_sessions ADD COLUMN IF NOT EXISTS slot_code TEXT;
+        ALTER TABLE table_seat_sessions ADD COLUMN IF NOT EXISTS group_name TEXT;
+        ALTER TABLE table_seat_sessions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+        ALTER TABLE table_seat_sessions ADD COLUMN IF NOT EXISTS current_order_id INTEGER;
+        ALTER TABLE table_seat_sessions ADD COLUMN IF NOT EXISTS notes TEXT;
+        ALTER TABLE table_seat_sessions ADD COLUMN IF NOT EXISTS auto_managed BOOLEAN DEFAULT TRUE;
+        ALTER TABLE table_seat_sessions ADD COLUMN IF NOT EXISTS opened_at TIMESTAMPTZ DEFAULT NOW();
+        ALTER TABLE table_seat_sessions ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
+        ALTER TABLE table_seat_sessions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+        ALTER TABLE table_seat_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+        UPDATE table_seat_sessions SET status = COALESCE(status, 'active') WHERE status IS NULL;
+        UPDATE table_seat_sessions SET auto_managed = COALESCE(auto_managed, TRUE) WHERE auto_managed IS NULL;
+        UPDATE table_seat_sessions SET opened_at = COALESCE(opened_at, NOW()) WHERE opened_at IS NULL;
+        UPDATE table_seat_sessions SET created_at = COALESCE(created_at, NOW()) WHERE created_at IS NULL;
+        UPDATE table_seat_sessions SET updated_at = COALESCE(updated_at, NOW()) WHERE updated_at IS NULL;
       `,
     },
     {
