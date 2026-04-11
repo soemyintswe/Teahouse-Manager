@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, numeric, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -9,9 +9,72 @@ export const settingsTable = pgTable("settings", {
   airconFee: numeric("aircon_fee", { precision: 10, scale: 2 }).notNull().default("500.00"),
   currency: text("currency").notNull().default("MMK"),
   receiptFooter: text("receipt_footer"),
+  notifyActivateEmailSubject: text("notify_activate_email_subject")
+    .notNull()
+    .default("Teahouse Manager - Account Activated"),
+  notifyActivateEmailBody: text("notify_activate_email_body")
+    .notNull()
+    .default(
+      [
+        "Hello {{fullName}},",
+        "",
+        "Your Teahouse Manager account has been activated.",
+        "Temporary Password: {{temporaryPassword}}",
+        "",
+        "Please login and change this password immediately.",
+        "If you did not request this change, contact support.",
+      ].join("\n"),
+    ),
+  notifyActivateSmsBody: text("notify_activate_sms_body")
+    .notNull()
+    .default(
+      "Teahouse Manager account activated. Temp password: {{temporaryPassword}}. Please login and change it now.",
+    ),
+  notifyResetEmailSubject: text("notify_reset_email_subject")
+    .notNull()
+    .default("Teahouse Manager - Password Reset"),
+  notifyResetEmailBody: text("notify_reset_email_body")
+    .notNull()
+    .default(
+      [
+        "Hello {{fullName}},",
+        "",
+        "Your Teahouse Manager password has been reset.",
+        "Temporary Password: {{temporaryPassword}}",
+        "",
+        "Please login and change this password immediately.",
+        "If you did not request this change, contact support.",
+      ].join("\n"),
+    ),
+  notifyResetSmsBody: text("notify_reset_sms_body")
+    .notNull()
+    .default(
+      "Teahouse Manager password reset. Temp password: {{temporaryPassword}}. Please login and change it now.",
+    ),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const notificationLogsTable = pgTable("notification_logs", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id"),
+  customerName: text("customer_name"),
+  reason: text("reason").notNull(), // account_activated, password_reset
+  channel: text("channel").notNull(), // email, sms
+  provider: text("provider").notNull(),
+  recipient: text("recipient"),
+  status: text("status").notNull(), // sent, failed, skipped
+  message: text("message"),
+  payload: text("payload"), // serialized template metadata
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const insertSettingsSchema = createInsertSchema(settingsTable).omit({ id: true, updatedAt: true });
 export type InsertSettings = z.infer<typeof insertSettingsSchema>;
 export type Settings = typeof settingsTable.$inferSelect;
+
+export const insertNotificationLogSchema = createInsertSchema(notificationLogsTable).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertNotificationLog = z.infer<typeof insertNotificationLogSchema>;
+export type NotificationLog = typeof notificationLogsTable.$inferSelect;

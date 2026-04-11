@@ -214,6 +214,7 @@ router.patch("/customers/:id/status", requireRoles(["manager", "owner"]), async 
     if (temporaryPassword) {
       const phoneRows = await db.select().from(customerPhonesTable).where(eq(customerPhonesTable.customerId, updated.id));
       notifications = await sendCredentialNotification({
+        customerId: updated.id,
         fullName: updated.fullName,
         email: updated.email,
         phones: phoneRows.map((row) => row.phone),
@@ -263,6 +264,7 @@ router.post("/customers/:id/reset-password", requireRoles(["manager", "owner"]),
 
     const phoneRows = await db.select().from(customerPhonesTable).where(eq(customerPhonesTable.customerId, updated.id));
     const notifications = await sendCredentialNotification({
+      customerId: updated.id,
       fullName: updated.fullName,
       email: updated.email,
       phones: phoneRows.map((row) => row.phone),

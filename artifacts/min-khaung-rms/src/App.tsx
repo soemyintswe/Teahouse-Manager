@@ -48,6 +48,7 @@ import FinancePage from "@/pages/finance";
 import LoginPage from "@/pages/login";
 import PublicHomePage from "@/pages/public-home";
 import DeliveryOrdersPage from "@/pages/delivery-orders";
+import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import { setupAutoUpdate } from "@/lib/mobile-updater";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -330,7 +331,7 @@ function RouterContent() {
         <Route path="/staff" component={guard("staff", StaffPage)} />
         <Route path="/delivery-orders" component={guard("deliveryOrders", DeliveryOrdersPage)} />
         <Route path="/finance" component={guard("finance", FinancePage)} />
-        <Route path="/settings" component={guard("settings", () => <StubPage title={t("nav.settings")} />)} />
+        <Route path="/settings" component={guard("settings", SettingsPage)} />
         <Route path="/login" component={() => <AccessDenied />} />
         <Route component={NotFound} />
       </Switch>

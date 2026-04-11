@@ -296,11 +296,62 @@ export async function ensureDbCompatibility(): Promise<void> {
           aircon_fee NUMERIC(10,2) NOT NULL DEFAULT 500.00,
           currency TEXT NOT NULL DEFAULT 'MMK',
           receipt_footer TEXT,
+          notify_activate_email_subject TEXT NOT NULL DEFAULT 'Teahouse Manager - Account Activated',
+          notify_activate_email_body TEXT NOT NULL DEFAULT 'Hello {{fullName}},\n\nYour Teahouse Manager account has been activated.\nTemporary Password: {{temporaryPassword}}\n\nPlease login and change this password immediately.\nIf you did not request this change, contact support.',
+          notify_activate_sms_body TEXT NOT NULL DEFAULT 'Teahouse Manager account activated. Temp password: {{temporaryPassword}}. Please login and change it now.',
+          notify_reset_email_subject TEXT NOT NULL DEFAULT 'Teahouse Manager - Password Reset',
+          notify_reset_email_body TEXT NOT NULL DEFAULT 'Hello {{fullName}},\n\nYour Teahouse Manager password has been reset.\nTemporary Password: {{temporaryPassword}}\n\nPlease login and change this password immediately.\nIf you did not request this change, contact support.',
+          notify_reset_sms_body TEXT NOT NULL DEFAULT 'Teahouse Manager password reset. Temp password: {{temporaryPassword}}. Please login and change it now.',
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS notify_activate_email_subject TEXT DEFAULT 'Teahouse Manager - Account Activated';
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS notify_activate_email_body TEXT DEFAULT 'Hello {{fullName}},\n\nYour Teahouse Manager account has been activated.\nTemporary Password: {{temporaryPassword}}\n\nPlease login and change this password immediately.\nIf you did not request this change, contact support.';
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS notify_activate_sms_body TEXT DEFAULT 'Teahouse Manager account activated. Temp password: {{temporaryPassword}}. Please login and change it now.';
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS notify_reset_email_subject TEXT DEFAULT 'Teahouse Manager - Password Reset';
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS notify_reset_email_body TEXT DEFAULT 'Hello {{fullName}},\n\nYour Teahouse Manager password has been reset.\nTemporary Password: {{temporaryPassword}}\n\nPlease login and change this password immediately.\nIf you did not request this change, contact support.';
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS notify_reset_sms_body TEXT DEFAULT 'Teahouse Manager password reset. Temp password: {{temporaryPassword}}. Please login and change it now.';
+        UPDATE settings SET notify_activate_email_subject = COALESCE(notify_activate_email_subject, 'Teahouse Manager - Account Activated') WHERE notify_activate_email_subject IS NULL;
+        UPDATE settings SET notify_activate_email_body = COALESCE(notify_activate_email_body, 'Hello {{fullName}},\n\nYour Teahouse Manager account has been activated.\nTemporary Password: {{temporaryPassword}}\n\nPlease login and change this password immediately.\nIf you did not request this change, contact support.') WHERE notify_activate_email_body IS NULL;
+        UPDATE settings SET notify_activate_sms_body = COALESCE(notify_activate_sms_body, 'Teahouse Manager account activated. Temp password: {{temporaryPassword}}. Please login and change it now.') WHERE notify_activate_sms_body IS NULL;
+        UPDATE settings SET notify_reset_email_subject = COALESCE(notify_reset_email_subject, 'Teahouse Manager - Password Reset') WHERE notify_reset_email_subject IS NULL;
+        UPDATE settings SET notify_reset_email_body = COALESCE(notify_reset_email_body, 'Hello {{fullName}},\n\nYour Teahouse Manager password has been reset.\nTemporary Password: {{temporaryPassword}}\n\nPlease login and change this password immediately.\nIf you did not request this change, contact support.') WHERE notify_reset_email_body IS NULL;
+        UPDATE settings SET notify_reset_sms_body = COALESCE(notify_reset_sms_body, 'Teahouse Manager password reset. Temp password: {{temporaryPassword}}. Please login and change it now.') WHERE notify_reset_sms_body IS NULL;
         INSERT INTO settings (restaurant_name, tax_rate, aircon_fee, currency, receipt_footer, updated_at)
         SELECT 'Min Khaung Tea House & Restaurant', 5.00, 500.00, 'MMK', null, NOW()
         WHERE NOT EXISTS (SELECT 1 FROM settings);
+      `,
+    },
+    {
+      name: "notification_logs table",
+      sql: `
+        CREATE TABLE IF NOT EXISTS notification_logs (
+          id SERIAL PRIMARY KEY,
+          customer_id INTEGER,
+          customer_name TEXT,
+          reason TEXT NOT NULL,
+          channel TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          recipient TEXT,
+          status TEXT NOT NULL,
+          message TEXT,
+          payload TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS customer_id INTEGER;
+        ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS customer_name TEXT;
+        ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS reason TEXT;
+        ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS channel TEXT;
+        ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS provider TEXT;
+        ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS recipient TEXT;
+        ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS status TEXT;
+        ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS message TEXT;
+        ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS payload TEXT;
+        ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+        UPDATE notification_logs SET reason = COALESCE(reason, 'unknown') WHERE reason IS NULL;
+        UPDATE notification_logs SET channel = COALESCE(channel, 'unknown') WHERE channel IS NULL;
+        UPDATE notification_logs SET provider = COALESCE(provider, 'unknown') WHERE provider IS NULL;
+        UPDATE notification_logs SET status = COALESCE(status, 'unknown') WHERE status IS NULL;
+        UPDATE notification_logs SET created_at = COALESCE(created_at, NOW()) WHERE created_at IS NULL;
       `,
     },
   ];
