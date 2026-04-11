@@ -61,6 +61,7 @@ type CustomerAddress = {
 type CustomerMeResponse = {
   id: number;
   fullName: string;
+  email?: string | null;
   status: string;
   mustChangePassword: boolean;
   phones: string[];
@@ -76,6 +77,7 @@ type CustomerRegisterResponse = {
 
 type RegisterFormState = {
   fullName: string;
+  email: string;
   phones: string[];
   unitNo: string;
   street: string;
@@ -147,6 +149,7 @@ export default function PublicHomePage() {
 
   const [registerForm, setRegisterForm] = useState<RegisterFormState>({
     fullName: "",
+    email: "",
     phones: [""],
     unitNo: "",
     street: "",
@@ -321,6 +324,7 @@ export default function PublicHomePage() {
 
   const saveRegisterProfile = async () => {
     const fullName = registerForm.fullName.trim();
+    const email = registerForm.email.trim().toLowerCase();
     const phones = registerForm.phones
       .map((phone) => normalizePhone(phone))
       .filter((phone) => phone.length >= 7)
@@ -340,6 +344,14 @@ export default function PublicHomePage() {
       });
       return;
     }
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) {
+      toast({
+        title: t("public.register.invalidEmailTitle"),
+        description: t("public.register.invalidEmailDesc"),
+        variant: "destructive",
+      });
+      return;
+    }
 
     setRegistering(true);
     try {
@@ -348,6 +360,7 @@ export default function PublicHomePage() {
         responseType: "json",
         body: JSON.stringify({
           fullName,
+          email: email || undefined,
           phones,
           address: {
             unitNo: unitNo || undefined,
@@ -508,6 +521,11 @@ export default function PublicHomePage() {
               ) : customerProfile ? (
                 <div className="space-y-1 text-sm">
                   <p className="font-semibold">{customerProfile.fullName}</p>
+                  {customerProfile.email ? (
+                    <a href={`mailto:${customerProfile.email}`} className="text-xs text-primary hover:underline">
+                      {customerProfile.email}
+                    </a>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
                     {customerProfile.phones.map((phone) => (
                       <a
@@ -808,6 +826,15 @@ export default function PublicHomePage() {
               <Input
                 value={registerForm.fullName}
                 onChange={(event) => setRegisterForm((prev) => ({ ...prev, fullName: event.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>{t("public.register.emailOptional")}</Label>
+              <Input
+                type="email"
+                value={registerForm.email}
+                onChange={(event) => setRegisterForm((prev) => ({ ...prev, email: event.target.value }))}
+                placeholder="name@example.com"
               />
             </div>
             <div className="space-y-2">

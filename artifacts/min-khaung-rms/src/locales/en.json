@@ -139,6 +139,7 @@
       "title": "Delivery Account Registration",
       "subtitle": "Please provide your delivery details before placing an online order.",
       "fullName": "Full Name",
+      "emailOptional": "Email (optional)",
       "phone": "Phone Number",
       "phoneList": "Phone Numbers",
       "addPhone": "Add Phone",
@@ -168,6 +169,8 @@
       "loginPassword": "Temporary Password:",
       "requiredTitle": "Registration required",
       "requiredDesc": "Please fill full name, phone number, and delivery address.",
+      "invalidEmailTitle": "Invalid email",
+      "invalidEmailDesc": "Please enter a valid email format (example: name@example.com).",
       "deliveryRequired": "Delivery orders require registered contact and address information."
     },
     "checkout": {
@@ -749,6 +752,12 @@
       "resetDone": "{{name}} password reset",
       "resetFailed": "Failed to reset customer password",
       "tempPassword": "Temporary password: {{password}}",
+      "notify": {
+        "emailSent": "Email sent",
+        "emailNotSent": "Email not sent",
+        "smsCount": "SMS sent: {{count}}",
+        "warnings": "Warnings"
+      },
       "empty": "No customer accounts found.",
       "name": "Customer",
       "phones": "Phones",

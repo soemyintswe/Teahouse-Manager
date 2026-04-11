@@ -68,6 +68,7 @@ type CustomerStatus = "pending" | "approved" | "denied" | "terminated";
 type CustomerAccount = {
   id: number;
   fullName: string;
+  email?: string | null;
   status: CustomerStatus;
   mustChangePassword: boolean;
   createdAt: string;
@@ -85,6 +86,26 @@ type CustomerAccount = {
 };
 
 type CustomerStatusAction = "approve" | "deny" | "terminate";
+
+type CredentialNotification = {
+  emailSent: boolean;
+  smsSentCount: number;
+  warnings: string[];
+};
+
+type CustomerStatusResponse = {
+  id: number;
+  status: CustomerStatus;
+  fullName: string;
+  temporaryPassword?: string;
+  notifications?: CredentialNotification;
+};
+
+type CustomerResetPasswordResponse = {
+  temporaryPassword: string;
+  fullName: string;
+  notifications?: CredentialNotification;
+};
 
 type StaffFormState = {
   name: string;
@@ -275,6 +296,18 @@ export default function StaffPage() {
   const [townshipFilter, setTownshipFilter] = useState("");
   const [streetFilter, setStreetFilter] = useState("");
 
+  const formatNotificationSummary = (notifications?: CredentialNotification): string => {
+    if (!notifications) return "";
+    const parts = [
+      notifications.emailSent ? t("staff.customers.notify.emailSent") : t("staff.customers.notify.emailNotSent"),
+      t("staff.customers.notify.smsCount", { count: notifications.smsSentCount }),
+    ];
+    if (notifications.warnings.length > 0) {
+      parts.push(`${t("staff.customers.notify.warnings")}: ${notifications.warnings.join(" | ")}`);
+    }
+    return parts.join(" · ");
+  };
+
   const sortedStaff = useMemo(
     () => [...staff].sort((a, b) => a.name.localeCompare(b.name)),
     [staff],
@@ -348,12 +381,23 @@ export default function StaffPage() {
   const updateCustomerStatus = async (id: number, action: CustomerStatusAction) => {
     setCustomerActionLoadingId(id);
     try {
-      await customFetch(`/api/customers/${id}/status`, {
+      const response = await customFetch<CustomerStatusResponse>(`/api/customers/${id}/status`, {
         method: "PATCH",
         responseType: "json",
         body: JSON.stringify({ action }),
       });
-      toast({ title: t("staff.customers.statusUpdated") });
+      const details: string[] = [];
+      if (response.temporaryPassword) {
+        details.push(t("staff.customers.tempPassword", { password: response.temporaryPassword }));
+      }
+      const notifySummary = formatNotificationSummary(response.notifications);
+      if (notifySummary) {
+        details.push(notifySummary);
+      }
+      toast({
+        title: t("staff.customers.statusUpdated"),
+        description: details.length > 0 ? details.join("\n") : undefined,
+      });
       await loadCustomers();
     } catch (error) {
       toast({
@@ -369,13 +413,16 @@ export default function StaffPage() {
   const resetCustomerPassword = async (id: number) => {
     setCustomerActionLoadingId(id);
     try {
-      const response = await customFetch<{ temporaryPassword: string; fullName: string }>(`/api/customers/${id}/reset-password`, {
+      const response = await customFetch<CustomerResetPasswordResponse>(`/api/customers/${id}/reset-password`, {
         method: "POST",
         responseType: "json",
       });
+      const notifySummary = formatNotificationSummary(response.notifications);
       toast({
         title: t("staff.customers.resetDone", { name: response.fullName }),
-        description: t("staff.customers.tempPassword", { password: response.temporaryPassword }),
+        description: [t("staff.customers.tempPassword", { password: response.temporaryPassword }), notifySummary]
+          .filter(Boolean)
+          .join("\n"),
       });
       await loadCustomers();
     } catch (error) {
@@ -552,6 +599,11 @@ export default function StaffPage() {
                     <TableCell>#{customer.id}</TableCell>
                     <TableCell>
                       <div className="font-semibold">{customer.fullName}</div>
+                      {customer.email ? (
+                        <a href={`mailto:${customer.email}`} className="text-xs text-primary hover:underline">
+                          {customer.email}
+                        </a>
+                      ) : null}
                       <div className="text-xs text-muted-foreground">
                         {new Date(customer.createdAt).toLocaleDateString()}
                       </div>

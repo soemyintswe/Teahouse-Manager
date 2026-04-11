@@ -139,6 +139,7 @@
       "title": "Delivery အကောင့် မှတ်ပုံတင်ခြင်း",
       "subtitle": "Online မှာယူမှုမတင်ခင် ပို့ဆောင်ရေးအချက်အလက်များ ဖြည့်ပါ။",
       "fullName": "အမည်အပြည့်အစုံ",
+      "emailOptional": "အီးမေးလ် (optional)",
       "phone": "ဖုန်းနံပါတ်",
       "phoneList": "ဖုန်းနံပါတ်များ",
       "addPhone": "ဖုန်းထပ်ထည့်မည်",
@@ -168,6 +169,8 @@
       "loginPassword": "ယာယီစကားဝှက်:",
       "requiredTitle": "Register လိုအပ်ပါသည်",
       "requiredDesc": "အမည်၊ ဖုန်းနံပါတ်၊ လိပ်စာ ကိုဖြည့်ပေးပါ။",
+      "invalidEmailTitle": "အီးမေးလ် ပုံစံမမှန်ပါ",
+      "invalidEmailDesc": "name@example.com ပုံစံဖြင့် အီးမေးလ်ကို ထည့်ပါ။",
       "deliveryRequired": "Delivery order တင်ရန် ဆက်သွယ်ရန်/လိပ်စာ အချက်အလက်များ Register လုပ်ထားရပါမည်။"
     },
     "checkout": {
@@ -749,6 +752,12 @@
       "resetDone": "{{name}} ၏ စကားဝှက် reset ပြီးပါပြီ",
       "resetFailed": "Customer စကားဝှက် reset မအောင်မြင်ပါ",
       "tempPassword": "ယာယီစကားဝှက်: {{password}}",
+      "notify": {
+        "emailSent": "Email ပို့ပြီး",
+        "emailNotSent": "Email မပို့နိုင်",
+        "smsCount": "SMS ပို့ပြီး: {{count}}",
+        "warnings": "သတိပေးချက်"
+      },
       "empty": "Customer account မတွေ့ပါ။",
       "name": "Customer",
       "phones": "ဖုန်းများ",

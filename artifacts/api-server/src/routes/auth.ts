@@ -17,6 +17,7 @@ type GuestLoginBody = {
 
 type CustomerRegisterBody = {
   fullName?: unknown;
+  email?: unknown;
   phones?: unknown;
   address?: unknown;
 };
@@ -203,6 +204,7 @@ router.post("/auth/staff-login", async (req, res): Promise<void> => {
 router.post("/auth/customer-register", async (req, res): Promise<void> => {
   const body = (req.body ?? {}) as CustomerRegisterBody;
   const fullName = normalizeDisplayText(body.fullName);
+  const email = normalizeDisplayText(body.email).toLowerCase();
   const phones = parsePhoneList(body.phones);
   const rawAddress = body.address && typeof body.address === "object" ? (body.address as Record<string, unknown>) : null;
   const unitNo = normalizeDisplayText(rawAddress?.unitNo);
@@ -232,6 +234,7 @@ router.post("/auth/customer-register", async (req, res): Promise<void> => {
       .insert(customersTable)
       .values({
         fullName,
+        email: email || null,
         password: temporaryPassword,
         status: "pending",
         mustChangePassword: true,

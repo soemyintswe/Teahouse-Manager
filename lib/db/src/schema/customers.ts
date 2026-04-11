@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 export const customersTable = pgTable("customers", {
   id: serial("id").primaryKey(),
   fullName: text("full_name").notNull(),
+  email: text("email"),
   password: text("password").notNull(),
   status: text("status").notNull().default("pending"), // pending, approved, denied, terminated
   mustChangePassword: boolean("must_change_password").notNull().default(true),

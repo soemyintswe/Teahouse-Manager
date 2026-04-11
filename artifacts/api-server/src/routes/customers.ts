@@ -3,6 +3,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { db, customerAddressesTable, customerPhonesTable, customersTable, ordersTable } from "@workspace/db";
 import { requireAuth, requireRoles } from "../lib/auth";
 import { isSchemaDriftError } from "../lib/db-errors";
+import { sendCredentialNotification } from "../lib/customer-notify";
 
 const router: IRouter = Router();
 
@@ -53,6 +54,7 @@ router.get("/customers/me", requireAuth, async (req, res): Promise<void> => {
   res.json({
     id: customer.id,
     fullName: customer.fullName,
+    email: customer.email,
     status: customer.status,
     mustChangePassword: customer.mustChangePassword,
     phones: phones
@@ -126,6 +128,7 @@ router.get("/customers", requireRoles(["manager", "owner"]), async (req, res): P
         return {
           id: customer.id,
           fullName: customer.fullName,
+          email: customer.email,
           status: customer.status,
           mustChangePassword: customer.mustChangePassword,
           createdAt: toIsoString(customer.createdAt),
@@ -173,22 +176,66 @@ router.patch("/customers/:id/status", requireRoles(["manager", "owner"]), async 
     return;
   }
 
-  const nextStatus = action === "approve" ? "approved" : action === "deny" ? "denied" : "terminated";
-  const [updated] = await db
-    .update(customersTable)
-    .set({ status: nextStatus })
-    .where(eq(customersTable.id, id))
-    .returning();
-  if (!updated) {
-    res.status(404).json({ error: "Customer not found." });
-    return;
-  }
+  try {
+    const nextStatus = action === "approve" ? "approved" : action === "deny" ? "denied" : "terminated";
 
-  res.json({
-    id: updated.id,
-    status: updated.status,
-    fullName: updated.fullName,
-  });
+    const [existing] = await db.select().from(customersTable).where(eq(customersTable.id, id));
+    if (!existing) {
+      res.status(404).json({ error: "Customer not found." });
+      return;
+    }
+
+    let temporaryPassword: string | null = null;
+    const updatePayload: Partial<typeof customersTable.$inferInsert> = { status: nextStatus };
+    if (action === "approve" && existing.status !== "approved") {
+      temporaryPassword = createTemporaryPassword();
+      updatePayload.password = temporaryPassword;
+      updatePayload.mustChangePassword = true;
+    }
+
+    const [updated] = await db
+      .update(customersTable)
+      .set(updatePayload)
+      .where(eq(customersTable.id, id))
+      .returning();
+    if (!updated) {
+      res.status(404).json({ error: "Customer not found." });
+      return;
+    }
+
+    let notifications:
+      | {
+          emailSent: boolean;
+          smsSentCount: number;
+          warnings: string[];
+        }
+      | undefined;
+
+    if (temporaryPassword) {
+      const phoneRows = await db.select().from(customerPhonesTable).where(eq(customerPhonesTable.customerId, updated.id));
+      notifications = await sendCredentialNotification({
+        fullName: updated.fullName,
+        email: updated.email,
+        phones: phoneRows.map((row) => row.phone),
+        temporaryPassword,
+        reason: "account_activated",
+      });
+    }
+
+    res.json({
+      id: updated.id,
+      status: updated.status,
+      fullName: updated.fullName,
+      temporaryPassword: temporaryPassword ?? undefined,
+      notifications,
+    });
+  } catch (error) {
+    if (isSchemaDriftError(error)) {
+      res.status(503).json({ error: "Database schema is updating. Please retry in a moment." });
+      return;
+    }
+    res.status(500).json({ error: "Failed to update customer account status." });
+  }
 });
 
 router.post("/customers/:id/reset-password", requireRoles(["manager", "owner"]), async (req, res): Promise<void> => {
@@ -198,27 +245,45 @@ router.post("/customers/:id/reset-password", requireRoles(["manager", "owner"]),
     return;
   }
 
-  const temporaryPassword = createTemporaryPassword();
-  const [updated] = await db
-    .update(customersTable)
-    .set({
-      password: temporaryPassword,
-      mustChangePassword: true,
-      status: "approved",
-    })
-    .where(eq(customersTable.id, id))
-    .returning();
-  if (!updated) {
-    res.status(404).json({ error: "Customer not found." });
-    return;
-  }
+  try {
+    const temporaryPassword = createTemporaryPassword();
+    const [updated] = await db
+      .update(customersTable)
+      .set({
+        password: temporaryPassword,
+        mustChangePassword: true,
+        status: "approved",
+      })
+      .where(eq(customersTable.id, id))
+      .returning();
+    if (!updated) {
+      res.status(404).json({ error: "Customer not found." });
+      return;
+    }
 
-  res.json({
-    id: updated.id,
-    fullName: updated.fullName,
-    temporaryPassword,
-    mustChangePassword: updated.mustChangePassword,
-  });
+    const phoneRows = await db.select().from(customerPhonesTable).where(eq(customerPhonesTable.customerId, updated.id));
+    const notifications = await sendCredentialNotification({
+      fullName: updated.fullName,
+      email: updated.email,
+      phones: phoneRows.map((row) => row.phone),
+      temporaryPassword,
+      reason: "password_reset",
+    });
+
+    res.json({
+      id: updated.id,
+      fullName: updated.fullName,
+      temporaryPassword,
+      mustChangePassword: updated.mustChangePassword,
+      notifications,
+    });
+  } catch (error) {
+    if (isSchemaDriftError(error)) {
+      res.status(503).json({ error: "Database schema is updating. Please retry in a moment." });
+      return;
+    }
+    res.status(500).json({ error: "Failed to reset customer password." });
+  }
 });
 
 export default router;

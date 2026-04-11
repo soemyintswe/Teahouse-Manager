@@ -65,9 +65,15 @@ This repo now includes [render.yaml](./render.yaml) for one-click Render Bluepri
 - `DATABASE_URL` = your Neon connection string
 - `CORS_ORIGINS` = frontend URL (example: `https://teahouse-web.onrender.com`)
 - `AUTH_SECRET` = long random secret for login tokens
+- `NOTIFY_EMAIL_PROVIDER` = `log` (default) or `resend`
+- `NOTIFY_SMS_PROVIDER` = `log` (default) or `twilio`
 - `GOOGLE_DRIVE_CLIENT_EMAIL` = service account client email (for menu image upload)
 - `GOOGLE_DRIVE_PRIVATE_KEY` = service account private key (keep `\n` line breaks)
 - `GOOGLE_DRIVE_FOLDER_ID` = optional Drive folder id for uploaded menu images
+
+Optional notification provider keys:
+- `RESEND_API_KEY`, `NOTIFY_EMAIL_FROM`, `NOTIFY_EMAIL_REPLY_TO`
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_PHONE`
 
 `teahouse-web`:
 - `VITE_API_BASE_URL` = API URL (example: `https://teahouse-api.onrender.com`)

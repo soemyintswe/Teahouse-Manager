@@ -13,6 +13,7 @@ export async function ensureDbCompatibility(): Promise<void> {
         CREATE TABLE IF NOT EXISTS customers (
           id SERIAL PRIMARY KEY,
           full_name TEXT NOT NULL DEFAULT '',
+          email TEXT,
           password TEXT NOT NULL DEFAULT '',
           status TEXT NOT NULL DEFAULT 'pending',
           must_change_password BOOLEAN NOT NULL DEFAULT TRUE,
@@ -25,6 +26,7 @@ export async function ensureDbCompatibility(): Promise<void> {
       name: "customers columns",
       sql: `
         ALTER TABLE customers ADD COLUMN IF NOT EXISTS full_name TEXT;
+        ALTER TABLE customers ADD COLUMN IF NOT EXISTS email TEXT;
         ALTER TABLE customers ADD COLUMN IF NOT EXISTS password TEXT;
         ALTER TABLE customers ADD COLUMN IF NOT EXISTS status TEXT;
         ALTER TABLE customers ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT TRUE;
