@@ -88,6 +88,8 @@ export default function CashierPage() {
   const orderId = useMemo(() => parseOrderId(search), [search]);
   const walletFromUrl = useMemo(() => parseWallet(search), [search]);
   const [wallet, setWallet] = useState<WalletCode>(walletFromUrl);
+  const [splitGroups, setSplitGroups] = useState("2");
+  const [isSplitting, setIsSplitting] = useState(false);
 
   const { data: order, isLoading: orderLoading } = useGetOrder(orderId ?? 0, {
     query: {
@@ -217,6 +219,42 @@ export default function CashierPage() {
         description: error instanceof Error ? error.message : t("common.unknownError"),
         variant: "destructive",
       });
+    }
+  };
+
+  const handleSplitBillEvenly = async () => {
+    if (!orderId || isSplitting) return;
+    const groups = Number.parseInt(splitGroups, 10);
+    if (!Number.isFinite(groups) || groups < 2 || groups > 8) {
+      toast({
+        title: "Invalid split group count",
+        description: "Split groups must be between 2 and 8.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsSplitting(true);
+      await customFetch(`/api/orders/${orderId}/split-evenly`, {
+        method: "POST",
+        responseType: "json",
+        body: JSON.stringify({ groups }),
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() }),
+      ]);
+      toast({ title: `Bill split into ${groups} groups successfully.` });
+      setLocation("/cashier");
+    } catch (error) {
+      toast({
+        title: "Failed to split bill",
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setIsSplitting(false);
     }
   };
 
@@ -380,6 +418,29 @@ export default function CashierPage() {
       </div>
 
       <div className="flex justify-end gap-2">
+        {isPayable && !isPaid ? (
+          <div className="mr-auto flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1.5">
+            <span className="text-xs font-medium text-muted-foreground">Split Bill</span>
+            <select
+              className="h-8 rounded-md border bg-background px-2 text-sm"
+              value={splitGroups}
+              onChange={(event) => setSplitGroups(event.target.value)}
+              disabled={isSplitting || createPayment.isPending}
+            >
+              {[2, 3, 4, 5, 6, 7, 8].map((value) => (
+                <option key={value} value={value}>{value} groups</option>
+              ))}
+            </select>
+            <Button
+              variant="outline"
+              onClick={() => void handleSplitBillEvenly()}
+              disabled={isSplitting || createPayment.isPending || (order.items?.length ?? 0) === 0}
+            >
+              {isSplitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              Split
+            </Button>
+          </div>
+        ) : null}
         {isPaid ? (
           <>
             <Button

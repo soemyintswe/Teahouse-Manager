@@ -47,6 +47,18 @@ type SimpleOrder = {
   tableId: number;
 };
 
+type TableMergeGroupRecord = {
+  id: number;
+  zone: string;
+  anchorTableId: number;
+  tableIds: number[];
+  tableNumbers: string[];
+  status: string;
+  createdByStaffId: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 const OCCUPANCY_CONFIG: Record<
   TableData["occupancyStatus"],
   { labelKey: string; bg: string; border: string; text: string; dot: string }
@@ -401,6 +413,16 @@ export default function FloorPlan() {
     staleTime: 15000,
     refetchInterval: 30000,
   });
+  const { data: mergeGroups = [] } = useQuery({
+    queryKey: ["table-merge-groups", "active"],
+    queryFn: () =>
+      customFetch<TableMergeGroupRecord[]>("/api/tables/merge-groups?status=active", {
+        method: "GET",
+        responseType: "json",
+      }),
+    staleTime: 8000,
+    refetchInterval: 15000,
+  });
   const updateTable = useUpdateTable();
   const createTable = useCreateTable();
 
@@ -415,6 +437,8 @@ export default function FloorPlan() {
   const [savingLayoutTableId, setSavingLayoutTableId] = useState<number | null>(null);
   const [isAligningLayout, setIsAligningLayout] = useState(false);
   const [isRenumbering, setIsRenumbering] = useState(false);
+  const [isMergingTables, setIsMergingTables] = useState(false);
+  const [isReleasingMerge, setIsReleasingMerge] = useState(false);
   const [selectedLayoutTableIds, setSelectedLayoutTableIds] = useState<number[]>([]);
   const [suppressLayoutClickTableId, setSuppressLayoutClickTableId] = useState<number | null>(null);
 
@@ -422,6 +446,7 @@ export default function FloorPlan() {
     const interval = setInterval(() => {
       queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
       queryClient.invalidateQueries({ queryKey: ROOMS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["table-merge-groups", "active"] });
       setLastRefreshed(new Date());
     }, 30000);
     return () => clearInterval(interval);
@@ -430,6 +455,7 @@ export default function FloorPlan() {
   const handleManualRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() });
     queryClient.invalidateQueries({ queryKey: ROOMS_QUERY_KEY });
+    queryClient.invalidateQueries({ queryKey: ["table-merge-groups", "active"] });
     setLastRefreshed(new Date());
   }, [queryClient]);
 
@@ -539,6 +565,28 @@ export default function FloorPlan() {
     () => roomTables.filter((table) => selectedLayoutTableIds.includes(table.id)),
     [roomTables, selectedLayoutTableIds],
   );
+  const mergeGroupByTableId = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const group of mergeGroups) {
+      for (const tableId of group.tableIds) {
+        map.set(tableId, group.id);
+      }
+    }
+    return map;
+  }, [mergeGroups]);
+  const selectedMergeGroupIds = useMemo(
+    () =>
+      [...new Set(
+        selectedLayoutTableIds
+          .map((tableId) => mergeGroupByTableId.get(tableId))
+          .filter((value): value is number => typeof value === "number"),
+      )],
+    [mergeGroupByTableId, selectedLayoutTableIds],
+  );
+  const selectedSingleMergeGroupId = selectedMergeGroupIds.length === 1 ? selectedMergeGroupIds[0] : null;
+  const canMergeSelectedTables = selectedLayoutCount >= 2 && selectedMergeGroupIds.length === 0;
+  const canReleaseSelectedMerge =
+    selectedLayoutCount >= 1 && selectedSingleMergeGroupId != null && selectedMergeGroupIds.length === 1;
   const selectedRoomTableIds = useMemo(
     () => roomTables.map((table) => table.id),
     [roomTables],
@@ -1066,6 +1114,58 @@ export default function FloorPlan() {
     }
   }, [isRenumbering, queryClient, selectedRoomCode, t, toast]);
 
+  const handleMergeSelectedTables = useCallback(async () => {
+    if (!canMergeSelectedTables || isMergingTables) return;
+    try {
+      setIsMergingTables(true);
+      await customFetch("/api/tables/merge", {
+        method: "POST",
+        responseType: "json",
+        body: JSON.stringify({
+          tableIds: selectedLayoutTableIds,
+        }),
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: ["table-merge-groups", "active"] }),
+      ]);
+      toast({ title: `Merged ${selectedLayoutTableIds.length} table(s) into one group bill.` });
+    } catch (error) {
+      toast({
+        title: "Failed to merge selected tables",
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setIsMergingTables(false);
+    }
+  }, [canMergeSelectedTables, isMergingTables, queryClient, selectedLayoutTableIds, t, toast]);
+
+  const handleReleaseSelectedMergeGroup = useCallback(async () => {
+    if (!canReleaseSelectedMerge || !selectedSingleMergeGroupId || isReleasingMerge) return;
+    try {
+      setIsReleasingMerge(true);
+      await customFetch(`/api/tables/merge-groups/${selectedSingleMergeGroupId}/release`, {
+        method: "POST",
+        responseType: "json",
+        body: JSON.stringify({}),
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: ["table-merge-groups", "active"] }),
+      ]);
+      toast({ title: "Released merged table group." });
+    } catch (error) {
+      toast({
+        title: "Failed to release merged table group",
+        description: error instanceof Error ? error.message : t("common.unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setIsReleasingMerge(false);
+    }
+  }, [canReleaseSelectedMerge, isReleasingMerge, queryClient, selectedSingleMergeGroupId, t, toast]);
+
   const handleSelectAllTablesInRoom = useCallback(() => {
     if (!isLayoutEditMode || selectedRoomTableIds.length === 0) return;
     setSelectedLayoutTableIds((prev) => {
@@ -1356,6 +1456,9 @@ export default function FloorPlan() {
               ? t("floorPlan.layoutSaving")
               : t("floorPlan.layoutEditHint", { count: selectedLayoutCount })}
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Active merge groups in room: {mergeGroups.filter((group) => group.zone === selectedRoomCode).length}
+          </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button
               variant={allTablesSelectedInRoom ? "secondary" : "outline"}
@@ -1372,6 +1475,36 @@ export default function FloorPlan() {
               disabled={selectedLayoutCount === 0 || savingLayoutTableId !== null || isAligningLayout || isRenumbering}
             >
               {t("floorPlan.clearSelection")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { void handleMergeSelectedTables(); }}
+              disabled={
+                !canMergeSelectedTables ||
+                savingLayoutTableId !== null ||
+                isAligningLayout ||
+                isRenumbering ||
+                isMergingTables
+              }
+            >
+              {isMergingTables ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+              Merge Selected Bill
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { void handleReleaseSelectedMergeGroup(); }}
+              disabled={
+                !canReleaseSelectedMerge ||
+                savingLayoutTableId !== null ||
+                isAligningLayout ||
+                isRenumbering ||
+                isReleasingMerge
+              }
+            >
+              {isReleasingMerge ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+              Release Merge Group
             </Button>
             <Button
               variant="outline"

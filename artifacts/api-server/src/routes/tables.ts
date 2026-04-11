@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { count, eq } from "drizzle-orm";
-import { db, roomsTable, tablesTable } from "@workspace/db";
+import { and, count, eq, inArray } from "drizzle-orm";
+import { billingAuditLogsTable, db, ordersTable, roomsTable, tableMergeGroupsTable, tablesTable } from "@workspace/db";
 import { canAccessTable, requireAuth, requireRoles } from "../lib/auth";
 import {
   CreateTableBody,
@@ -28,6 +28,14 @@ type CreateRoomPayload = {
 type UpdateRoomPayload = Partial<CreateRoomPayload>;
 type RenumberTablesPayload = {
   zone?: unknown;
+};
+type MergeTablesPayload = {
+  tableIds?: unknown;
+  anchorTableId?: unknown;
+  staffId?: unknown;
+};
+type ReleaseMergePayload = {
+  staffId?: unknown;
 };
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -109,6 +117,44 @@ function parseUpdateRoomBody(body: unknown): { ok: true; data: UpdateRoomPayload
 
 function parseId(input: string | string[] | undefined): number {
   return parseInt(Array.isArray(input) ? input[0] : input ?? "", 10);
+}
+
+function parseInteger(input: unknown): number | null {
+  if (typeof input === "number" && Number.isFinite(input)) return Math.floor(input);
+  if (typeof input === "string") {
+    const parsed = Number.parseInt(input, 10);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function parseIdArray(input: unknown): number[] {
+  if (!Array.isArray(input)) return [];
+  const ids: number[] = [];
+  for (const value of input) {
+    const parsed = parseInteger(value);
+    if (parsed && parsed > 0) ids.push(parsed);
+  }
+  return [...new Set(ids)];
+}
+
+function parseMergedTableIds(raw: string): number[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const ids = parsed
+      .map((value) => (typeof value === "number" ? Math.floor(value) : Number.NaN))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    return [...new Set(ids)];
+  } catch {
+    return [];
+  }
+}
+
+function computeDistance(left: { posX: number; posY: number }, right: { posX: number; posY: number }): number {
+  const dx = left.posX - right.posX;
+  const dy = left.posY - right.posY;
+  return Math.sqrt((dx * dx) + (dy * dy));
 }
 
 function toIsoTable(table: typeof tablesTable.$inferSelect) {
@@ -372,6 +418,273 @@ router.post("/tables", requireRoles(ADMIN_ROLES), async (req, res): Promise<void
   await normalizeZoneTableNumbers(table.zone);
   res.status(201).json(GetTableResponse.parse(toIsoTable(table)));
 });
+
+router.get(
+  "/tables/merge-groups",
+  requireRoles(["waiter", "cashier", "supervisor", "manager", "owner"]),
+  async (req, res): Promise<void> => {
+    const status = typeof req.query.status === "string" ? req.query.status.trim().toLowerCase() : "";
+    const groups = status
+      ? await db
+          .select()
+          .from(tableMergeGroupsTable)
+          .where(eq(tableMergeGroupsTable.status, status))
+          .orderBy(tableMergeGroupsTable.createdAt)
+      : await db.select().from(tableMergeGroupsTable).orderBy(tableMergeGroupsTable.createdAt);
+
+    const tableIds = [...new Set(groups.flatMap((group) => parseMergedTableIds(group.mergedTableIds)))];
+    const tables = tableIds.length > 0
+      ? await db
+          .select({
+            id: tablesTable.id,
+            tableNumber: tablesTable.tableNumber,
+          })
+          .from(tablesTable)
+          .where(inArray(tablesTable.id, tableIds))
+      : [];
+    const tableNumberById = new Map(tables.map((row) => [row.id, row.tableNumber]));
+
+    res.json(
+      groups.map((group) => {
+        const mergedIds = parseMergedTableIds(group.mergedTableIds);
+        return {
+          id: group.id,
+          zone: group.zone,
+          anchorTableId: group.anchorTableId,
+          tableIds: mergedIds,
+          tableNumbers: mergedIds.map((tableId) => tableNumberById.get(tableId)).filter(Boolean),
+          status: group.status,
+          createdByStaffId: group.createdByStaffId,
+          createdAt: group.createdAt.toISOString(),
+          updatedAt: group.updatedAt.toISOString(),
+        };
+      }),
+    );
+  },
+);
+
+router.post(
+  "/tables/merge",
+  requireRoles(["waiter", "cashier", "supervisor", "manager", "owner"]),
+  async (req, res): Promise<void> => {
+    const body = (req.body ?? {}) as MergeTablesPayload;
+    const tableIds = parseIdArray(body.tableIds);
+    const requestedAnchorId = parseInteger(body.anchorTableId);
+    const staffId = parseInteger(body.staffId) ?? req.auth?.staffId ?? null;
+
+    if (tableIds.length < 2) {
+      res.status(400).json({ error: "At least 2 tables are required for merge." });
+      return;
+    }
+
+    const anchorTableId = requestedAnchorId && tableIds.includes(requestedAnchorId) ? requestedAnchorId : tableIds[0];
+    if (!anchorTableId) {
+      res.status(400).json({ error: "Invalid anchor table id." });
+      return;
+    }
+
+    try {
+      const result = await db.transaction(async (tx) => {
+        const tables = await tx.select().from(tablesTable).where(inArray(tablesTable.id, tableIds));
+        if (tables.length !== tableIds.length) {
+          const error = new Error("Some tables were not found.") as Error & { statusCode?: number };
+          error.statusCode = 404;
+          throw error;
+        }
+
+        const zones = [...new Set(tables.map((table) => table.zone))];
+        if (zones.length !== 1) {
+          const error = new Error("All merged tables must belong to the same room/zone.") as Error & { statusCode?: number };
+          error.statusCode = 409;
+          throw error;
+        }
+
+        const anchorTable = tables.find((table) => table.id === anchorTableId);
+        if (!anchorTable) {
+          const error = new Error("Anchor table not found in merge selection.") as Error & { statusCode?: number };
+          error.statusCode = 400;
+          throw error;
+        }
+
+        for (const table of tables) {
+          if (table.status !== "Active") {
+            const error = new Error(`Table ${table.tableNumber} is not in active service state.`) as Error & { statusCode?: number };
+            error.statusCode = 409;
+            throw error;
+          }
+          if (table.currentOrderId) {
+            const [linkedOrder] = await tx.select().from(ordersTable).where(eq(ordersTable.id, table.currentOrderId));
+            const blocked = linkedOrder && (linkedOrder.status === "open" || linkedOrder.status === "ready_to_pay");
+            if (blocked) {
+              const error = new Error(`Table ${table.tableNumber} already has an active order.`) as Error & { statusCode?: number };
+              error.statusCode = 409;
+              throw error;
+            }
+          }
+          if (table.mergedGroupId) {
+            const error = new Error(`Table ${table.tableNumber} is already in a merged group.`) as Error & { statusCode?: number };
+            error.statusCode = 409;
+            throw error;
+          }
+          if (table.occupancyStatus !== "available") {
+            const error = new Error(`Table ${table.tableNumber} must be available before merge.`) as Error & { statusCode?: number };
+            error.statusCode = 409;
+            throw error;
+          }
+          const distance = computeDistance(table, anchorTable);
+          if (distance > 170) {
+            const error = new Error(`Table ${table.tableNumber} is too far from anchor table for merge.`) as Error & { statusCode?: number };
+            error.statusCode = 409;
+            throw error;
+          }
+        }
+
+        const orderedIds = [...tableIds].sort((a, b) => a - b);
+        const [mergeGroup] = await tx
+          .insert(tableMergeGroupsTable)
+          .values({
+            zone: zones[0],
+            anchorTableId,
+            mergedTableIds: JSON.stringify(orderedIds),
+            status: "active",
+            createdByStaffId: staffId,
+          })
+          .returning();
+
+        for (const tableId of orderedIds) {
+          await tx
+            .update(tablesTable)
+            .set({
+              mergedGroupId: mergeGroup.id,
+              occupancyStatus: "occupied",
+            })
+            .where(eq(tablesTable.id, tableId));
+        }
+
+        await tx.insert(billingAuditLogsTable).values({
+          operation: "merge_tables",
+          mergeGroupId: mergeGroup.id,
+          tableIds: JSON.stringify(orderedIds),
+          detail: JSON.stringify({
+            anchorTableId,
+            zone: zones[0],
+          }),
+          staffId,
+        });
+
+        return mergeGroup;
+      });
+
+      res.status(201).json({
+        id: result.id,
+        zone: result.zone,
+        anchorTableId: result.anchorTableId,
+        tableIds: parseMergedTableIds(result.mergedTableIds),
+        status: result.status,
+        createdByStaffId: result.createdByStaffId,
+        createdAt: result.createdAt.toISOString(),
+        updatedAt: result.updatedAt.toISOString(),
+      });
+    } catch (error) {
+      const statusCode = (error as { statusCode?: number })?.statusCode ?? 500;
+      const message = error instanceof Error ? error.message : "Failed to merge tables.";
+      res.status(statusCode).json({ error: message });
+    }
+  },
+);
+
+router.post(
+  "/tables/merge-groups/:id/release",
+  requireRoles(["waiter", "cashier", "supervisor", "manager", "owner"]),
+  async (req, res): Promise<void> => {
+    const mergeGroupId = parseId(req.params.id);
+    if (!Number.isFinite(mergeGroupId) || mergeGroupId <= 0) {
+      res.status(400).json({ error: "Invalid merge group id." });
+      return;
+    }
+
+    const body = (req.body ?? {}) as ReleaseMergePayload;
+    const staffId = parseInteger(body.staffId) ?? req.auth?.staffId ?? null;
+
+    try {
+      const released = await db.transaction(async (tx) => {
+        const [mergeGroup] = await tx.select().from(tableMergeGroupsTable).where(eq(tableMergeGroupsTable.id, mergeGroupId));
+        if (!mergeGroup) {
+          const error = new Error("Merge group not found.") as Error & { statusCode?: number };
+          error.statusCode = 404;
+          throw error;
+        }
+        if (mergeGroup.status !== "active") {
+          const error = new Error("Merge group is already released.") as Error & { statusCode?: number };
+          error.statusCode = 409;
+          throw error;
+        }
+
+        const tableIds = parseMergedTableIds(mergeGroup.mergedTableIds);
+        const tables = tableIds.length > 0
+          ? await tx.select().from(tablesTable).where(inArray(tablesTable.id, tableIds))
+          : [];
+
+        const activeOrderIds = [...new Set(tables.map((table) => table.currentOrderId).filter((value): value is number => value != null))];
+        const activeOrders = activeOrderIds.length > 0
+          ? await tx
+              .select()
+              .from(ordersTable)
+              .where(and(inArray(ordersTable.id, activeOrderIds), inArray(ordersTable.status, ["open", "ready_to_pay"])))
+          : [];
+        if (activeOrders.length > 0) {
+          const error = new Error("Cannot release merge group while active orders are still open.") as Error & { statusCode?: number };
+          error.statusCode = 409;
+          throw error;
+        }
+
+        await tx.update(tableMergeGroupsTable).set({ status: "released" }).where(eq(tableMergeGroupsTable.id, mergeGroup.id));
+
+        for (const table of tables) {
+          const [linkedOrder] = table.currentOrderId
+            ? await tx.select().from(ordersTable).where(eq(ordersTable.id, table.currentOrderId))
+            : [null];
+
+          const nextOccupancy = linkedOrder?.status === "paid"
+            ? "paid"
+            : linkedOrder?.status === "cancelled"
+              ? "available"
+              : table.currentOrderId
+                ? "occupied"
+                : "available";
+
+          await tx
+            .update(tablesTable)
+            .set({
+              mergedGroupId: null,
+              occupancyStatus: nextOccupancy,
+            })
+            .where(eq(tablesTable.id, table.id));
+        }
+
+        await tx.insert(billingAuditLogsTable).values({
+          operation: "release_merge",
+          mergeGroupId: mergeGroup.id,
+          tableIds: JSON.stringify(tableIds),
+          detail: JSON.stringify({ released: true }),
+          staffId,
+        });
+
+        return {
+          mergeGroupId: mergeGroup.id,
+          releasedTableIds: tableIds,
+          status: "released",
+        };
+      });
+
+      res.json(released);
+    } catch (error) {
+      const statusCode = (error as { statusCode?: number })?.statusCode ?? 500;
+      const message = error instanceof Error ? error.message : "Failed to release merge group.";
+      res.status(statusCode).json({ error: message });
+    }
+  },
+);
 
 router.get("/tables/:id", requireAuth, async (req, res): Promise<void> => {
   const params = GetTableParams.safeParse({ id: parseId(req.params.id) });

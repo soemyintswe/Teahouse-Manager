@@ -106,6 +106,7 @@ export async function ensureDbCompatibility(): Promise<void> {
           pos_x INTEGER NOT NULL DEFAULT 0,
           pos_y INTEGER NOT NULL DEFAULT 0,
           current_order_id INTEGER,
+          merged_group_id INTEGER,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
@@ -119,6 +120,7 @@ export async function ensureDbCompatibility(): Promise<void> {
         ALTER TABLE tables ADD COLUMN IF NOT EXISTS pos_x INTEGER DEFAULT 0;
         ALTER TABLE tables ADD COLUMN IF NOT EXISTS pos_y INTEGER DEFAULT 0;
         ALTER TABLE tables ADD COLUMN IF NOT EXISTS current_order_id INTEGER;
+        ALTER TABLE tables ADD COLUMN IF NOT EXISTS merged_group_id INTEGER;
       `,
     },
     {
@@ -135,6 +137,9 @@ export async function ensureDbCompatibility(): Promise<void> {
           tax_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
           total_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
           payment_method TEXT,
+          billing_group_id INTEGER,
+          split_parent_order_id INTEGER,
+          split_label TEXT,
           customer_id INTEGER,
           customer_name TEXT,
           customer_phones TEXT,
@@ -164,6 +169,9 @@ export async function ensureDbCompatibility(): Promise<void> {
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_amount NUMERIC(10,2) DEFAULT 0;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_amount NUMERIC(10,2) DEFAULT 0;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_group_id INTEGER;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS split_parent_order_id INTEGER;
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS split_label TEXT;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id INTEGER;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name TEXT;
         ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_phones TEXT;
@@ -198,6 +206,55 @@ export async function ensureDbCompatibility(): Promise<void> {
         ALTER TABLE orders ALTER COLUMN total_amount SET DEFAULT 0;
         ALTER TABLE orders ALTER COLUMN created_at SET DEFAULT NOW();
         ALTER TABLE orders ALTER COLUMN updated_at SET DEFAULT NOW();
+      `,
+    },
+    {
+      name: "table merge groups table",
+      sql: `
+        CREATE TABLE IF NOT EXISTS table_merge_groups (
+          id SERIAL PRIMARY KEY,
+          zone TEXT NOT NULL,
+          anchor_table_id INTEGER NOT NULL,
+          merged_table_ids TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active',
+          created_by_staff_id INTEGER,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        ALTER TABLE table_merge_groups ADD COLUMN IF NOT EXISTS zone TEXT;
+        ALTER TABLE table_merge_groups ADD COLUMN IF NOT EXISTS anchor_table_id INTEGER;
+        ALTER TABLE table_merge_groups ADD COLUMN IF NOT EXISTS merged_table_ids TEXT;
+        ALTER TABLE table_merge_groups ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+        ALTER TABLE table_merge_groups ADD COLUMN IF NOT EXISTS created_by_staff_id INTEGER;
+        ALTER TABLE table_merge_groups ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+        ALTER TABLE table_merge_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+        UPDATE table_merge_groups SET status = COALESCE(status, 'active') WHERE status IS NULL;
+        UPDATE table_merge_groups SET created_at = COALESCE(created_at, NOW()) WHERE created_at IS NULL;
+        UPDATE table_merge_groups SET updated_at = COALESCE(updated_at, NOW()) WHERE updated_at IS NULL;
+      `,
+    },
+    {
+      name: "billing audit logs table",
+      sql: `
+        CREATE TABLE IF NOT EXISTS billing_audit_logs (
+          id SERIAL PRIMARY KEY,
+          operation TEXT NOT NULL,
+          merge_group_id INTEGER,
+          order_id INTEGER,
+          table_ids TEXT,
+          detail TEXT,
+          staff_id INTEGER,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        ALTER TABLE billing_audit_logs ADD COLUMN IF NOT EXISTS operation TEXT;
+        ALTER TABLE billing_audit_logs ADD COLUMN IF NOT EXISTS merge_group_id INTEGER;
+        ALTER TABLE billing_audit_logs ADD COLUMN IF NOT EXISTS order_id INTEGER;
+        ALTER TABLE billing_audit_logs ADD COLUMN IF NOT EXISTS table_ids TEXT;
+        ALTER TABLE billing_audit_logs ADD COLUMN IF NOT EXISTS detail TEXT;
+        ALTER TABLE billing_audit_logs ADD COLUMN IF NOT EXISTS staff_id INTEGER;
+        ALTER TABLE billing_audit_logs ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+        UPDATE billing_audit_logs SET operation = COALESCE(operation, 'unknown') WHERE operation IS NULL;
+        UPDATE billing_audit_logs SET created_at = COALESCE(created_at, NOW()) WHERE created_at IS NULL;
       `,
     },
     {

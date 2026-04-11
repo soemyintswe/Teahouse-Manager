@@ -13,6 +13,9 @@ export const ordersTable = pgTable("orders", {
   taxAmount: numeric("tax_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   paymentMethod: text("payment_method"),
+  billingGroupId: integer("billing_group_id"),
+  splitParentOrderId: integer("split_parent_order_id"),
+  splitLabel: text("split_label"),
   customerId: integer("customer_id"),
   customerName: text("customer_name"),
   customerPhones: text("customer_phones"), // JSON array string

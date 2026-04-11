@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  customFetch,
   useListPayments,
   useListTransactions,
   useCreateTransaction,
@@ -7,7 +8,7 @@ import {
   getListTransactionsQueryKey,
 } from "@workspace/api-client-react";
 import type { Payment, Transaction } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { ArrowDownCircle, ArrowUpCircle, Loader2, Plus, WalletCards } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -34,12 +35,23 @@ import {
 } from "@/components/ui/table";
 
 type ManualType = "deposit" | "income" | "expense" | "withdrawal";
-type SourceFilter = "all" | "payment" | "manual";
+type SourceFilter = "all" | "payment" | "manual" | "audit";
+
+type AuditEvent = {
+  id: number;
+  operation: string;
+  mergeGroupId: number | null;
+  orderId: number | null;
+  tableIds: unknown;
+  detail: unknown;
+  staffId: number | null;
+  createdAt: string;
+};
 
 type LedgerEntry = {
   id: string;
   createdAt: string;
-  source: "payment" | "manual";
+  source: "payment" | "manual" | "audit";
   type: string;
   direction: "in" | "out";
   amount: number;
@@ -123,9 +135,18 @@ export default function FinancePage() {
   const { data: transactions = [], isLoading: transactionsLoading } = useListTransactions(undefined, {
     query: { queryKey: getListTransactionsQueryKey(), refetchInterval: 20000 },
   });
+  const { data: auditEvents = [], isLoading: auditLoading } = useQuery({
+    queryKey: ["finance-audit-events"],
+    queryFn: () =>
+      customFetch<AuditEvent[]>("/api/finance/audit-events", {
+        method: "GET",
+        responseType: "json",
+      }),
+    refetchInterval: 20000,
+  });
   const createTransaction = useCreateTransaction();
 
-  const isLoading = paymentsLoading || transactionsLoading;
+  const isLoading = paymentsLoading || transactionsLoading || auditLoading;
 
   const ledger = useMemo<LedgerEntry[]>(() => {
     const paymentEntries = (payments as Payment[]).map((payment) => ({
@@ -156,10 +177,30 @@ export default function FinancePage() {
       tableNumber: null,
     }));
 
-    return [...paymentEntries, ...manualEntries].sort(
+    const auditEntries = (auditEvents as AuditEvent[]).map((event) => ({
+      id: `audit-${event.id}`,
+      createdAt: event.createdAt,
+      source: "audit" as const,
+      type: event.operation,
+      direction: "in" as const,
+      amount: 0,
+      description: (() => {
+        const detailText =
+          event.detail && typeof event.detail === "object"
+            ? JSON.stringify(event.detail)
+            : String(event.detail ?? "");
+        return `Audit: ${event.operation}${detailText ? ` · ${detailText}` : ""}`;
+      })(),
+      referenceNumber: event.orderId ? `Order #${event.orderId}` : event.mergeGroupId ? `Merge #${event.mergeGroupId}` : null,
+      paymentMethod: null,
+      orderId: event.orderId ?? null,
+      tableNumber: null,
+    }));
+
+    return [...paymentEntries, ...manualEntries, ...auditEntries].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [payments, transactions]);
+  }, [auditEvents, payments, transactions]);
 
   const filteredLedger = useMemo(() => {
     return ledger.filter((entry) => {
@@ -294,6 +335,7 @@ export default function FinancePage() {
                 <SelectItem value="all">{t("finance.sourceAll")}</SelectItem>
                 <SelectItem value="payment">{t("finance.sourcePayment")}</SelectItem>
                 <SelectItem value="manual">{t("finance.sourceManual")}</SelectItem>
+                <SelectItem value="audit">Audit</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -458,7 +500,11 @@ export default function FinancePage() {
                       <TableCell>{new Date(entry.createdAt).toLocaleString()}</TableCell>
                       <TableCell>
                         <Badge variant="outline">
-                          {entry.source === "payment" ? t("finance.sourcePayment") : t("finance.sourceManual")}
+                          {entry.source === "payment"
+                            ? t("finance.sourcePayment")
+                            : entry.source === "manual"
+                              ? t("finance.sourceManual")
+                              : "Audit"}
                         </Badge>
                       </TableCell>
                       <TableCell>{typeLabel(entry.type)}</TableCell>
@@ -485,4 +531,3 @@ export default function FinancePage() {
     </div>
   );
 }
-

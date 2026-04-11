@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and, sql } from "drizzle-orm";
-import { db, paymentsTable, ordersTable, tablesTable } from "@workspace/db";
+import { eq, and, inArray, sql } from "drizzle-orm";
+import { db, paymentsTable, ordersTable, tableMergeGroupsTable, tablesTable } from "@workspace/db";
 import { canAccessTable, requireAuth, requireRoles } from "../lib/auth";
 import {
   ListPaymentsQueryParams,
@@ -53,6 +53,34 @@ function buildPaymentPayload(input: {
 
 function formatPayment(p: typeof paymentsTable.$inferSelect) {
   return { ...p, amount: p.amount.toString(), createdAt: p.createdAt.toISOString() };
+}
+
+function parseMergedTableIds(raw: string | null | undefined): number[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const ids = parsed
+      .map((value) => (typeof value === "number" ? Math.floor(value) : Number.NaN))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    return [...new Set(ids)];
+  } catch {
+    return [];
+  }
+}
+
+async function resolveOrderTableIds(order: typeof ordersTable.$inferSelect): Promise<number[]> {
+  if (order.billingGroupId) {
+    const [group] = await db
+      .select()
+      .from(tableMergeGroupsTable)
+      .where(eq(tableMergeGroupsTable.id, order.billingGroupId));
+    if (group) {
+      const tableIds = parseMergedTableIds(group.mergedTableIds);
+      if (tableIds.length > 0) return tableIds;
+    }
+  }
+  return order.tableId > 0 ? [order.tableId] : [];
 }
 
 router.get("/payments", requireRoles(["cashier", "supervisor", "manager", "owner"]), async (req, res): Promise<void> => {
@@ -140,6 +168,14 @@ router.post("/payments", requireAuth, async (req, res): Promise<void> => {
     res.status(403).json({ error: "Permission denied." });
     return;
   }
+  if (order.status === "paid") {
+    res.status(409).json({ error: "Order is already paid." });
+    return;
+  }
+  if (order.status === "cancelled") {
+    res.status(409).json({ error: "Cancelled order cannot be paid." });
+    return;
+  }
 
   const receiptNumber = `RCP-${Date.now()}-${order.id}`;
   const [payment] = await db.insert(paymentsTable).values({
@@ -154,7 +190,38 @@ router.post("/payments", requireAuth, async (req, res): Promise<void> => {
 
   // Mark order as paid, but keep table occupied until manual checkout.
   await db.update(ordersTable).set({ status: "paid", paymentMethod: parsed.data.paymentMethod }).where(eq(ordersTable.id, parsed.data.orderId));
-  await db.update(tablesTable).set({ occupancyStatus: "paid", currentOrderId: parsed.data.orderId }).where(eq(tablesTable.id, order.tableId));
+  const tableIds = await resolveOrderTableIds(order);
+
+  if (tableIds.length > 0) {
+    const parentOrderId = order.splitParentOrderId ?? order.id;
+    const [parentOrder] = await db.select().from(ordersTable).where(eq(ordersTable.id, parentOrderId));
+    const splitChildren = await db.select().from(ordersTable).where(eq(ordersTable.splitParentOrderId, parentOrderId));
+    const splitFamily = [
+      ...(parentOrder ? [parentOrder] : []),
+      ...splitChildren,
+    ];
+    const hasSplitFamily = splitFamily.length > 1 || Boolean(parentOrder?.splitLabel === "split_parent");
+
+    if (hasSplitFamily) {
+      const hasUnpaidSplit = splitFamily.some((entry) => {
+        const totalAmount = Number(entry.totalAmount.toString());
+        if (!Number.isFinite(totalAmount) || totalAmount <= 0) return false;
+        return entry.status !== "paid" && entry.status !== "cancelled";
+      });
+      await db
+        .update(tablesTable)
+        .set({
+          occupancyStatus: hasUnpaidSplit ? "payment_pending" : "paid",
+          currentOrderId: parentOrderId,
+        })
+        .where(inArray(tablesTable.id, tableIds));
+    } else {
+      await db
+        .update(tablesTable)
+        .set({ occupancyStatus: "paid", currentOrderId: parsed.data.orderId })
+        .where(inArray(tablesTable.id, tableIds));
+    }
+  }
 
   res.status(201).json(GetPaymentResponse.parse(formatPayment(payment)));
 });

@@ -19,6 +19,7 @@ export const tablesTable = pgTable("tables", {
   posX: integer("pos_x").notNull().default(0),
   posY: integer("pos_y").notNull().default(0),
   currentOrderId: integer("current_order_id"),
+  mergedGroupId: integer("merged_group_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
