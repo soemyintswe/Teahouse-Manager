@@ -159,6 +159,41 @@ router.post("/payments", requireAuth, async (req, res): Promise<void> => {
   res.status(201).json(GetPaymentResponse.parse(formatPayment(payment)));
 });
 
+router.get("/payments/order/:orderId/latest", requireAuth, async (req, res): Promise<void> => {
+  const orderId = parseOrderId(req.params.orderId);
+  if (!orderId) {
+    res.status(400).json({ error: "Invalid order id." });
+    return;
+  }
+
+  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId));
+  if (!order) {
+    res.status(404).json({ error: "Order not found" });
+    return;
+  }
+  if (req.auth?.role === "guest" && !canAccessTable(req, order.tableId)) {
+    res.status(403).json({ error: "Permission denied." });
+    return;
+  }
+  if (req.auth?.role === "customer" && req.auth.customerId !== order.customerId) {
+    res.status(403).json({ error: "Permission denied." });
+    return;
+  }
+
+  const [payment] = await db
+    .select()
+    .from(paymentsTable)
+    .where(eq(paymentsTable.orderId, order.id))
+    .orderBy(sql`${paymentsTable.createdAt} desc`);
+
+  if (!payment) {
+    res.status(404).json({ error: "Payment receipt not found for this order." });
+    return;
+  }
+
+  res.json(GetPaymentResponse.parse(formatPayment(payment)));
+});
+
 router.get("/payments/:id", requireRoles(["cashier", "supervisor", "manager", "owner"]), async (req, res): Promise<void> => {
   const params = GetPaymentParams.safeParse({ id: parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }

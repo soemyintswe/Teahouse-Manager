@@ -30,6 +30,18 @@ type PaymentQrPreview = {
   issuedAt: string;
 };
 
+type PaymentRecord = {
+  id: number;
+  orderId: number;
+  tableNumber: string;
+  amount: string;
+  paymentMethod: string;
+  status: string;
+  cashierId: number | null;
+  receiptNumber: string;
+  createdAt: string;
+};
+
 type CashierOrderPick = {
   id: number;
   tableNumber: string;
@@ -55,6 +67,15 @@ function parseWallet(search: string): WalletCode {
 
 function formatAmount(value: string | number): string {
   return `${Number(value).toLocaleString()} ks`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 export default function CashierPage() {
@@ -109,7 +130,69 @@ export default function CashierPage() {
     refetchInterval: 20000,
   });
 
+  const { data: latestPayment, isLoading: latestPaymentLoading } = useQuery({
+    queryKey: ["payment-latest", orderId],
+    enabled: Boolean(orderId && order?.status === "paid"),
+    retry: false,
+    queryFn: () =>
+      customFetch<PaymentRecord>(`/api/payments/order/${orderId}/latest`, {
+        method: "GET",
+        responseType: "json",
+      }),
+  });
+
   const createPayment = useCreatePayment();
+
+  const openReceiptWindow = (payment: PaymentRecord, autoPrint: boolean) => {
+    if (!order || typeof window === "undefined") return;
+    const walletLabel = payment.paymentMethod.startsWith("cash")
+      ? t("public.checkout.paymentCash")
+      : t(`cashier.wallet.${payment.paymentMethod}`);
+    const issuedAt = new Date(payment.createdAt).toLocaleString();
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${escapeHtml(t("cashier.receipt.title"))}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #111827; }
+      .card { max-width: 420px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 10px; padding: 18px; }
+      h1 { margin: 0 0 4px 0; font-size: 22px; }
+      .muted { color: #6b7280; font-size: 12px; }
+      .row { display: flex; justify-content: space-between; margin: 8px 0; font-size: 14px; }
+      .total { margin-top: 12px; border-top: 1px dashed #9ca3af; padding-top: 10px; font-weight: 700; font-size: 16px; }
+      .footer { margin-top: 16px; font-size: 12px; color: #6b7280; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>${escapeHtml(t("cashier.receipt.title"))}</h1>
+      <div class="muted">${escapeHtml(t("cashier.receipt.number"))}: ${escapeHtml(payment.receiptNumber)}</div>
+      <div class="muted">${escapeHtml(issuedAt)}</div>
+
+      <div class="row"><span>${escapeHtml(t("cashier.receipt.order"))}</span><span>#${order.id}</span></div>
+      <div class="row"><span>${escapeHtml(t("cashier.receipt.table"))}</span><span>${escapeHtml(order.tableNumber)}</span></div>
+      <div class="row"><span>${escapeHtml(t("orders.subtotal"))}</span><span>${escapeHtml(formatAmount(order.subtotal))}</span></div>
+      <div class="row"><span>${escapeHtml(t("orderDetail.tax"))}</span><span>${escapeHtml(formatAmount(order.taxAmount))}</span></div>
+      <div class="row total"><span>${escapeHtml(t("orders.total"))}</span><span>${escapeHtml(formatAmount(order.totalAmount))}</span></div>
+      <div class="row"><span>${escapeHtml(t("cashier.receipt.paymentMethod"))}</span><span>${escapeHtml(walletLabel)}</span></div>
+      <div class="footer">${escapeHtml(t("cashier.receipt.footer"))}</div>
+    </div>
+  </body>
+</html>`;
+
+    const popup = window.open("", "_blank", "noopener,noreferrer");
+    if (!popup) return;
+    popup.document.open();
+    popup.document.write(html);
+    popup.document.close();
+    if (autoPrint) {
+      window.setTimeout(() => {
+        popup.focus();
+        popup.print();
+      }, 250);
+    }
+  };
 
   const handleConfirmPayment = async () => {
     if (!orderId) return;
@@ -125,6 +208,7 @@ export default function CashierPage() {
         queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() }),
         queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() }),
         queryClient.invalidateQueries({ queryKey: getListTablesQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: ["payment-latest", orderId] }),
       ]);
       toast({ title: t("cashier.paymentSuccess") });
     } catch (error) {
@@ -296,6 +380,24 @@ export default function CashierPage() {
       </div>
 
       <div className="flex justify-end gap-2">
+        {isPaid ? (
+          <>
+            <Button
+              variant="outline"
+              onClick={() => latestPayment && openReceiptWindow(latestPayment, false)}
+              disabled={!latestPayment || latestPaymentLoading}
+            >
+              {t("cashier.receipt.viewSoft")}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => latestPayment && openReceiptWindow(latestPayment, true)}
+              disabled={!latestPayment || latestPaymentLoading}
+            >
+              {t("cashier.receipt.printHard")}
+            </Button>
+          </>
+        ) : null}
         <Button variant="outline" onClick={() => setLocation(`/orders/${order.id}`)}>
           {t("cashier.backOrder")}
         </Button>

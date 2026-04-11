@@ -617,6 +617,16 @@
     "alreadyPaid": "Already Paid",
     "paymentSuccess": "Payment confirmed successfully",
     "paymentFailed": "Failed to confirm payment",
+    "receipt": {
+      "title": "Payment Receipt",
+      "number": "Receipt No",
+      "order": "Order",
+      "table": "Table",
+      "paymentMethod": "Payment Method",
+      "footer": "Thank you for visiting Teahouse Manager.",
+      "viewSoft": "View Receipt",
+      "printHard": "Print Receipt"
+    },
     "wallet": {
       "wave_pay": "Wave Pay",
       "kbz_pay": "KBZ Pay",

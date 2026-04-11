@@ -617,6 +617,16 @@
     "alreadyPaid": "ငွေရှင်းပြီး",
     "paymentSuccess": "ငွေရှင်းမှု အောင်မြင်စွာ အတည်ပြုပြီးပါပြီ",
     "paymentFailed": "ငွေရှင်းမှု အတည်ပြုမရပါ",
+    "receipt": {
+      "title": "ငွေပြေစာ",
+      "number": "ပြေစာအမှတ်",
+      "order": "အော်ဒါ",
+      "table": "စားပွဲ",
+      "paymentMethod": "ငွေပေးချေမှုနည်းလမ်း",
+      "footer": "Teahouse Manager ကိုလာရောက်အားပေးမှုအတွက် ကျေးဇူးတင်ပါသည်။",
+      "viewSoft": "Soft copy ကြည့်မည်",
+      "printHard": "Hard copy ပုံနှိပ်မည်"
+    },
     "wallet": {
       "wave_pay": "Wave Pay",
       "kbz_pay": "KBZ Pay",
