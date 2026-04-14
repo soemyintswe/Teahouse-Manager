@@ -43,8 +43,10 @@
   "zones": {
     "hall": "Hall Zone",
     "aircon": "Air-con Room",
+    "outside": "Outside",
     "hallShort": "Hall",
-    "airconShort": "Air-con"
+    "airconShort": "Air-con",
+    "outsideShort": "Outside"
   },
   "station": {
     "salad": "အသုပ်",
@@ -839,6 +841,8 @@
     "customerSubtitle": "Table layout မှ လွတ်နေသောစားပွဲကိုရွေးပြီး ဘွတ်ကင်တင်ကာ တစ်ဆက်တည်း မီနူးမှာယူနိုင်ပါသည်။",
     "chooseTableLayout": "Table Layout မှ စားပွဲရွေးမည်",
     "noAvailableTable": "လက်ရှိအချိန်တွင် လွတ်နေသောစားပွဲမရှိပါ။",
+    "noAvailableTableInZone": "{{zone}} တွင် လွတ်နေသောစားပွဲမရှိပါ။",
+    "zoneFilter": "ဧရိယာ",
     "bookAndOrder": "စားပွဲဘွတ်ကင်တင်ပြီး မှာယူမည်",
     "backToMenu": "အများပြည်သူ မီနူးသို့ ပြန်မည်",
     "refresh": "ပြန်ဖွင့်မည်",

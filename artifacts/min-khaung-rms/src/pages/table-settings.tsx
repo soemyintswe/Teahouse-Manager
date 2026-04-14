@@ -147,11 +147,15 @@ function getZoneLabel(
   roomNameByCode?: Map<string, string>,
   short = false,
 ): string {
+  const normalized = zone.trim().toLowerCase();
   if (roomNameByCode?.has(zone)) return roomNameByCode.get(zone) ?? zone;
-  if (zone === "aircon") {
+  if (normalized === "aircon") {
     return t(short ? "zones.airconShort" : "zones.aircon");
   }
-  if (zone === "hall") return t(short ? "zones.hallShort" : "zones.hall");
+  if (normalized === "outside" || normalized === "outdoor") {
+    return t(short ? "zones.outsideShort" : "zones.outside");
+  }
+  if (normalized === "hall") return t(short ? "zones.hallShort" : "zones.hall");
   return zone;
 }
 

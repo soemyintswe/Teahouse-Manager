@@ -43,8 +43,10 @@
   "zones": {
     "hall": "Hall Zone",
     "aircon": "Air-con Room",
+    "outside": "Outside",
     "hallShort": "Hall",
-    "airconShort": "Air-con"
+    "airconShort": "Air-con",
+    "outsideShort": "Outside"
   },
   "station": {
     "salad": "Salad",
@@ -839,6 +841,8 @@
     "customerSubtitle": "Choose an available table from layout, book instantly, then continue to menu order.",
     "chooseTableLayout": "Choose Table from Layout",
     "noAvailableTable": "No available tables right now.",
+    "noAvailableTableInZone": "No available tables in {{zone}}.",
+    "zoneFilter": "Zone",
     "bookAndOrder": "Book Table and Continue to Order",
     "backToMenu": "Back to Public Menu",
     "refresh": "Refresh",

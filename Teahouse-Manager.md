@@ -1,6 +1,6 @@
 # Teahouse-Manager
 
-Last updated: 2026-04-14
+Last updated: 2026-04-15
 
 ## 1) Project Snapshot
 - Project: Teahouse Management System (Web + API + DB + Mobile/PWA usage)
@@ -68,6 +68,8 @@ Last updated: 2026-04-14
   - booking `orderAt` and `checkOutAt` synced from order/table lifecycle.
 - Frontend updates:
   - New Bookings page.
+  - Customer booking flow now uses zone tabs (`Hall Zone`, `Air-con Room`, `Outside`) and allows selection from available tables only.
+  - Customer booking layout zone selection now feeds directly into order handoff (`/orders?tableId=...&scan=1`).
   - New Business Hours settings page.
   - Floor Plan reserved table cards now show customer name and phone.
   - i18n updates (EN/MM) for booking/business-hours/floor-plan labels and toasts.
@@ -87,6 +89,7 @@ Last updated: 2026-04-14
   - `pnpm run build` passed.
 
 Recent commits:
+- `43a6e1f` Feature(customer): add table-booking flow with layout and order handoff
 - `430df39` Booking Update
 - `5ca9eba` Feature: Phase C shared seating sessions and workflow automation
 - `a975bae` Feature: Phase B table merge, split billing, and audit trails

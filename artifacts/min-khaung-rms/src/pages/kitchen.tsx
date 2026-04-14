@@ -27,6 +27,13 @@ function getStationLabel(station: StationCode, t: (key: string) => string): stri
   return t(`station.${station}`);
 }
 
+function getZoneLabel(zone: string, t: (key: string) => string, short = false): string {
+  const normalized = zone.trim().toLowerCase();
+  if (normalized === "aircon") return t(short ? "zones.airconShort" : "zones.aircon");
+  if (normalized === "outside" || normalized === "outdoor") return t(short ? "zones.outsideShort" : "zones.outside");
+  return t(short ? "zones.hallShort" : "zones.hall");
+}
+
 export default function Kitchen() {
   const { t } = useTranslation();
   const search = useSearch();
@@ -153,7 +160,7 @@ export default function Kitchen() {
                 <div>
                   <CardTitle className="text-2xl font-black">{t("kitchen.table", { table: order.tableNumber })}</CardTitle>
                   <span className="text-sm font-semibold uppercase text-muted-foreground">
-                    {order.zone === "aircon" ? t("zones.airconShort") : t("zones.hallShort")}
+                    {getZoneLabel(order.zone, t, true)}
                   </span>
                 </div>
                 <div className="flex items-center text-red-600 font-bold bg-red-100 px-2 py-1 rounded">

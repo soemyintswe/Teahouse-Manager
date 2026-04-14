@@ -194,8 +194,12 @@ function toLocalDateString(date: Date): string {
 }
 
 function getZoneLabel(zone: string, t: (key: string) => string, short = false): string {
-  if (zone === "aircon") {
+  const normalized = zone.trim().toLowerCase();
+  if (normalized === "aircon") {
     return t(short ? "zones.airconShort" : "zones.aircon");
+  }
+  if (normalized === "outside" || normalized === "outdoor") {
+    return t(short ? "zones.outsideShort" : "zones.outside");
   }
   return t(short ? "zones.hallShort" : "zones.hall");
 }

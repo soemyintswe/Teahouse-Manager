@@ -47,14 +47,35 @@ type BookingRecord = {
   status: "pending_payment" | "confirmed" | "checked_in" | "cancelled" | "completed";
 };
 
+type ZoneKey = "hall" | "aircon" | "outside";
+
 const CONFIG_QUERY_KEY = ["bookings", "customer-config"];
 const LAYOUT_QUERY_KEY = ["bookings", "customer-layout"];
 const HISTORY_QUERY_KEY = ["bookings", "customer-history"];
 const PROFILE_QUERY_KEY = ["customers", "me", "mini"];
+const ZONE_TABS: ZoneKey[] = ["hall", "aircon", "outside"];
+const OUTSIDE_ZONE_ALIASES = new Set(["outside", "outdoor", "patio", "garden", "external", "open"]);
 
 function toDateTimeInputValue(date: Date): string {
   const local = new Date(date.getTime() - (date.getTimezoneOffset() * 60_000));
   return local.toISOString().slice(0, 16);
+}
+
+function normalizeZone(rawZone: string): ZoneKey {
+  const zone = rawZone.trim().toLowerCase();
+  if (zone === "aircon" || zone === "air_con" || zone === "ac" || zone.includes("air")) {
+    return "aircon";
+  }
+  if (OUTSIDE_ZONE_ALIASES.has(zone) || zone.includes("outside") || zone.includes("outdoor")) {
+    return "outside";
+  }
+  return "hall";
+}
+
+function getZoneLabel(zone: ZoneKey, t: (key: string) => string, short = false): string {
+  if (zone === "aircon") return t(short ? "zones.airconShort" : "zones.aircon");
+  if (zone === "outside") return t(short ? "zones.outsideShort" : "zones.outside");
+  return t(short ? "zones.hallShort" : "zones.hall");
 }
 
 function getStatusClass(status: BookingRecord["status"]): string {
@@ -100,6 +121,7 @@ export default function CustomerBookingsPage() {
   });
 
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
+  const [selectedZone, setSelectedZone] = useState<ZoneKey>("hall");
   const [slotStartAt, setSlotStartAt] = useState<string>(toDateTimeInputValue(new Date(Date.now() + (65 * 60_000))));
   const [slotMinutes, setSlotMinutes] = useState<string>("120");
   const [notes, setNotes] = useState<string>("");
@@ -110,18 +132,38 @@ export default function CustomerBookingsPage() {
     setSlotStartAt(toDateTimeInputValue(new Date(Date.now() + ((config.bookingLeadTimeMinutes + 5) * 60_000))));
   }, [config]);
 
+  const tablesByZone = useMemo<Record<ZoneKey, CustomerLayoutTable[]>>(() => {
+    const grouped: Record<ZoneKey, CustomerLayoutTable[]> = {
+      hall: [],
+      aircon: [],
+      outside: [],
+    };
+    for (const table of availableTables) {
+      grouped[normalizeZone(table.zone)].push(table);
+    }
+    for (const zone of ZONE_TABS) {
+      grouped[zone].sort((left, right) => left.tableNumber.localeCompare(right.tableNumber, undefined, { numeric: true }));
+    }
+    return grouped;
+  }, [availableTables]);
+
+  const zoneTables = tablesByZone[selectedZone];
+
   useEffect(() => {
-    if (!availableTables.length) return;
-    if (selectedTableId && availableTables.some((table) => table.id === selectedTableId)) return;
-    setSelectedTableId(availableTables[0].id);
-  }, [availableTables, selectedTableId]);
+    if (!zoneTables.length) {
+      setSelectedTableId(null);
+      return;
+    }
+    if (selectedTableId && zoneTables.some((table) => table.id === selectedTableId)) return;
+    setSelectedTableId(zoneTables[0].id);
+  }, [selectedTableId, zoneTables]);
 
   const layoutMetrics = useMemo(() => {
-    if (availableTables.length === 0) {
+    if (zoneTables.length === 0) {
       return { minX: 0, minY: 0, rangeX: 1, rangeY: 1 };
     }
-    const xs = availableTables.map((table) => table.posX);
-    const ys = availableTables.map((table) => table.posY);
+    const xs = zoneTables.map((table) => table.posX);
+    const ys = zoneTables.map((table) => table.posY);
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
     const minY = Math.min(...ys);
@@ -132,7 +174,7 @@ export default function CustomerBookingsPage() {
       rangeX: Math.max(maxX - minX, 1),
       rangeY: Math.max(maxY - minY, 1),
     };
-  }, [availableTables]);
+  }, [zoneTables]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -216,8 +258,38 @@ export default function CustomerBookingsPage() {
             <p className="text-sm text-muted-foreground">{t("bookings.noAvailableTable")}</p>
           ) : (
             <div className="space-y-3">
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-muted-foreground">{t("bookings.zoneFilter")}</p>
+                <div className="flex flex-wrap gap-2">
+                  {ZONE_TABS.map((zone) => {
+                    const active = selectedZone === zone;
+                    const count = tablesByZone[zone].length;
+                    return (
+                      <button
+                        key={zone}
+                        type="button"
+                        onClick={() => setSelectedZone(zone)}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                          active
+                            ? "border-emerald-600 bg-emerald-600 text-white"
+                            : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+                        }`}
+                      >
+                        {getZoneLabel(zone, t)} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {zoneTables.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {t("bookings.noAvailableTableInZone", { zone: getZoneLabel(selectedZone, t) })}
+                </p>
+              ) : null}
+
               <div className="relative h-[360px] overflow-hidden rounded-lg border bg-muted/20">
-                {availableTables.map((table) => {
+                {zoneTables.map((table) => {
                   const left = 6 + (((table.posX - layoutMetrics.minX) / layoutMetrics.rangeX) * 88);
                   const top = 8 + (((table.posY - layoutMetrics.minY) / layoutMetrics.rangeY) * 80);
                   const selected = selectedTableId === table.id;
@@ -245,11 +317,14 @@ export default function CustomerBookingsPage() {
                   <select
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                     value={selectedTableId ?? ""}
-                    onChange={(event) => setSelectedTableId(Number.parseInt(event.target.value, 10))}
+                    onChange={(event) => {
+                      const parsed = Number.parseInt(event.target.value, 10);
+                      setSelectedTableId(Number.isFinite(parsed) ? parsed : null);
+                    }}
                   >
-                    {availableTables.map((table) => (
+                    {zoneTables.map((table) => (
                       <option key={table.id} value={table.id}>
-                        {table.tableNumber} ({table.zone})
+                        {table.tableNumber} ({getZoneLabel(normalizeZone(table.zone), t)})
                       </option>
                     ))}
                   </select>
@@ -323,4 +398,3 @@ export default function CustomerBookingsPage() {
     </div>
   );
 }
-
