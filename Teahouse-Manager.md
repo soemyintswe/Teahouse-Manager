@@ -71,6 +71,7 @@ Last updated: 2026-04-15
   - Customer booking flow now uses zone tabs (`Hall Zone`, `Air-con Room`, `Outside`) and allows selection from available tables only.
   - Customer booking layout zone selection now feeds directly into order handoff (`/orders?tableId=...&scan=1`).
   - Startup resiliency update: when Render/API is waking up, app now keeps showing loading spinner + loading message only and performs silent background retries (no user-facing error card/retry button).
+  - Customer login redirect hardening: successful customer login now always returns to Public Menu (`/`) instead of remaining on `/login?mode=customer`.
   - New Business Hours settings page.
   - Floor Plan reserved table cards now show customer name and phone.
   - i18n updates (EN/MM) for booking/business-hours/floor-plan labels and toasts.
@@ -90,6 +91,7 @@ Last updated: 2026-04-15
   - `pnpm run build` passed.
 
 Recent commits:
+- `950b534` Fix(bootstrap): keep loading UI and silent auto-retry on startup failures
 - `eab7b4b` Feature(bookings): zone-based available table selection on customer bookings
 - `43a6e1f` Feature(customer): add table-booking flow with layout and order handoff
 - `430df39` Booking Update

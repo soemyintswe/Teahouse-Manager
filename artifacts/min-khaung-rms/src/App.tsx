@@ -324,13 +324,8 @@ function RouterContent() {
     const [, setLocation] = useLocation();
 
     useEffect(() => {
-      if (user?.role === "customer" && user.mustChangePassword) return;
       setLocation(getDefaultPath());
     }, [getDefaultPath, setLocation, user]);
-
-    if (user?.role === "customer" && user.mustChangePassword) {
-      return <LoginPage />;
-    }
 
     return (
       <div className="flex min-h-[40vh] items-center justify-center">

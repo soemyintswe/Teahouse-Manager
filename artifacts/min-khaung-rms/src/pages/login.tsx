@@ -124,7 +124,6 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!user) return;
-    if (user.role === "customer" && user.mustChangePassword) return;
     setLocation(getDefaultPath());
   }, [getDefaultPath, setLocation, user]);
 
@@ -188,16 +187,9 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const user = await loginCustomer({ phone, password });
+      await loginCustomer({ phone, password });
       toast({ title: t("auth.loginSuccess") });
-      if (user.mustChangePassword) {
-        setPendingOldPassword(password);
-        setNewPassword("");
-        setConfirmPassword("");
-        setPasswordChangeOpen(true);
-      } else {
-        setLocation("/");
-      }
+      setLocation("/");
     } catch (error) {
       toast({
         title: t("auth.loginFailed"),
