@@ -1,7 +1,6 @@
 import * as React from "react";
 import { Capacitor } from "@capacitor/core";
 import { setBaseUrl } from "@workspace/api-client-react";
-import { RefreshCw } from "lucide-react";
 import { createRoot } from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
 import App from "./App";
@@ -26,8 +25,7 @@ if (resolvedApiBaseUrl) {
 
 type BootState =
   | { status: "loading"; message: string }
-  | { status: "ready" }
-  | { status: "error"; message: string; detail?: string };
+  | { status: "ready" };
 
 type NormalizedError = {
   message: string;
@@ -95,77 +93,6 @@ function LoadingScreen({ message }: { message: string }) {
   );
 }
 
-function ErrorScreen({ message, detail }: { message: string; detail?: string }) {
-  return <RetryableErrorScreen message={message} detail={detail} />;
-}
-
-function RetryableErrorScreen({
-  message,
-  detail,
-  onRetry,
-  autoRetryMs = 0,
-}: {
-  message: string;
-  detail?: string;
-  onRetry?: () => void;
-  autoRetryMs?: number;
-}) {
-  const apiInfo = resolvedApiBaseUrl ?? "Same-origin /api";
-  const retryAction = React.useMemo(() => onRetry ?? (() => window.location.reload()), [onRetry]);
-  const enableAutoRetry = autoRetryMs > 0;
-  const [secondsLeft, setSecondsLeft] = React.useState(
-    enableAutoRetry ? Math.ceil(autoRetryMs / 1000) : 0,
-  );
-
-  React.useEffect(() => {
-    if (!enableAutoRetry) return;
-
-    const startedAt = Date.now();
-    setSecondsLeft(Math.ceil(autoRetryMs / 1000));
-
-    const intervalId = window.setInterval(() => {
-      const elapsed = Date.now() - startedAt;
-      const remaining = Math.max(0, Math.ceil((autoRetryMs - elapsed) / 1000));
-      setSecondsLeft(remaining);
-    }, 250);
-
-    const timeoutId = window.setTimeout(() => {
-      retryAction();
-    }, autoRetryMs);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.clearTimeout(timeoutId);
-    };
-  }, [autoRetryMs, enableAutoRetry, message, detail, retryAction]);
-
-  return (
-    <div className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
-      <div className="w-full max-w-lg rounded-xl border border-destructive/40 bg-card p-6 shadow-lg">
-        <h1 className="text-xl font-bold text-destructive">{i18n.t("bootstrap.appErrorTitle")}</h1>
-        <p className="mt-2 text-sm">{message}</p>
-        {enableAutoRetry ? (
-          <p className="mt-2 text-sm text-muted-foreground">
-            {i18n.t("bootstrap.autoRetrying", { seconds: secondsLeft })}
-          </p>
-        ) : null}
-        <div className="mt-3 rounded-md bg-muted p-3 text-xs text-muted-foreground">
-          <p>{i18n.t("bootstrap.api")}: {apiInfo}</p>
-          {detail ? <p className="mt-1 line-clamp-3">{detail}</p> : null}
-        </div>
-        <button
-          type="button"
-          onClick={retryAction}
-          className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          <RefreshCw className="h-4 w-4" />
-          {i18n.t("common.retry")}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 type RuntimeErrorBoundaryProps = React.PropsWithChildren<{
   onError: (error: Error) => void;
 }>;
@@ -193,7 +120,7 @@ class RuntimeErrorBoundary extends React.Component<
 
   render() {
     if (this.state.error) {
-      return <ErrorScreen message={this.state.error.message} detail={this.state.error.stack} />;
+      return <LoadingScreen message={i18n.t("bootstrap.retrying")} />;
     }
     return this.props.children;
   }
@@ -205,34 +132,48 @@ function BootstrapApp() {
     message: i18n.t("bootstrap.initializing"),
   });
   const [retryTick, setRetryTick] = React.useState(0);
+  const retryTimerRef = React.useRef<number | null>(null);
 
-  const requestBootstrapRetry = React.useCallback(() => {
+  const requestBootstrapRetry = React.useCallback((message: string) => {
     setState({
       status: "loading",
-      message: i18n.t("bootstrap.retrying"),
+      message,
     });
     setRetryTick((prev) => prev + 1);
   }, []);
 
+  const queueBootstrapRetry = React.useCallback(() => {
+    if (retryTimerRef.current !== null) {
+      window.clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+
+    setState({
+      status: "loading",
+      message: i18n.t("bootstrap.autoRetrying", { seconds: Math.ceil(startupAutoRetryMs / 1000) }),
+    });
+
+    retryTimerRef.current = window.setTimeout(() => {
+      requestBootstrapRetry(i18n.t("bootstrap.retrying"));
+    }, startupAutoRetryMs);
+  }, [requestBootstrapRetry]);
+
   React.useEffect(() => {
     let mounted = true;
 
-    const applyError = (error: unknown) => {
+    const recoverFromError = (error: unknown) => {
       if (!mounted) return;
       const normalized = normalizeError(error);
-      setState({
-        status: "error",
-        message: normalized.message,
-        detail: normalized.detail,
-      });
+      console.warn("[bootstrap] transient startup/runtime issue, retrying silently", normalized);
+      queueBootstrapRetry();
     };
 
     const handleWindowError = (event: ErrorEvent) => {
-      applyError(event.error ?? new Error(event.message || i18n.t("bootstrap.unexpectedRuntime")));
+      recoverFromError(event.error ?? new Error(event.message || i18n.t("bootstrap.unexpectedRuntime")));
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      applyError(event.reason);
+      recoverFromError(event.reason);
     };
 
     window.addEventListener("error", handleWindowError);
@@ -243,9 +184,13 @@ function BootstrapApp() {
         setState({ status: "loading", message: i18n.t("bootstrap.connectingApi") });
         await verifyServerReachable();
         if (!mounted) return;
+        if (retryTimerRef.current !== null) {
+          window.clearTimeout(retryTimerRef.current);
+          retryTimerRef.current = null;
+        }
         setState({ status: "ready" });
       } catch (error) {
-        applyError(error);
+        recoverFromError(error);
       }
     };
 
@@ -253,35 +198,25 @@ function BootstrapApp() {
 
     return () => {
       mounted = false;
+      if (retryTimerRef.current !== null) {
+        window.clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
       window.removeEventListener("error", handleWindowError);
       window.removeEventListener("unhandledrejection", handleUnhandledRejection);
     };
-  }, [retryTick]);
+  }, [queueBootstrapRetry, retryTick]);
 
   if (state.status === "loading") {
     return <LoadingScreen message={state.message} />;
   }
 
-  if (state.status === "error") {
-    return (
-      <RetryableErrorScreen
-        message={state.message}
-        detail={state.detail}
-        onRetry={requestBootstrapRetry}
-        autoRetryMs={startupAutoRetryMs}
-      />
-    );
-  }
-
   return (
     <RuntimeErrorBoundary
-      onError={(error) =>
-        setState({
-          status: "error",
-          message: error.message || i18n.t("bootstrap.unexpectedRuntime"),
-          detail: error.stack,
-        })
-      }
+      onError={(error) => {
+        console.warn("[bootstrap] runtime error captured, switching to silent recovery", error);
+        queueBootstrapRetry();
+      }}
     >
       <App />
     </RuntimeErrorBoundary>
