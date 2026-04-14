@@ -294,7 +294,7 @@ function Layout({ children }: { children: React.ReactNode }) {
 
 function RouterContent() {
   const { t } = useTranslation();
-  const { user, loading, hasPermission } = useAuth();
+  const { user, loading, hasPermission, getDefaultPath } = useAuth();
 
   if (loading) {
     return (
@@ -319,6 +319,25 @@ function RouterContent() {
   const guard = (permission: AppPermission, Component: React.ComponentType) => () =>
     hasPermission(permission) ? <Component /> : <AccessDenied />;
 
+  const LoginRedirect = () => {
+    const [, setLocation] = useLocation();
+
+    useEffect(() => {
+      if (user?.role === "customer" && user.mustChangePassword) return;
+      setLocation(getDefaultPath());
+    }, [getDefaultPath, setLocation, user]);
+
+    if (user?.role === "customer" && user.mustChangePassword) {
+      return <LoginPage />;
+    }
+
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <Loader2 className="h-7 w-7 animate-spin text-primary" />
+      </div>
+    );
+  };
+
   return (
     <Layout>
       <Switch>
@@ -342,7 +361,7 @@ function RouterContent() {
         <Route path="/finance" component={guard("finance", FinancePage)} />
         <Route path="/settings" component={guard("settings", SettingsPage)} />
         <Route path="/business-hours" component={guard("businessHours", BusinessHoursPage)} />
-        <Route path="/login" component={LoginPage} />
+        <Route path="/login" component={LoginRedirect} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
