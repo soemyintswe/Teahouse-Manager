@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEventHandler } from "react";
 import { useLocation } from "wouter";
-import { Languages, Loader2, LogIn, QrCode, UserRound } from "lucide-react";
+import { Eye, EyeOff, Languages, Loader2, LogIn, QrCode, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,6 +69,43 @@ function modeButtonClass(selected: boolean): string {
     : "h-auto min-h-11 whitespace-normal rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100";
 }
 
+function PasswordInput({
+  value,
+  onChange,
+  placeholder,
+  visible,
+  onToggle,
+  toggleLabel,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  placeholder: string;
+  visible: boolean;
+  onToggle: () => void;
+  toggleLabel: string;
+}) {
+  return (
+    <div className="relative">
+      <Input
+        type={visible ? "text" : "password"}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="pr-11"
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={toggleLabel}
+        title={toggleLabel}
+        className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-muted-foreground hover:text-foreground"
+      >
+        {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
+  );
+}
+
 export default function LoginPage() {
   const { t, i18n } = useTranslation();
   const [, setLocation] = useLocation();
@@ -86,6 +123,10 @@ export default function LoginPage() {
   const [pendingOldPassword, setPendingOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showStaffPin, setShowStaffPin] = useState(false);
+  const [showCustomerPassword, setShowCustomerPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const queryTableId = useMemo(() => parseTableIdFromSearch(window.location.search), []);
@@ -93,6 +134,10 @@ export default function LoginPage() {
 
   const isMyanmar = i18n.resolvedLanguage === "mm";
   const nextLanguageLabel = isMyanmar ? t("language.english") : t("language.myanmar");
+  const staffPasswordToggleLabel = showStaffPin ? t("auth.hidePassword") : t("auth.showPassword");
+  const customerPasswordToggleLabel = showCustomerPassword ? t("auth.hidePassword") : t("auth.showPassword");
+  const newPasswordToggleLabel = showNewPassword ? t("auth.hidePassword") : t("auth.showPassword");
+  const confirmPasswordToggleLabel = showConfirmPassword ? t("auth.hidePassword") : t("auth.showPassword");
 
   useEffect(() => {
     if (!queryTableId && !queryTableCode) return;
@@ -318,11 +363,13 @@ export default function LoginPage() {
               </div>
               <div className="space-y-1">
                 <Label>{t("auth.pin")}</Label>
-                <Input
-                  type="password"
+                <PasswordInput
                   value={pin}
-                  onChange={(event) => setPin(event.target.value)}
+                  onChange={setPin}
                   placeholder="••••"
+                  visible={showStaffPin}
+                  onToggle={() => setShowStaffPin((prev) => !prev)}
+                  toggleLabel={staffPasswordToggleLabel}
                 />
               </div>
               <Button type="submit" disabled={loading || !identifier.trim() || !pin.trim()} className="w-full bg-emerald-700 text-white hover:bg-emerald-800">
@@ -377,11 +424,13 @@ export default function LoginPage() {
               </div>
               <div className="space-y-1">
                 <Label>{t("auth.customerPassword")}</Label>
-                <Input
-                  type="password"
+                <PasswordInput
                   value={customerPassword}
-                  onChange={(event) => setCustomerPassword(event.target.value)}
+                  onChange={setCustomerPassword}
                   placeholder="••••••"
+                  visible={showCustomerPassword}
+                  onToggle={() => setShowCustomerPassword((prev) => !prev)}
+                  toggleLabel={customerPasswordToggleLabel}
                 />
               </div>
               <Button type="submit" disabled={loading || !customerPhone.trim() || !customerPassword.trim()} className="w-full bg-emerald-700 text-white hover:bg-emerald-800">
@@ -421,20 +470,24 @@ export default function LoginPage() {
           <div className="space-y-3">
             <div className="space-y-1">
               <Label>{t("auth.passwordChange.newPassword")}</Label>
-              <Input
-                type="password"
+              <PasswordInput
                 value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
+                onChange={setNewPassword}
                 placeholder="******"
+                visible={showNewPassword}
+                onToggle={() => setShowNewPassword((prev) => !prev)}
+                toggleLabel={newPasswordToggleLabel}
               />
             </div>
             <div className="space-y-1">
               <Label>{t("auth.passwordChange.confirmPassword")}</Label>
-              <Input
-                type="password"
+              <PasswordInput
                 value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
+                onChange={setConfirmPassword}
                 placeholder="******"
+                visible={showConfirmPassword}
+                onToggle={() => setShowConfirmPassword((prev) => !prev)}
+                toggleLabel={confirmPasswordToggleLabel}
               />
             </div>
           </div>

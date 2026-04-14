@@ -728,6 +728,8 @@
     "guestConnected": "Connected to table successfully.",
     "loginSuccess": "Login successful",
     "loginFailed": "Login failed",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "logout": "Logout",
     "cancelToHome": "Cancel",
     "guestSession": "Guest Session · Table {{table}}",

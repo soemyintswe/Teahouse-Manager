@@ -728,6 +728,8 @@
     "guestConnected": "စားပွဲနှင့် အောင်မြင်စွာ ချိတ်ဆက်ပြီးပါပြီ။",
     "loginSuccess": "အောင်မြင်စွာဝင်ပြီးပါပြီ",
     "loginFailed": "အကောင့်ဝင်မရပါ",
+    "showPassword": "စကားဝှက်ပြမည်",
+    "hidePassword": "စကားဝှက်ဖျောက်မည်",
     "logout": "ထွက်မည်",
     "cancelToHome": "မူလစာမျက်နှာသို့ ပြန်မည်",
     "guestSession": "ဧည့်သည် session · Table {{table}}",

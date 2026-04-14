@@ -119,6 +119,12 @@ function makeAddressLine(address: CustomerAddress | null | undefined): string {
     .join(", ");
 }
 
+function shouldSuppressProfileErrorToast(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.trim().toLowerCase();
+  return message.includes("401") || message.includes("authentication required");
+}
+
 export default function PublicHomePage() {
   const { t, i18n } = useTranslation();
   const [, setLocation] = useLocation();
@@ -195,6 +201,10 @@ export default function PublicHomePage() {
         setCustomerProfile(data);
       })
       .catch((error) => {
+        if (shouldSuppressProfileErrorToast(error)) {
+          setCustomerProfile(null);
+          return;
+        }
         toast({
           title: t("public.profile.loadFailed"),
           description: error instanceof Error ? error.message : t("common.unknownError"),
