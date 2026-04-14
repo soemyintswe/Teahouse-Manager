@@ -7,7 +7,7 @@ export const customersTable = pgTable("customers", {
   fullName: text("full_name").notNull(),
   email: text("email"),
   password: text("password").notNull(),
-  status: text("status").notNull().default("pending"), // pending, approved, denied, terminated
+  status: text("status").notNull().default("approved"), // approved, denied, terminated (pending kept for legacy migration)
   mustChangePassword: boolean("must_change_password").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

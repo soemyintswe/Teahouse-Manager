@@ -342,7 +342,7 @@ function RouterContent() {
         <Route path="/finance" component={guard("finance", FinancePage)} />
         <Route path="/settings" component={guard("settings", SettingsPage)} />
         <Route path="/business-hours" component={guard("businessHours", BusinessHoursPage)} />
-        <Route path="/login" component={() => <AccessDenied />} />
+        <Route path="/login" component={LoginPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

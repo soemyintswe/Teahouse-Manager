@@ -163,7 +163,7 @@
       "saveButton": "Save Registration",
       "goLogin": "Go to Login",
       "saved": "Delivery profile saved",
-      "pendingApproval": "Account created. Wait for admin approval before login.",
+      "pendingApproval": "Account created. You can login now.",
       "failedTitle": "Registration failed",
       "tempPasswordReady": "Temporary password generated",
       "tempPasswordHint": "Use these credentials for first customer login.",

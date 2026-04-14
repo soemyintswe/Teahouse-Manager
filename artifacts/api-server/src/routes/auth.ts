@@ -237,7 +237,7 @@ router.post("/auth/customer-register", async (req, res): Promise<void> => {
         fullName,
         email: email || null,
         password: temporaryPassword,
-        status: "pending",
+        status: "approved",
         mustChangePassword: true,
       })
       .returning();
@@ -265,7 +265,7 @@ router.post("/auth/customer-register", async (req, res): Promise<void> => {
       customerId: customer.id,
       status: customer.status,
       temporaryPassword,
-      message: "Customer account created. Waiting for admin approval.",
+      message: "Customer account created. You can login now.",
     });
   } catch {
     res.status(500).json({ error: "Failed to register customer account. Please retry in a few seconds." });
@@ -288,22 +288,27 @@ router.post("/auth/customer-login", async (req, res): Promise<void> => {
     return;
   }
 
-  const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, phoneRow.customerId));
+  let [customer] = await db.select().from(customersTable).where(eq(customersTable.id, phoneRow.customerId));
   if (!customer || customer.password !== password) {
     res.status(401).json({ error: "Invalid phone or password." });
     return;
   }
-  if (customer.status === "pending") {
-    res.status(403).json({ error: "Account is pending admin approval." });
-    return;
-  }
-  if (customer.status === "denied") {
+  const customerStatus = normalizeDisplayText(customer.status).toLowerCase();
+  if (customerStatus === "denied") {
     res.status(403).json({ error: "Account has been denied by admin." });
     return;
   }
-  if (customer.status === "terminated") {
+  if (customerStatus === "terminated") {
     res.status(403).json({ error: "Account has been terminated." });
     return;
+  }
+  if (customerStatus === "pending") {
+    const [updated] = await db
+      .update(customersTable)
+      .set({ status: "approved" })
+      .where(eq(customersTable.id, customer.id))
+      .returning();
+    if (updated) customer = updated;
   }
 
   const token = issueAuthToken({

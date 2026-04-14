@@ -546,10 +546,17 @@ router.post("/orders/delivery-request", requireAuth, async (req, res): Promise<v
         error.statusCode = 404;
         throw error;
       }
-      if (customer.status !== "approved") {
-        const error = new Error("Customer account is not approved.") as Error & { statusCode?: number };
+      const customerStatus = String(customer.status ?? "").trim().toLowerCase();
+      if (customerStatus === "denied" || customerStatus === "terminated") {
+        const error = new Error("Customer account is not active.") as Error & { statusCode?: number };
         error.statusCode = 403;
         throw error;
+      }
+      if (customerStatus === "pending") {
+        await tx
+          .update(customersTable)
+          .set({ status: "approved" })
+          .where(eq(customersTable.id, customer.id));
       }
 
       const phones = await tx

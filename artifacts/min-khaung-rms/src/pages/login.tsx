@@ -73,7 +73,7 @@ export default function LoginPage() {
   const { t, i18n } = useTranslation();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { loginStaff, loginGuest, loginCustomer, changeCustomerPassword, logout } = useAuth();
+  const { user, loginStaff, loginGuest, loginCustomer, changeCustomerPassword, logout, getDefaultPath } = useAuth();
 
   const modeFromSearch = useMemo(() => parseModeFromSearch(window.location.search), []);
   const [mode, setMode] = useState<LoginMode>(modeFromSearch ?? "staff");
@@ -121,6 +121,12 @@ export default function LoginPage() {
     if (!modeFromSearch) return;
     setMode(modeFromSearch);
   }, [modeFromSearch]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (user.role === "customer" && user.mustChangePassword) return;
+    setLocation(getDefaultPath());
+  }, [getDefaultPath, setLocation, user]);
 
   const handleStaffLogin = async () => {
     if (!identifier.trim() || !pin.trim()) return;

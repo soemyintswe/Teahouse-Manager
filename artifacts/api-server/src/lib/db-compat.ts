@@ -15,7 +15,7 @@ export async function ensureDbCompatibility(): Promise<void> {
           full_name TEXT NOT NULL DEFAULT '',
           email TEXT,
           password TEXT NOT NULL DEFAULT '',
-          status TEXT NOT NULL DEFAULT 'pending',
+          status TEXT NOT NULL DEFAULT 'approved',
           must_change_password BOOLEAN NOT NULL DEFAULT TRUE,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -34,10 +34,12 @@ export async function ensureDbCompatibility(): Promise<void> {
         ALTER TABLE customers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
         UPDATE customers SET full_name = COALESCE(full_name, '') WHERE full_name IS NULL;
         UPDATE customers SET password = COALESCE(password, '') WHERE password IS NULL;
-        UPDATE customers SET status = COALESCE(status, 'pending') WHERE status IS NULL;
+        UPDATE customers SET status = COALESCE(status, 'approved') WHERE status IS NULL;
+        UPDATE customers SET status = 'approved' WHERE LOWER(BTRIM(COALESCE(status, ''))) IN ('', 'pending');
         UPDATE customers SET must_change_password = COALESCE(must_change_password, TRUE) WHERE must_change_password IS NULL;
         UPDATE customers SET created_at = COALESCE(created_at, NOW()) WHERE created_at IS NULL;
         UPDATE customers SET updated_at = COALESCE(updated_at, NOW()) WHERE updated_at IS NULL;
+        ALTER TABLE customers ALTER COLUMN status SET DEFAULT 'approved';
       `,
     },
     {
