@@ -12,6 +12,7 @@ import financeRouter from "./finance";
 import settingsRouter from "./settings";
 import dashboardRouter from "./dashboard";
 import customersRouter from "./customers";
+import bookingsRouter from "./bookings";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(financeRouter);
 router.use(settingsRouter);
 router.use(dashboardRouter);
 router.use(customersRouter);
+router.use(bookingsRouter);
 
 export default router;

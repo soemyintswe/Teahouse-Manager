@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, staffTable, tablesTable, customersTable, customerPhonesTable, customerAddressesTable } from "@workspace/db";
 import { APP_ROLES, issueAuthToken, requireAuth, type AppRole, type AuthPrincipal, isStaffRole } from "../lib/auth";
+import { autoCancelExpiredBookings } from "../lib/bookings";
 
 const router: IRouter = Router();
 
@@ -376,6 +377,7 @@ router.post("/auth/customer-change-password", requireAuth, async (req, res): Pro
 });
 
 router.post("/auth/guest-login", async (req, res): Promise<void> => {
+  await autoCancelExpiredBookings();
   const body = (req.body ?? {}) as GuestLoginBody;
   const tableId =
     typeof body.tableId === "number" && Number.isFinite(body.tableId) && body.tableId > 0

@@ -20,6 +20,7 @@ type AppPermission =
   | "publicMenu"
   | "dashboard"
   | "floorPlan"
+  | "bookings"
   | "tableSettings"
   | "orders"
   | "kds"
@@ -29,6 +30,7 @@ type AppPermission =
   | "staff"
   | "finance"
   | "settings"
+  | "businessHours"
   | "deliveryOrders";
 
 export type AuthUser = {
@@ -85,14 +87,14 @@ const AUTH_STORAGE_KEY = "teahouse_auth_token";
 const ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
   customer: ["publicMenu", "deliveryOrders"],
   guest: ["orders"],
-  waiter: ["dashboard", "floorPlan", "orders", "deliveryOrders"],
+  waiter: ["dashboard", "floorPlan", "bookings", "orders", "deliveryOrders"],
   kitchen: ["kds", "orders"],
-  cashier: ["dashboard", "orders", "cashier", "finance", "deliveryOrders"],
-  cleaner: ["floorPlan", "orders"],
-  room_supervisor: ["dashboard", "floorPlan", "orders", "kds", "deliveryOrders"],
-  supervisor: ["dashboard", "floorPlan", "tableSettings", "orders", "kds", "cashier", "menu", "inventory", "finance", "deliveryOrders"],
-  manager: ["dashboard", "floorPlan", "tableSettings", "orders", "kds", "cashier", "menu", "inventory", "staff", "finance", "settings", "deliveryOrders"],
-  owner: ["dashboard", "floorPlan", "tableSettings", "orders", "kds", "cashier", "menu", "inventory", "staff", "finance", "settings", "deliveryOrders"],
+  cashier: ["dashboard", "bookings", "orders", "cashier", "finance", "deliveryOrders"],
+  cleaner: ["floorPlan", "bookings", "orders"],
+  room_supervisor: ["dashboard", "floorPlan", "bookings", "orders", "kds", "deliveryOrders"],
+  supervisor: ["dashboard", "floorPlan", "bookings", "tableSettings", "orders", "kds", "cashier", "menu", "inventory", "finance", "businessHours", "deliveryOrders"],
+  manager: ["dashboard", "floorPlan", "bookings", "tableSettings", "orders", "kds", "cashier", "menu", "inventory", "staff", "finance", "settings", "businessHours", "deliveryOrders"],
+  owner: ["dashboard", "floorPlan", "bookings", "tableSettings", "orders", "kds", "cashier", "menu", "inventory", "staff", "finance", "settings", "businessHours", "deliveryOrders"],
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);

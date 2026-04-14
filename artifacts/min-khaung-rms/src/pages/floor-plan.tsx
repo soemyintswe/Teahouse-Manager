@@ -73,6 +73,18 @@ type TableSeatSessionRecord = {
   updatedAt: string;
 };
 
+type TableBookingActiveRecord = {
+  id: number;
+  tableId: number;
+  customerName: string;
+  customerPhone: string;
+  status: "pending_payment" | "confirmed" | "checked_in" | "cancelled" | "completed";
+  slotStartAt: string;
+  slotEndAt: string;
+  autoCancelAt: string;
+  checkInAt: string | null;
+};
+
 const OCCUPANCY_CONFIG: Record<
   TableData["occupancyStatus"],
   { labelKey: string; bg: string; border: string; text: string; dot: string }
@@ -236,6 +248,7 @@ function getRoomLabel(
 
 function TableCard({
   table,
+  activeBooking,
   onClick,
   onPointerDown,
   positionOverride,
@@ -245,6 +258,7 @@ function TableCard({
   seatSessionCount,
 }: {
   table: TableData;
+  activeBooking?: TableBookingActiveRecord | null;
   onClick: () => void;
   onPointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
   positionOverride?: { x: number; y: number };
@@ -317,12 +331,19 @@ function TableCard({
             <Crown className="h-2.5 w-2.5" /> {t("category.VIP")}
           </span>
         ) : null}
-        {table.isBooked ? (
+        {(table.isBooked || activeBooking) ? (
           <span className="inline-flex items-center gap-0.5 rounded bg-blue-200/90 px-1 py-0.5 text-blue-900 font-bold">
             <BookmarkCheck className="h-2.5 w-2.5" /> {t("floorPlan.reserved")}
           </span>
         ) : null}
       </div>
+
+      {activeBooking ? (
+        <div className="mt-0.5 px-1 text-center text-[8px] leading-tight">
+          <p className="truncate font-bold">{activeBooking.customerName}</p>
+          <p className="truncate">{activeBooking.customerPhone}</p>
+        </div>
+      ) : null}
 
       <span className="text-[8px] font-bold uppercase tracking-wide">
         {isMaintenance ? t("status.service.Maintenance") : occupancyLabel}
@@ -342,6 +363,7 @@ function TableCard({
 
 function QuickActionMenu({
   table,
+  activeBooking,
   seatSessions,
   sessionBusy,
   roomNameByCode,
@@ -353,8 +375,10 @@ function QuickActionMenu({
   onOpenSeatSessionOrder,
   onSetSeatSessionStatus,
   onMarkSeatSessionClean,
+  onOpenBookings,
 }: {
   table: TableData;
+  activeBooking?: TableBookingActiveRecord | null;
   seatSessions: TableSeatSessionRecord[];
   sessionBusy: boolean;
   roomNameByCode: Map<string, string>;
@@ -366,6 +390,7 @@ function QuickActionMenu({
   onOpenSeatSessionOrder: (session: TableSeatSessionRecord) => void;
   onSetSeatSessionStatus: (sessionId: number, status: TableSeatSessionRecord["status"]) => void;
   onMarkSeatSessionClean: (sessionId: number) => void;
+  onOpenBookings: () => void;
 }) {
   const { t } = useTranslation();
   const cfg = OCCUPANCY_CONFIG[table.occupancyStatus] ?? OCCUPANCY_CONFIG.available;
@@ -398,8 +423,16 @@ function QuickActionMenu({
           <Badge variant="outline" className="text-xs">
             {t(cfg.labelKey)}
           </Badge>
-          {table.isBooked ? <Badge className="text-xs bg-blue-500 text-white">{t("floorPlan.reserved")}</Badge> : null}
+          {(table.isBooked || activeBooking) ? <Badge className="text-xs bg-blue-500 text-white">{t("floorPlan.reserved")}</Badge> : null}
         </div>
+
+        {activeBooking ? (
+          <div className="mt-2 rounded-md border bg-blue-50 px-2 py-1.5 text-xs text-blue-900">
+            <p className="font-semibold">{t("floorPlan.bookingFor", { name: activeBooking.customerName })}</p>
+            <p>{t("floorPlan.bookingPhone", { phone: activeBooking.customerPhone })}</p>
+            <p>{new Date(activeBooking.slotStartAt).toLocaleString()} - {new Date(activeBooking.slotEndAt).toLocaleTimeString()}</p>
+          </div>
+        ) : null}
 
         <div className="mt-4 space-y-2">
           {table.occupancyStatus === "available" ? (
@@ -428,6 +461,10 @@ function QuickActionMenu({
               <Sparkles className="mr-2 h-4 w-4" /> {t("actions.markClean")}
             </Button>
           ) : null}
+
+          <Button variant="outline" className="w-full" onClick={onOpenBookings}>
+            {t("floorPlan.manageBooking")}
+          </Button>
         </div>
 
         <div className="mt-4 rounded-lg border bg-muted/20 p-3">
@@ -517,6 +554,16 @@ export default function FloorPlan() {
     staleTime: 6000,
     refetchInterval: 12000,
   });
+  const { data: activeBookings = [] } = useQuery({
+    queryKey: ["bookings", "active"],
+    queryFn: () =>
+      customFetch<TableBookingActiveRecord[]>("/api/bookings/active", {
+        method: "GET",
+        responseType: "json",
+      }),
+    staleTime: 6000,
+    refetchInterval: 12000,
+  });
   const updateTable = useUpdateTable();
   const createTable = useCreateTable();
 
@@ -543,6 +590,7 @@ export default function FloorPlan() {
       queryClient.invalidateQueries({ queryKey: ROOMS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["table-merge-groups", "active"] });
       queryClient.invalidateQueries({ queryKey: ["table-seat-sessions", "all"] });
+      queryClient.invalidateQueries({ queryKey: ["bookings", "active"] });
       setLastRefreshed(new Date());
     }, 30000);
     return () => clearInterval(interval);
@@ -553,6 +601,7 @@ export default function FloorPlan() {
     queryClient.invalidateQueries({ queryKey: ROOMS_QUERY_KEY });
     queryClient.invalidateQueries({ queryKey: ["table-merge-groups", "active"] });
     queryClient.invalidateQueries({ queryKey: ["table-seat-sessions", "all"] });
+    queryClient.invalidateQueries({ queryKey: ["bookings", "active"] });
     setLastRefreshed(new Date());
   }, [queryClient]);
 
@@ -641,6 +690,26 @@ export default function FloorPlan() {
   const selectedTable = useMemo(
     () => visibleTables.find((table) => table.id === selectedTableId) ?? null,
     [visibleTables, selectedTableId],
+  );
+  const activeBookingByTableId = useMemo(() => {
+    const map = new Map<number, TableBookingActiveRecord>();
+    for (const booking of activeBookings) {
+      if (booking.status !== "confirmed") continue;
+      if (booking.checkInAt) continue;
+      const existing = map.get(booking.tableId);
+      if (!existing) {
+        map.set(booking.tableId, booking);
+        continue;
+      }
+      if (new Date(booking.slotStartAt).getTime() > new Date(existing.slotStartAt).getTime()) {
+        map.set(booking.tableId, booking);
+      }
+    }
+    return map;
+  }, [activeBookings]);
+  const selectedTableBooking = useMemo(
+    () => (selectedTable ? activeBookingByTableId.get(selectedTable.id) ?? null : null),
+    [activeBookingByTableId, selectedTable],
   );
   const { data: selectedTableSessions = [] } = useQuery({
     queryKey: ["table-seat-sessions", selectedTableId ?? 0],
@@ -1398,6 +1467,22 @@ export default function FloorPlan() {
   }, []);
 
   const handleStartOrder = useCallback(async (table: TableData) => {
+    if (table.isBooked) {
+      const booking = activeBookingByTableId.get(table.id);
+      toast({
+        title: t("floorPlan.tableReservedTitle"),
+        description: booking
+          ? t("floorPlan.tableReservedDescWithCustomer", {
+              name: booking.customerName,
+              phone: booking.customerPhone,
+            })
+          : t("floorPlan.tableReservedDesc"),
+      });
+      setLocation(`/bookings?tableId=${table.id}`);
+      setSelectedTableId(null);
+      return;
+    }
+
     if (table.occupancyStatus === "payment_pending") {
       let targetOrderId = table.currentOrderId;
 
@@ -1492,7 +1577,7 @@ export default function FloorPlan() {
 
     setLocation(`/orders?tableId=${table.id}`);
     setSelectedTableId(null);
-  }, [allSeatSessions, getLatestTableOrder, handleOpenSeatSessionOrder, queryClient, setLocation, t, toast, updateTable]);
+  }, [activeBookingByTableId, allSeatSessions, getLatestTableOrder, handleOpenSeatSessionOrder, queryClient, setLocation, t, toast, updateTable]);
 
   if (isLoading || roomsLoading) {
     return (
@@ -1615,34 +1700,42 @@ export default function FloorPlan() {
             </div>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {filteredTables.map((table) => (
-                <button
-                  key={table.id}
-                  className="rounded-md border p-3 text-left transition-colors hover:bg-muted/30"
-                  onClick={() => handleTableClick(table)}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-bold">
-                      {t("floorPlan.tableLabel", {
-                        tableNumber: table.tableNumber,
-                        category: getCategoryLabel(table.category, t),
-                      })}{" "}
-                      {t("floorPlan.capacity", { capacity: table.capacity })}
+              {filteredTables.map((table) => {
+                const booking = activeBookingByTableId.get(table.id);
+                return (
+                  <button
+                    key={table.id}
+                    className="rounded-md border p-3 text-left transition-colors hover:bg-muted/30"
+                    onClick={() => handleTableClick(table)}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-bold">
+                        {t("floorPlan.tableLabel", {
+                          tableNumber: table.tableNumber,
+                          category: getCategoryLabel(table.category, t),
+                        })}{" "}
+                        {t("floorPlan.capacity", { capacity: table.capacity })}
+                      </p>
+                      <Badge variant="outline" className="text-xs">
+                        {getRoomLabel(table.zone, t, roomNameByCode, true)}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t("common.id")} #{table.id} {(table.isBooked || booking) ? `· ${t("floorPlan.reserved")}` : ""}
                     </p>
-                    <Badge variant="outline" className="text-xs">
-                      {getRoomLabel(table.zone, t, roomNameByCode, true)}
-                    </Badge>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t("common.id")} #{table.id} {table.isBooked ? `· ${t("floorPlan.reserved")}` : ""}
-                  </p>
-                  {table.currentOrderId ? (
-                    <p className="mt-1 text-xs font-medium text-primary">{t("floorPlan.order", { id: table.currentOrderId })}</p>
-                  ) : (
-                    <p className="mt-1 text-xs text-muted-foreground">{t("floorPlan.noActiveOrder")}</p>
-                  )}
-                </button>
-              ))}
+                    {booking ? (
+                      <p className="mt-1 text-xs text-blue-700">
+                        {booking.customerName} · {booking.customerPhone}
+                      </p>
+                    ) : null}
+                    {table.currentOrderId ? (
+                      <p className="mt-1 text-xs font-medium text-primary">{t("floorPlan.order", { id: table.currentOrderId })}</p>
+                    ) : (
+                      <p className="mt-1 text-xs text-muted-foreground">{t("floorPlan.noActiveOrder")}</p>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1818,6 +1911,7 @@ export default function FloorPlan() {
                 <TableCard
                   key={table.id}
                   table={table}
+                  activeBooking={activeBookingByTableId.get(table.id) ?? null}
                   onClick={() => handleTableClick(table)}
                   onPointerDown={(event) => handleTablePointerDown(table, event)}
                   positionOverride={draftPositions[table.id]}
@@ -1840,6 +1934,7 @@ export default function FloorPlan() {
       {selectedTable ? (
         <QuickActionMenu
           table={selectedTable}
+          activeBooking={selectedTableBooking}
           seatSessions={selectedTableSessions.filter((session) => session.status !== "closed")}
           sessionBusy={isManagingSessions}
           roomNameByCode={roomNameByCode}
@@ -1851,6 +1946,10 @@ export default function FloorPlan() {
           onOpenSeatSessionOrder={(session) => handleOpenSeatSessionOrder(selectedTable.id, session)}
           onSetSeatSessionStatus={(sessionId, status) => { void handleUpdateSeatSession(selectedTable.id, sessionId, status); }}
           onMarkSeatSessionClean={(sessionId) => { void handleMarkSeatSessionClean(selectedTable.id, sessionId); }}
+          onOpenBookings={() => {
+            setLocation(`/bookings?tableId=${selectedTable.id}`);
+            setSelectedTableId(null);
+          }}
         />
       ) : null}
     </div>

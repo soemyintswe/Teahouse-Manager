@@ -29,6 +29,8 @@ import {
   Settings,
   Armchair,
   Truck,
+  CalendarClock,
+  Clock3,
   Languages,
   LogOut,
   Loader2,
@@ -49,6 +51,8 @@ import LoginPage from "@/pages/login";
 import PublicHomePage from "@/pages/public-home";
 import DeliveryOrdersPage from "@/pages/delivery-orders";
 import SettingsPage from "@/pages/settings";
+import BookingsPage from "@/pages/bookings";
+import BusinessHoursPage from "@/pages/business-hours";
 import NotFound from "@/pages/not-found";
 import { setupAutoUpdate } from "@/lib/mobile-updater";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -62,6 +66,7 @@ type AppPermission =
   | "publicMenu"
   | "dashboard"
   | "floorPlan"
+  | "bookings"
   | "tableSettings"
   | "orders"
   | "kds"
@@ -71,12 +76,14 @@ type AppPermission =
   | "staff"
   | "finance"
   | "settings"
+  | "businessHours"
   | "deliveryOrders";
 
 const NAV_ITEMS: Array<{ href: string; labelKey: string; icon: React.ComponentType<{ className?: string }>; permission: AppPermission }> = [
   { href: "/", labelKey: "nav.publicMenu", icon: MenuIcon, permission: "publicMenu" },
   { href: "/", labelKey: "nav.dashboard", icon: LayoutDashboard, permission: "dashboard" },
   { href: "/floor-plan", labelKey: "nav.floorPlan", icon: MapIcon, permission: "floorPlan" },
+  { href: "/bookings", labelKey: "nav.bookings", icon: CalendarClock, permission: "bookings" },
   { href: "/table-settings", labelKey: "nav.tableSettings", icon: Armchair, permission: "tableSettings" },
   { href: "/orders", labelKey: "nav.orders", icon: ClipboardList, permission: "orders" },
   { href: "/kds?station=kitchen", labelKey: "nav.kds", icon: ChefHat, permission: "kds" },
@@ -87,6 +94,7 @@ const NAV_ITEMS: Array<{ href: string; labelKey: string; icon: React.ComponentTy
   { href: "/delivery-orders", labelKey: "nav.deliveryOrders", icon: Truck, permission: "deliveryOrders" },
   { href: "/finance", labelKey: "nav.finance", icon: LineChart, permission: "finance" },
   { href: "/settings", labelKey: "nav.settings", icon: Settings, permission: "settings" },
+  { href: "/business-hours", labelKey: "nav.businessHours", icon: Clock3, permission: "businessHours" },
 ];
 
 function AccessDenied() {
@@ -319,6 +327,7 @@ function RouterContent() {
           component={() => (user?.role === "customer" ? <PublicHomePage /> : guard("dashboard", Dashboard)())}
         />
         <Route path="/floor-plan" component={guard("floorPlan", FloorPlan)} />
+        <Route path="/bookings" component={guard("bookings", BookingsPage)} />
         <Route path="/table-settings" component={guard("tableSettings", TableSettingsPage)} />
         <Route path="/orders" component={guard("orders", OrdersPage)} />
         <Route path="/orders/new" component={guard("orders", NewOrderPage)} />
@@ -332,6 +341,7 @@ function RouterContent() {
         <Route path="/delivery-orders" component={guard("deliveryOrders", DeliveryOrdersPage)} />
         <Route path="/finance" component={guard("finance", FinancePage)} />
         <Route path="/settings" component={guard("settings", SettingsPage)} />
+        <Route path="/business-hours" component={guard("businessHours", BusinessHoursPage)} />
         <Route path="/login" component={() => <AccessDenied />} />
         <Route component={NotFound} />
       </Switch>

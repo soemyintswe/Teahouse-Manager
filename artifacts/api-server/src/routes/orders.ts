@@ -32,6 +32,7 @@ import {
   RemoveOrderItemParams,
 } from "@workspace/api-zod";
 import { isDatabaseError } from "../lib/db-errors";
+import { autoCancelExpiredBookings, markBookingOrderStartedForTable } from "../lib/bookings";
 import { syncTableOccupancyFromSeatSessions } from "../lib/seat-sessions";
 
 const router: IRouter = Router();
@@ -308,6 +309,7 @@ router.get("/orders", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/orders", requireAuth, async (req, res): Promise<void> => {
+  await autoCancelExpiredBookings();
   const parsed = CreateOrderBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const requestedSeatSessionId = parseInteger((req.body as { seatSessionId?: unknown } | undefined)?.seatSessionId);
@@ -337,6 +339,13 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
 
       if (["payment_pending", "paid", "dirty"].includes(table.occupancyStatus)) {
         const error = new Error("This table is currently unavailable.") as Error & { statusCode?: number };
+        error.statusCode = 409;
+        throw error;
+      }
+      if (table.isBooked) {
+        const error = new Error("This table is reserved. Please complete booking check-in first.") as Error & {
+          statusCode?: number;
+        };
         error.statusCode = 409;
         throw error;
       }
@@ -483,6 +492,8 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
         }
         await recalcOrder(order.id, tx);
       }
+
+      await markBookingOrderStartedForTable(parsed.data.tableId, order.id, tx);
 
       return order.id;
     });

@@ -390,6 +390,13 @@ export async function ensureDbCompatibility(): Promise<void> {
           aircon_fee NUMERIC(10,2) NOT NULL DEFAULT 500.00,
           currency TEXT NOT NULL DEFAULT 'MMK',
           receipt_footer TEXT,
+          booking_lead_time_minutes INTEGER NOT NULL DEFAULT 60,
+          booking_no_show_grace_minutes INTEGER NOT NULL DEFAULT 15,
+          booking_default_slot_minutes INTEGER NOT NULL DEFAULT 120,
+          business_open_time TEXT NOT NULL DEFAULT '08:00',
+          business_close_time TEXT NOT NULL DEFAULT '22:00',
+          business_closed_weekdays TEXT NOT NULL DEFAULT '[]',
+          business_closed_dates TEXT NOT NULL DEFAULT '[]',
           notify_activate_email_subject TEXT NOT NULL DEFAULT 'Teahouse Manager - Account Activated',
           notify_activate_email_body TEXT NOT NULL DEFAULT 'Hello {{fullName}},\n\nYour Teahouse Manager account has been activated.\nTemporary Password: {{temporaryPassword}}\n\nPlease login and change this password immediately.\nIf you did not request this change, contact support.',
           notify_activate_sms_body TEXT NOT NULL DEFAULT 'Teahouse Manager account activated. Temp password: {{temporaryPassword}}. Please login and change it now.',
@@ -404,15 +411,89 @@ export async function ensureDbCompatibility(): Promise<void> {
         ALTER TABLE settings ADD COLUMN IF NOT EXISTS notify_reset_email_subject TEXT DEFAULT 'Teahouse Manager - Password Reset';
         ALTER TABLE settings ADD COLUMN IF NOT EXISTS notify_reset_email_body TEXT DEFAULT 'Hello {{fullName}},\n\nYour Teahouse Manager password has been reset.\nTemporary Password: {{temporaryPassword}}\n\nPlease login and change this password immediately.\nIf you did not request this change, contact support.';
         ALTER TABLE settings ADD COLUMN IF NOT EXISTS notify_reset_sms_body TEXT DEFAULT 'Teahouse Manager password reset. Temp password: {{temporaryPassword}}. Please login and change it now.';
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS booking_lead_time_minutes INTEGER DEFAULT 60;
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS booking_no_show_grace_minutes INTEGER DEFAULT 15;
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS booking_default_slot_minutes INTEGER DEFAULT 120;
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS business_open_time TEXT DEFAULT '08:00';
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS business_close_time TEXT DEFAULT '22:00';
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS business_closed_weekdays TEXT DEFAULT '[]';
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS business_closed_dates TEXT DEFAULT '[]';
         UPDATE settings SET notify_activate_email_subject = COALESCE(notify_activate_email_subject, 'Teahouse Manager - Account Activated') WHERE notify_activate_email_subject IS NULL;
         UPDATE settings SET notify_activate_email_body = COALESCE(notify_activate_email_body, 'Hello {{fullName}},\n\nYour Teahouse Manager account has been activated.\nTemporary Password: {{temporaryPassword}}\n\nPlease login and change this password immediately.\nIf you did not request this change, contact support.') WHERE notify_activate_email_body IS NULL;
         UPDATE settings SET notify_activate_sms_body = COALESCE(notify_activate_sms_body, 'Teahouse Manager account activated. Temp password: {{temporaryPassword}}. Please login and change it now.') WHERE notify_activate_sms_body IS NULL;
         UPDATE settings SET notify_reset_email_subject = COALESCE(notify_reset_email_subject, 'Teahouse Manager - Password Reset') WHERE notify_reset_email_subject IS NULL;
         UPDATE settings SET notify_reset_email_body = COALESCE(notify_reset_email_body, 'Hello {{fullName}},\n\nYour Teahouse Manager password has been reset.\nTemporary Password: {{temporaryPassword}}\n\nPlease login and change this password immediately.\nIf you did not request this change, contact support.') WHERE notify_reset_email_body IS NULL;
         UPDATE settings SET notify_reset_sms_body = COALESCE(notify_reset_sms_body, 'Teahouse Manager password reset. Temp password: {{temporaryPassword}}. Please login and change it now.') WHERE notify_reset_sms_body IS NULL;
+        UPDATE settings SET booking_lead_time_minutes = COALESCE(booking_lead_time_minutes, 60) WHERE booking_lead_time_minutes IS NULL;
+        UPDATE settings SET booking_no_show_grace_minutes = COALESCE(booking_no_show_grace_minutes, 15) WHERE booking_no_show_grace_minutes IS NULL;
+        UPDATE settings SET booking_default_slot_minutes = COALESCE(booking_default_slot_minutes, 120) WHERE booking_default_slot_minutes IS NULL;
+        UPDATE settings SET business_open_time = COALESCE(business_open_time, '08:00') WHERE business_open_time IS NULL;
+        UPDATE settings SET business_close_time = COALESCE(business_close_time, '22:00') WHERE business_close_time IS NULL;
+        UPDATE settings SET business_closed_weekdays = COALESCE(business_closed_weekdays, '[]') WHERE business_closed_weekdays IS NULL;
+        UPDATE settings SET business_closed_dates = COALESCE(business_closed_dates, '[]') WHERE business_closed_dates IS NULL;
         INSERT INTO settings (restaurant_name, tax_rate, aircon_fee, currency, receipt_footer, updated_at)
         SELECT 'Min Khaung Tea House & Restaurant', 5.00, 500.00, 'MMK', null, NOW()
         WHERE NOT EXISTS (SELECT 1 FROM settings);
+      `,
+    },
+    {
+      name: "table_bookings table",
+      sql: `
+        CREATE TABLE IF NOT EXISTS table_bookings (
+          id SERIAL PRIMARY KEY,
+          table_id INTEGER NOT NULL,
+          customer_name TEXT NOT NULL,
+          customer_phone TEXT NOT NULL,
+          slot_start_at TIMESTAMPTZ NOT NULL,
+          slot_end_at TIMESTAMPTZ NOT NULL,
+          extension_minutes INTEGER NOT NULL DEFAULT 0,
+          booking_fee NUMERIC(10,2) NOT NULL DEFAULT 0,
+          preorder_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+          booking_fee_paid BOOLEAN NOT NULL DEFAULT FALSE,
+          preorder_amount_paid BOOLEAN NOT NULL DEFAULT FALSE,
+          status TEXT NOT NULL DEFAULT 'pending_payment',
+          auto_cancel_at TIMESTAMPTZ NOT NULL,
+          confirmed_at TIMESTAMPTZ,
+          check_in_at TIMESTAMPTZ,
+          order_at TIMESTAMPTZ,
+          check_out_at TIMESTAMPTZ,
+          order_id INTEGER,
+          cancel_reason TEXT,
+          notes TEXT,
+          created_by_staff_id INTEGER,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS table_id INTEGER;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS customer_name TEXT;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS customer_phone TEXT;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS slot_start_at TIMESTAMPTZ;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS slot_end_at TIMESTAMPTZ;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS extension_minutes INTEGER DEFAULT 0;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS booking_fee NUMERIC(10,2) DEFAULT 0;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS preorder_amount NUMERIC(10,2) DEFAULT 0;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS booking_fee_paid BOOLEAN DEFAULT FALSE;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS preorder_amount_paid BOOLEAN DEFAULT FALSE;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending_payment';
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS auto_cancel_at TIMESTAMPTZ;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS check_in_at TIMESTAMPTZ;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS order_at TIMESTAMPTZ;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS check_out_at TIMESTAMPTZ;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS order_id INTEGER;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS notes TEXT;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS created_by_staff_id INTEGER;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+        UPDATE table_bookings SET extension_minutes = COALESCE(extension_minutes, 0) WHERE extension_minutes IS NULL;
+        UPDATE table_bookings SET booking_fee = COALESCE(booking_fee, 0) WHERE booking_fee IS NULL;
+        UPDATE table_bookings SET preorder_amount = COALESCE(preorder_amount, 0) WHERE preorder_amount IS NULL;
+        UPDATE table_bookings SET booking_fee_paid = COALESCE(booking_fee_paid, FALSE) WHERE booking_fee_paid IS NULL;
+        UPDATE table_bookings SET preorder_amount_paid = COALESCE(preorder_amount_paid, FALSE) WHERE preorder_amount_paid IS NULL;
+        UPDATE table_bookings SET status = COALESCE(status, 'pending_payment') WHERE status IS NULL;
+        UPDATE table_bookings SET created_at = COALESCE(created_at, NOW()) WHERE created_at IS NULL;
+        UPDATE table_bookings SET updated_at = COALESCE(updated_at, NOW()) WHERE updated_at IS NULL;
       `,
     },
     {

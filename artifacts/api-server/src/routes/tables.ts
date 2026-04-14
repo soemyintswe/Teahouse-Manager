@@ -10,6 +10,7 @@ import {
   tablesTable,
 } from "@workspace/db";
 import { canAccessTable, requireAuth, requireRoles } from "../lib/auth";
+import { autoCancelExpiredBookings, markBookingCheckoutForTable } from "../lib/bookings";
 import { syncTableOccupancyFromSeatSessions } from "../lib/seat-sessions";
 import {
   CreateTableBody,
@@ -444,6 +445,7 @@ router.delete("/rooms/:id", requireRoles(ADMIN_ROLES), async (req, res): Promise
 });
 
 router.get("/tables", requireRoles(["waiter", "kitchen", "cashier", "supervisor", "manager", "owner"]), async (_req, res): Promise<void> => {
+  await autoCancelExpiredBookings();
   const tables = await db.select().from(tablesTable).orderBy(tablesTable.zone, tablesTable.tableNumber);
   res.json(ListTablesResponse.parse(tables.map(toIsoTable)));
 });
@@ -1006,6 +1008,7 @@ router.post(
 );
 
 router.get("/tables/:id", requireAuth, async (req, res): Promise<void> => {
+  await autoCancelExpiredBookings();
   const params = GetTableParams.safeParse({ id: parseId(req.params.id) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const [table] = await db.select().from(tablesTable).where(eq(tablesTable.id, params.data.id));
@@ -1015,6 +1018,7 @@ router.get("/tables/:id", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/tables/:id/scan", async (req, res): Promise<void> => {
+  await autoCancelExpiredBookings();
   const params = GetTableParams.safeParse({ id: parseId(req.params.id) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
@@ -1028,6 +1032,7 @@ router.post("/tables/:id/scan", async (req, res): Promise<void> => {
 });
 
 router.patch("/tables/:id", requireRoles(ADMIN_ROLES), async (req, res): Promise<void> => {
+  await autoCancelExpiredBookings();
   const params = UpdateTableParams.safeParse({ id: parseId(req.params.id) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateTableBody.safeParse(req.body);
@@ -1058,6 +1063,15 @@ router.patch("/tables/:id", requireRoles(ADMIN_ROLES), async (req, res): Promise
   if (payload.status && payload.status !== "Active") {
     payload.currentOrderId = null;
     payload.occupancyStatus = payload.occupancyStatus ?? "dirty";
+  }
+
+  const nextOccupancy = payload.occupancyStatus;
+  if (
+    nextOccupancy &&
+    (nextOccupancy === "dirty" || nextOccupancy === "available") &&
+    ["occupied", "payment_pending", "paid"].includes(currentTable.occupancyStatus)
+  ) {
+    await markBookingCheckoutForTable(currentTable.id);
   }
 
   const [table] = await db.update(tablesTable).set(payload).where(eq(tablesTable.id, params.data.id)).returning();
