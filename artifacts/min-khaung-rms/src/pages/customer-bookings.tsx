@@ -24,6 +24,13 @@ type CustomerBookingConfig = {
   bookingDefaultSlotMinutes: number;
 };
 
+type CustomerLayoutRoom = {
+  code: string;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
 type CustomerLayoutTable = {
   id: number;
   tableNumber: string;
@@ -32,9 +39,18 @@ type CustomerLayoutTable = {
   category: string;
   posX: number;
   posY: number;
-  status: string;
-  occupancyStatus: string;
+  status: "Active" | "Maintenance" | "Archived";
+  occupancyStatus: "available" | "occupied" | "payment_pending" | "paid" | "dirty";
   isBooked: boolean;
+  roomName: string;
+  roomSortOrder: number;
+  roomIsActive: boolean;
+  isSelectable: boolean;
+};
+
+type CustomerLayoutResponse = {
+  rooms: CustomerLayoutRoom[];
+  tables: CustomerLayoutTable[];
 };
 
 type BookingRecord = {
@@ -47,35 +63,14 @@ type BookingRecord = {
   status: "pending_payment" | "confirmed" | "checked_in" | "cancelled" | "completed";
 };
 
-type ZoneKey = "hall" | "aircon" | "outside";
-
 const CONFIG_QUERY_KEY = ["bookings", "customer-config"];
 const LAYOUT_QUERY_KEY = ["bookings", "customer-layout"];
 const HISTORY_QUERY_KEY = ["bookings", "customer-history"];
 const PROFILE_QUERY_KEY = ["customers", "me", "mini"];
-const ZONE_TABS: ZoneKey[] = ["hall", "aircon", "outside"];
-const OUTSIDE_ZONE_ALIASES = new Set(["outside", "outdoor", "patio", "garden", "external", "open"]);
 
 function toDateTimeInputValue(date: Date): string {
   const local = new Date(date.getTime() - (date.getTimezoneOffset() * 60_000));
   return local.toISOString().slice(0, 16);
-}
-
-function normalizeZone(rawZone: string): ZoneKey {
-  const zone = rawZone.trim().toLowerCase();
-  if (zone === "aircon" || zone === "air_con" || zone === "ac" || zone.includes("air")) {
-    return "aircon";
-  }
-  if (OUTSIDE_ZONE_ALIASES.has(zone) || zone.includes("outside") || zone.includes("outdoor")) {
-    return "outside";
-  }
-  return "hall";
-}
-
-function getZoneLabel(zone: ZoneKey, t: (key: string) => string, short = false): string {
-  if (zone === "aircon") return t(short ? "zones.airconShort" : "zones.aircon");
-  if (zone === "outside") return t(short ? "zones.outsideShort" : "zones.outside");
-  return t(short ? "zones.hallShort" : "zones.hall");
 }
 
 function getStatusClass(status: BookingRecord["status"]): string {
@@ -84,6 +79,47 @@ function getStatusClass(status: BookingRecord["status"]): string {
   if (status === "pending_payment") return "bg-amber-100 text-amber-700 border-amber-300";
   if (status === "cancelled") return "bg-red-100 text-red-700 border-red-300";
   return "bg-slate-100 text-slate-700 border-slate-300";
+}
+
+function getFallbackRoomName(code: string, t: (key: string) => string): string {
+  const normalized = code.trim().toLowerCase();
+  if (normalized === "aircon") return t("zones.aircon");
+  if (normalized === "outside" || normalized === "outdoor") return t("zones.outside");
+  if (normalized === "hall") return t("zones.hall");
+  return code;
+}
+
+function getTableStatusLabel(table: CustomerLayoutTable, t: (key: string) => string): string {
+  if (table.status !== "Active") return t(`status.service.${table.status}`);
+  if (table.isBooked) return t("floorPlan.reserved");
+  return t(`status.occupancy.${table.occupancyStatus}`);
+}
+
+function getTableCardClass(table: CustomerLayoutTable, selected: boolean): string {
+  if (table.isSelectable) {
+    return selected
+      ? "border-emerald-700 bg-emerald-600 text-white"
+      : "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100";
+  }
+  if (table.status === "Maintenance" || table.status === "Archived") {
+    return "border-slate-300 bg-slate-100 text-slate-500";
+  }
+  if (table.isBooked) {
+    return "border-blue-300 bg-blue-100 text-blue-700";
+  }
+  if (table.occupancyStatus === "occupied") {
+    return "border-amber-300 bg-amber-100 text-amber-800";
+  }
+  if (table.occupancyStatus === "payment_pending") {
+    return "border-red-300 bg-red-100 text-red-700";
+  }
+  if (table.occupancyStatus === "paid") {
+    return "border-indigo-300 bg-indigo-100 text-indigo-700";
+  }
+  if (table.occupancyStatus === "dirty") {
+    return "border-slate-300 bg-slate-200 text-slate-700";
+  }
+  return "border-slate-300 bg-slate-100 text-slate-600";
 }
 
 export default function CustomerBookingsPage() {
@@ -106,9 +142,9 @@ export default function CustomerBookingsPage() {
     enabled: isCustomer,
   });
 
-  const { data: availableTables = [], isLoading: layoutLoading } = useQuery({
+  const { data: layoutData, isLoading: layoutLoading } = useQuery({
     queryKey: LAYOUT_QUERY_KEY,
-    queryFn: () => customFetch<CustomerLayoutTable[]>("/api/bookings/customer-layout", { method: "GET", responseType: "json" }),
+    queryFn: () => customFetch<CustomerLayoutResponse>("/api/bookings/customer-layout", { method: "GET", responseType: "json" }),
     enabled: isCustomer,
     refetchInterval: 15000,
   });
@@ -120,8 +156,44 @@ export default function CustomerBookingsPage() {
     refetchInterval: 15000,
   });
 
+  const allTables = layoutData?.tables ?? [];
+
+  const rooms = useMemo<CustomerLayoutRoom[]>(() => {
+    const defaults: CustomerLayoutRoom[] = [
+      { code: "hall", name: t("zones.hall"), sortOrder: 1, isActive: true },
+      { code: "aircon", name: t("zones.aircon"), sortOrder: 2, isActive: true },
+      { code: "outside", name: t("zones.outside"), sortOrder: 3, isActive: true },
+    ];
+    const byCode = new Map(defaults.map((room) => [room.code, room]));
+
+    for (const room of layoutData?.rooms ?? []) {
+      byCode.set(room.code, {
+        code: room.code,
+        name: room.name || getFallbackRoomName(room.code, t),
+        sortOrder: room.sortOrder,
+        isActive: room.isActive,
+      });
+    }
+
+    for (const table of allTables) {
+      if (byCode.has(table.zone)) continue;
+      byCode.set(table.zone, {
+        code: table.zone,
+        name: table.roomName || getFallbackRoomName(table.zone, t),
+        sortOrder: table.roomSortOrder,
+        isActive: table.roomIsActive,
+      });
+    }
+
+    return [...byCode.values()].sort((left, right) => {
+      const orderDiff = left.sortOrder - right.sortOrder;
+      if (orderDiff !== 0) return orderDiff;
+      return left.name.localeCompare(right.name);
+    });
+  }, [allTables, layoutData?.rooms, t]);
+
+  const [selectedRoomCode, setSelectedRoomCode] = useState<string>("hall");
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
-  const [selectedZone, setSelectedZone] = useState<ZoneKey>("hall");
   const [slotStartAt, setSlotStartAt] = useState<string>(toDateTimeInputValue(new Date(Date.now() + (65 * 60_000))));
   const [slotMinutes, setSlotMinutes] = useState<string>("120");
   const [notes, setNotes] = useState<string>("");
@@ -132,38 +204,44 @@ export default function CustomerBookingsPage() {
     setSlotStartAt(toDateTimeInputValue(new Date(Date.now() + ((config.bookingLeadTimeMinutes + 5) * 60_000))));
   }, [config]);
 
-  const tablesByZone = useMemo<Record<ZoneKey, CustomerLayoutTable[]>>(() => {
-    const grouped: Record<ZoneKey, CustomerLayoutTable[]> = {
-      hall: [],
-      aircon: [],
-      outside: [],
-    };
-    for (const table of availableTables) {
-      grouped[normalizeZone(table.zone)].push(table);
+  useEffect(() => {
+    if (!rooms.length) return;
+    if (rooms.some((room) => room.code === selectedRoomCode)) return;
+    setSelectedRoomCode(rooms[0].code);
+  }, [rooms, selectedRoomCode]);
+
+  const tablesByRoom = useMemo(() => {
+    const grouped = new Map<string, CustomerLayoutTable[]>();
+    for (const table of allTables) {
+      const existing = grouped.get(table.zone) ?? [];
+      existing.push(table);
+      grouped.set(table.zone, existing);
     }
-    for (const zone of ZONE_TABS) {
-      grouped[zone].sort((left, right) => left.tableNumber.localeCompare(right.tableNumber, undefined, { numeric: true }));
+    for (const roomTables of grouped.values()) {
+      roomTables.sort((left, right) => left.tableNumber.localeCompare(right.tableNumber, undefined, { numeric: true }));
     }
     return grouped;
-  }, [availableTables]);
+  }, [allTables]);
 
-  const zoneTables = tablesByZone[selectedZone];
+  const roomTables = tablesByRoom.get(selectedRoomCode) ?? [];
+  const selectableRoomTables = roomTables.filter((table) => table.isSelectable);
+  const selectedRoom = rooms.find((room) => room.code === selectedRoomCode);
 
   useEffect(() => {
-    if (!zoneTables.length) {
+    if (!selectableRoomTables.length) {
       setSelectedTableId(null);
       return;
     }
-    if (selectedTableId && zoneTables.some((table) => table.id === selectedTableId)) return;
-    setSelectedTableId(zoneTables[0].id);
-  }, [selectedTableId, zoneTables]);
+    if (selectedTableId && selectableRoomTables.some((table) => table.id === selectedTableId)) return;
+    setSelectedTableId(selectableRoomTables[0].id);
+  }, [selectableRoomTables, selectedTableId]);
 
   const layoutMetrics = useMemo(() => {
-    if (zoneTables.length === 0) {
+    if (roomTables.length === 0) {
       return { minX: 0, minY: 0, rangeX: 1, rangeY: 1 };
     }
-    const xs = zoneTables.map((table) => table.posX);
-    const ys = zoneTables.map((table) => table.posY);
+    const xs = roomTables.map((table) => table.posX);
+    const ys = roomTables.map((table) => table.posY);
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
     const minY = Math.min(...ys);
@@ -174,12 +252,17 @@ export default function CustomerBookingsPage() {
       rangeX: Math.max(maxX - minX, 1),
       rangeY: Math.max(maxY - minY, 1),
     };
-  }, [zoneTables]);
+  }, [roomTables]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!selectedTableId) throw new Error("Please select a table.");
       if (!slotStartAt) throw new Error("Please select booking date and time.");
+      const selectedTable = roomTables.find((table) => table.id === selectedTableId);
+      if (!selectedTable?.isSelectable) {
+        throw new Error("Only available tables can be selected.");
+      }
+
       const slotMinutesNumber = Number.parseInt(slotMinutes, 10);
       if (!Number.isFinite(slotMinutesNumber) || slotMinutesNumber < 15) {
         throw new Error("slotMinutes must be at least 15.");
@@ -254,42 +337,42 @@ export default function CustomerBookingsPage() {
           <CardTitle>{t("bookings.chooseTableLayout")}</CardTitle>
         </CardHeader>
         <CardContent>
-          {availableTables.length === 0 ? (
+          {allTables.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("bookings.noAvailableTable")}</p>
           ) : (
             <div className="space-y-3">
               <div className="space-y-2">
                 <p className="text-sm font-semibold text-muted-foreground">{t("bookings.zoneFilter")}</p>
                 <div className="flex flex-wrap gap-2">
-                  {ZONE_TABS.map((zone) => {
-                    const active = selectedZone === zone;
-                    const count = tablesByZone[zone].length;
+                  {rooms.map((room) => {
+                    const active = selectedRoomCode === room.code;
+                    const count = tablesByRoom.get(room.code)?.length ?? 0;
                     return (
                       <button
-                        key={zone}
+                        key={room.code}
                         type="button"
-                        onClick={() => setSelectedZone(zone)}
+                        onClick={() => setSelectedRoomCode(room.code)}
                         className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
                           active
                             ? "border-emerald-600 bg-emerald-600 text-white"
                             : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
                         }`}
                       >
-                        {getZoneLabel(zone, t)} ({count})
+                        {room.name} ({count})
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {zoneTables.length === 0 ? (
+              {roomTables.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  {t("bookings.noAvailableTableInZone", { zone: getZoneLabel(selectedZone, t) })}
+                  {t("bookings.noAvailableTableInZone", { zone: selectedRoom?.name ?? getFallbackRoomName(selectedRoomCode, t) })}
                 </p>
               ) : null}
 
-              <div className="relative h-[360px] overflow-hidden rounded-lg border bg-muted/20">
-                {zoneTables.map((table) => {
+              <div className="relative h-[420px] overflow-hidden rounded-lg border bg-muted/20">
+                {roomTables.map((table) => {
                   const left = 6 + (((table.posX - layoutMetrics.minX) / layoutMetrics.rangeX) * 88);
                   const top = 8 + (((table.posY - layoutMetrics.minY) / layoutMetrics.rangeY) * 80);
                   const selected = selectedTableId === table.id;
@@ -297,15 +380,18 @@ export default function CustomerBookingsPage() {
                     <button
                       key={table.id}
                       type="button"
-                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-md border px-3 py-2 text-xs font-semibold shadow-sm ${
-                        selected
-                          ? "border-emerald-600 bg-emerald-600 text-white"
-                          : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
-                      }`}
-                      style={{ left: `${left}%`, top: `${top}%` }}
-                      onClick={() => setSelectedTableId(table.id)}
+                      disabled={!table.isSelectable}
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-md border px-2 py-1.5 text-center text-[11px] font-semibold shadow-sm transition-colors ${
+                        getTableCardClass(table, selected)
+                      } ${table.isSelectable ? "" : "cursor-not-allowed opacity-90"}`}
+                      style={{ left: `${left}%`, top: `${top}%`, width: "86px", minHeight: "58px" }}
+                      onClick={() => {
+                        if (!table.isSelectable) return;
+                        setSelectedTableId(table.id);
+                      }}
                     >
-                      {table.tableNumber}
+                      <p className="font-bold">{table.tableNumber}</p>
+                      <p className="mt-0.5 text-[10px] leading-tight opacity-90">{getTableStatusLabel(table, t)}</p>
                     </button>
                   );
                 })}
@@ -322,12 +408,16 @@ export default function CustomerBookingsPage() {
                       setSelectedTableId(Number.isFinite(parsed) ? parsed : null);
                     }}
                   >
-                    {zoneTables.map((table) => (
+                    {selectableRoomTables.length === 0 ? (
+                      <option value="">{t("bookings.selectTable")}</option>
+                    ) : null}
+                    {selectableRoomTables.map((table) => (
                       <option key={table.id} value={table.id}>
-                        {table.tableNumber} ({getZoneLabel(normalizeZone(table.zone), t)})
+                        {table.tableNumber} ({selectedRoom?.name ?? getFallbackRoomName(table.zone, t)})
                       </option>
                     ))}
                   </select>
+                  <p className="text-xs text-muted-foreground">{t("bookings.availableOnlyHint")}</p>
                 </div>
                 <div className="space-y-1">
                   <Label>{t("bookings.customer")}</Label>

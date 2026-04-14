@@ -74,6 +74,8 @@ Last updated: 2026-04-15
   - Customer login redirect hardening: successful customer login now always returns to Public Menu (`/`) instead of remaining on `/login?mode=customer`.
   - Public Menu customer profile load now suppresses transient 401-auth toast noise to avoid flashing error messages.
   - Login password UX update: added show/hide toggle on all login-password fields (staff login, customer login, customer password-change dialog).
+  - Customer booking layout now shows all tables by room with status labels (Available/Occupied/Maintenance/etc.); only available tables are selectable for booking.
+  - Customer booking room tabs now use room metadata from backend (`/bookings/customer-layout`) to keep room placement accurate.
   - New Business Hours settings page.
   - Floor Plan reserved table cards now show customer name and phone.
   - i18n updates (EN/MM) for booking/business-hours/floor-plan labels and toasts.
@@ -93,6 +95,7 @@ Last updated: 2026-04-15
   - `pnpm run build` passed.
 
 Recent commits:
+- `a655cbc` Fix(auth-ui): suppress transient profile 401 toast and add password show/hide toggles
 - `99929f2` Fix(auth): always redirect customer login to public menu
 - `950b534` Fix(bootstrap): keep loading UI and silent auto-retry on startup failures
 - `eab7b4b` Feature(bookings): zone-based available table selection on customer bookings

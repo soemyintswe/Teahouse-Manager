@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
-import { customerPhonesTable, customersTable, db, tableBookingsTable, tablesTable } from "@workspace/db";
+import { customerPhonesTable, customersTable, db, roomsTable, tableBookingsTable, tablesTable } from "@workspace/db";
 import { requireAuth, requireRoles } from "../lib/auth";
 import {
   autoCancelExpiredBookings,
@@ -200,6 +200,17 @@ router.get("/bookings/customer-config", requireRoles(["customer"]), async (_req,
 
 router.get("/bookings/customer-layout", requireRoles(["customer"]), async (_req, res): Promise<void> => {
   await autoCancelExpiredBookings();
+  const rooms = await db
+    .select({
+      code: roomsTable.code,
+      name: roomsTable.name,
+      sortOrder: roomsTable.sortOrder,
+      isActive: roomsTable.isActive,
+    })
+    .from(roomsTable)
+    .orderBy(roomsTable.sortOrder, roomsTable.name);
+  const roomByCode = new Map(rooms.map((room) => [room.code, room]));
+
   const rows = await db
     .select({
       id: tablesTable.id,
@@ -213,12 +224,24 @@ router.get("/bookings/customer-layout", requireRoles(["customer"]), async (_req,
       occupancyStatus: tablesTable.occupancyStatus,
       isBooked: tablesTable.isBooked,
     })
-    .from(tablesTable);
+    .from(tablesTable)
+    .orderBy(tablesTable.zone, tablesTable.tableNumber);
 
-  const availableTables = rows.filter(
-    (table) => table.status === "Active" && table.occupancyStatus === "available" && !table.isBooked,
-  );
-  res.json(availableTables);
+  res.json({
+    rooms,
+    tables: rows.map((table) => {
+      const room = roomByCode.get(table.zone);
+      const roomIsActive = room?.isActive ?? true;
+      const isSelectable = roomIsActive && table.status === "Active" && table.occupancyStatus === "available" && !table.isBooked;
+      return {
+        ...table,
+        roomName: room?.name ?? table.zone,
+        roomSortOrder: room?.sortOrder ?? Number.MAX_SAFE_INTEGER,
+        roomIsActive,
+        isSelectable,
+      };
+    }),
+  });
 });
 
 router.post("/bookings", requireAuth, async (req, res): Promise<void> => {
