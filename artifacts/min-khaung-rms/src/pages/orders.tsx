@@ -328,6 +328,8 @@ export default function OrdersPage() {
     user?.tableId ??
     ((scanRequested || menuItemIdFromQuery != null) ? storedTableId : null);
   const isGuest = user?.role === "guest";
+  const isCustomer = user?.role === "customer";
+  const isStaffMode = !isGuest && !isCustomer;
   const [menuViewMode, setMenuViewMode] = useState<MenuViewMode>("large");
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<number | null>(null);
 
@@ -382,7 +384,7 @@ export default function OrdersPage() {
 
   const { data: allTables = [], isLoading: tablesLoading } = useListTables({
     query: {
-      enabled: !isGuest,
+      enabled: isStaffMode,
       queryKey: getListTablesQueryKey(),
     },
   });
@@ -673,6 +675,13 @@ export default function OrdersPage() {
           <div className="rounded-lg border border-dashed p-6 text-center text-muted-foreground">
             {t("orders.scanTableFirstDesc")}
           </div>
+        ) : isCustomer ? (
+          <div className="space-y-3 rounded-lg border border-dashed p-6 text-center text-muted-foreground">
+            <p>{t("bookings.selectTable")}</p>
+            <Button variant="outline" onClick={() => setLocation("/bookings")}>
+              {t("public.tableBooking")}
+            </Button>
+          </div>
         ) : (
           <>
             <p className="text-sm text-muted-foreground">{t("orders.selectTablePrompt")}</p>
@@ -717,9 +726,9 @@ export default function OrdersPage() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
         <p>{t("orders.tableNotFound")}</p>
-        <Button variant="outline" onClick={() => setLocation(isGuest ? "/orders" : "/floor-plan")}>
+        <Button variant="outline" onClick={() => setLocation(isGuest ? "/orders" : (isCustomer ? "/bookings" : "/floor-plan"))}>
           <ArrowLeft className="mr-2 h-4 w-4" />
-          {t("orders.backToFloor")}
+          {isCustomer ? t("bookings.backToMenu") : t("orders.backToFloor")}
         </Button>
       </div>
     );
@@ -728,7 +737,7 @@ export default function OrdersPage() {
   return (
     <div className="flex h-full flex-col gap-4 overflow-x-hidden">
       <div className="flex max-w-full flex-wrap items-center gap-3">
-        <Button variant="outline" size="icon" onClick={() => setLocation(isGuest ? "/orders" : "/floor-plan")}>
+        <Button variant="outline" size="icon" onClick={() => setLocation(isGuest ? "/orders" : (isCustomer ? "/bookings" : "/floor-plan"))}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="min-w-0">
@@ -744,7 +753,7 @@ export default function OrdersPage() {
         </div>
         <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
           <Badge variant="outline">{t("floorPlan.tableId", { id: table.id })}</Badge>
-          {!isGuest ? (
+          {isStaffMode ? (
             <Button variant="outline" size="sm" onClick={() => setLocation("/orders")}>
               {t("orders.changeTable")}
             </Button>

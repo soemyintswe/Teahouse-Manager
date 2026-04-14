@@ -118,6 +118,8 @@
     "loginButton": "User Login",
     "guestButton": "Table Guest Access",
     "customerLogin": "Customer Login",
+    "tableBooking": "Table Booking",
+    "startTableBooking": "Book a Table",
     "myDeliveryOrders": "My Delivery Orders",
     "allCategories": "All Items",
     "preview": {
@@ -834,6 +836,11 @@
   "bookings": {
     "title": "Table Bookings",
     "subtitle": "Create time-slot bookings, confirm payment, and manage check-in/check-out flow.",
+    "customerSubtitle": "Choose an available table from layout, book instantly, then continue to menu order.",
+    "chooseTableLayout": "Choose Table from Layout",
+    "noAvailableTable": "No available tables right now.",
+    "bookAndOrder": "Book Table and Continue to Order",
+    "backToMenu": "Back to Public Menu",
     "refresh": "Refresh",
     "newBooking": "New Booking",
     "table": "Table",

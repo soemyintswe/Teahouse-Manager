@@ -118,6 +118,8 @@
     "loginButton": "User Login",
     "guestButton": "စားပွဲဧည့်သည်ဝင်ရောက်မှု",
     "customerLogin": "Customer Login",
+    "tableBooking": "စားပွဲဘွတ်ကင်",
+    "startTableBooking": "စားပွဲဘွတ်ကင် စတင်မည်",
     "myDeliveryOrders": "မိမိ Delivery မှာယူမှုများ",
     "allCategories": "အစားအသောက်အားလုံး",
     "preview": {
@@ -834,6 +836,11 @@
   "bookings": {
     "title": "စားပွဲ ဘွတ်ကင်များ",
     "subtitle": "အချိန်အပိုင်းအခြားဖြင့် ဘွတ်ကင်တင်ပြီး ငွေပေးချေမှုအတည်ပြုကာ Check-in/Check-out စီးဆင်းမှုကို စီမံပါ။",
+    "customerSubtitle": "Table layout မှ လွတ်နေသောစားပွဲကိုရွေးပြီး ဘွတ်ကင်တင်ကာ တစ်ဆက်တည်း မီနူးမှာယူနိုင်ပါသည်။",
+    "chooseTableLayout": "Table Layout မှ စားပွဲရွေးမည်",
+    "noAvailableTable": "လက်ရှိအချိန်တွင် လွတ်နေသောစားပွဲမရှိပါ။",
+    "bookAndOrder": "စားပွဲဘွတ်ကင်တင်ပြီး မှာယူမည်",
+    "backToMenu": "အများပြည်သူ မီနူးသို့ ပြန်မည်",
     "refresh": "ပြန်ဖွင့်မည်",
     "newBooking": "ဘွတ်ကင်အသစ်",
     "table": "စားပွဲ",

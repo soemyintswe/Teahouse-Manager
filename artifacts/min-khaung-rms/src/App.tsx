@@ -53,6 +53,7 @@ import DeliveryOrdersPage from "@/pages/delivery-orders";
 import SettingsPage from "@/pages/settings";
 import BookingsPage from "@/pages/bookings";
 import BusinessHoursPage from "@/pages/business-hours";
+import CustomerBookingsPage from "@/pages/customer-bookings";
 import NotFound from "@/pages/not-found";
 import { setupAutoUpdate } from "@/lib/mobile-updater";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -346,11 +347,23 @@ function RouterContent() {
           component={() => (user?.role === "customer" ? <PublicHomePage /> : guard("dashboard", Dashboard)())}
         />
         <Route path="/floor-plan" component={guard("floorPlan", FloorPlan)} />
-        <Route path="/bookings" component={guard("bookings", BookingsPage)} />
+        <Route
+          path="/bookings"
+          component={() => (user?.role === "customer" ? <CustomerBookingsPage /> : guard("bookings", BookingsPage)())}
+        />
         <Route path="/table-settings" component={guard("tableSettings", TableSettingsPage)} />
-        <Route path="/orders" component={guard("orders", OrdersPage)} />
-        <Route path="/orders/new" component={guard("orders", NewOrderPage)} />
-        <Route path="/orders/:id" component={guard("orders", OrderDetailPage)} />
+        <Route
+          path="/orders"
+          component={() => (user?.role === "customer" ? <OrdersPage /> : guard("orders", OrdersPage)())}
+        />
+        <Route
+          path="/orders/new"
+          component={() => (user?.role === "customer" ? <NewOrderPage /> : guard("orders", NewOrderPage)())}
+        />
+        <Route
+          path="/orders/:id"
+          component={() => (user?.role === "customer" ? <OrderDetailPage /> : guard("orders", OrderDetailPage)())}
+        />
         <Route path="/kds" component={guard("kds", Kitchen)} />
         <Route path="/kitchen" component={guard("kds", Kitchen)} />
         <Route path="/cashier" component={guard("cashier", CashierPage)} />

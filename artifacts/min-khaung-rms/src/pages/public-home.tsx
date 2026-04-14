@@ -485,13 +485,22 @@ export default function PublicHomePage() {
                   </Button>
                 </>
               ) : (
-                <Button
-                  variant="secondary"
-                  className="bg-white text-emerald-700 hover:bg-emerald-50"
-                  onClick={() => setLocation("/delivery-orders")}
-                >
-                  {t("public.myDeliveryOrders")}
-                </Button>
+                <>
+                  <Button
+                    variant="secondary"
+                    className="bg-white text-emerald-700 hover:bg-emerald-50"
+                    onClick={() => setLocation("/bookings")}
+                  >
+                    {t("public.tableBooking")}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="bg-white text-emerald-700 hover:bg-emerald-50"
+                    onClick={() => setLocation("/delivery-orders")}
+                  >
+                    {t("public.myDeliveryOrders")}
+                  </Button>
+                </>
               )}
               <Button
                 type="button"
@@ -546,6 +555,9 @@ export default function PublicHomePage() {
                 <Button onClick={() => setCheckoutOpen(true)} disabled={cart.length === 0}>
                   <ShoppingCart className="mr-1.5 h-4 w-4" />
                   {t("public.cart.checkoutButton", { count: cartCount })}
+                </Button>
+                <Button variant="outline" onClick={() => setLocation("/bookings")}>
+                  {t("public.startTableBooking")}
                 </Button>
                 <Button variant="outline" onClick={() => setLocation("/delivery-orders")}>
                   {t("public.myDeliveryOrders")}

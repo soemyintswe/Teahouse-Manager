@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
-import { db, tableBookingsTable, tablesTable } from "@workspace/db";
-import { requireRoles } from "../lib/auth";
+import { customerPhonesTable, customersTable, db, tableBookingsTable, tablesTable } from "@workspace/db";
+import { requireAuth, requireRoles } from "../lib/auth";
 import {
   autoCancelExpiredBookings,
   computeAutoCancelAt,
@@ -13,7 +13,7 @@ import {
 const router: IRouter = Router();
 
 const BOOKING_MANAGE_ROLES = ["waiter", "cashier", "cleaner", "room_supervisor", "supervisor", "manager", "owner"] as const;
-const BOOKING_VIEW_ROLES = ["waiter", "cashier", "cleaner", "room_supervisor", "supervisor", "manager", "owner"] as const;
+const BOOKING_VIEW_ROLES = ["waiter", "cashier", "cleaner", "room_supervisor", "supervisor", "manager", "owner", "customer"] as const;
 const BOOKING_STATUSES = ["pending_payment", "confirmed", "checked_in", "cancelled", "completed"] as const;
 const BLOCKING_BOOKING_STATUSES = ["pending_payment", "confirmed", "checked_in"] as const;
 
@@ -91,6 +91,7 @@ function formatBooking(row: typeof tableBookingsTable.$inferSelect) {
   return {
     id: row.id,
     tableId: row.tableId,
+    customerId: row.customerId ?? null,
     customerName: row.customerName,
     customerPhone: row.customerPhone,
     slotStartAt: row.slotStartAt.toISOString(),
@@ -121,6 +122,9 @@ router.get("/bookings/active", requireRoles(BOOKING_VIEW_ROLES), async (req, res
   const tableId = parseOptionalInt(req.query.tableId);
   const statuses = ["pending_payment", "confirmed", "checked_in"];
   const conditions = [inArray(tableBookingsTable.status, statuses)];
+  if (req.auth?.role === "customer" && req.auth.customerId) {
+    conditions.push(eq(tableBookingsTable.customerId, req.auth.customerId));
+  }
   if (tableId && tableId > 0) {
     conditions.push(eq(tableBookingsTable.tableId, tableId));
   }
@@ -161,6 +165,9 @@ router.get("/bookings", requireRoles(BOOKING_VIEW_ROLES), async (req, res): Prom
   const limit = limitRaw && limitRaw > 0 ? Math.min(limitRaw, 500) : 200;
 
   const conditions = [];
+  if (req.auth?.role === "customer" && req.auth.customerId) {
+    conditions.push(eq(tableBookingsTable.customerId, req.auth.customerId));
+  }
   if (status) conditions.push(eq(tableBookingsTable.status, status));
   if (tableId && tableId > 0) conditions.push(eq(tableBookingsTable.tableId, tableId));
   if (fromRaw) conditions.push(gte(tableBookingsTable.slotStartAt, fromRaw));
@@ -182,20 +189,95 @@ router.get("/bookings", requireRoles(BOOKING_VIEW_ROLES), async (req, res): Prom
   res.json(rows.map(formatBooking));
 });
 
-router.post("/bookings", requireRoles(BOOKING_MANAGE_ROLES), async (req, res): Promise<void> => {
+router.get("/bookings/customer-config", requireRoles(["customer"]), async (_req, res): Promise<void> => {
+  const config = await getBookingRuntimeConfig();
+  res.json({
+    bookingLeadTimeMinutes: config.leadTimeMinutes,
+    bookingNoShowGraceMinutes: config.noShowGraceMinutes,
+    bookingDefaultSlotMinutes: config.defaultSlotMinutes,
+  });
+});
+
+router.get("/bookings/customer-layout", requireRoles(["customer"]), async (_req, res): Promise<void> => {
   await autoCancelExpiredBookings();
+  const rows = await db
+    .select({
+      id: tablesTable.id,
+      tableNumber: tablesTable.tableNumber,
+      zone: tablesTable.zone,
+      capacity: tablesTable.capacity,
+      category: tablesTable.category,
+      posX: tablesTable.posX,
+      posY: tablesTable.posY,
+      status: tablesTable.status,
+      occupancyStatus: tablesTable.occupancyStatus,
+      isBooked: tablesTable.isBooked,
+    })
+    .from(tablesTable);
+
+  const availableTables = rows.filter(
+    (table) => table.status === "Active" && table.occupancyStatus === "available" && !table.isBooked,
+  );
+  res.json(availableTables);
+});
+
+router.post("/bookings", requireAuth, async (req, res): Promise<void> => {
+  await autoCancelExpiredBookings();
+  const canManageAsStaff = req.auth?.role && (BOOKING_MANAGE_ROLES as readonly string[]).includes(req.auth.role);
+  const isCustomer = req.auth?.role === "customer";
+  if (!canManageAsStaff && !isCustomer) {
+    res.status(403).json({ error: "Permission denied." });
+    return;
+  }
+
   const body = (req.body ?? {}) as CreateBookingBody;
   const tableId = parseOptionalInt(body.tableId);
-  const customerName = typeof body.customerName === "string" ? body.customerName.trim() : "";
-  const customerPhone = typeof body.customerPhone === "string" ? body.customerPhone.trim() : "";
+  let customerName = typeof body.customerName === "string" ? body.customerName.trim() : "";
+  let customerPhone = typeof body.customerPhone === "string" ? body.customerPhone.trim() : "";
   const slotStartAt = typeof body.slotStartAt === "string" ? new Date(body.slotStartAt) : null;
   const slotMinutesRaw = parseOptionalInt(body.slotMinutes);
-  const bookingFee = parseMoney(body.bookingFee, "0.00");
-  const preorderAmount = parseMoney(body.preorderAmount, "0.00");
-  const bookingFeePaid = parseBoolean(body.bookingFeePaid, false);
-  const preorderAmountPaid = parseBoolean(body.preorderAmountPaid, false);
+  let bookingFee = parseMoney(body.bookingFee, "0.00");
+  let preorderAmount = parseMoney(body.preorderAmount, "0.00");
+  let bookingFeePaid = parseBoolean(body.bookingFeePaid, false);
+  let preorderAmountPaid = parseBoolean(body.preorderAmountPaid, false);
   const notes = typeof body.notes === "string" ? body.notes.trim() : "";
-  const createdByStaffId = parseOptionalInt(body.staffId) ?? req.auth?.staffId ?? null;
+  const createdByStaffId = isCustomer ? null : (parseOptionalInt(body.staffId) ?? req.auth?.staffId ?? null);
+  let bookingCustomerId: number | null = null;
+
+  if (isCustomer) {
+    if (!req.auth?.customerId) {
+      res.status(403).json({ error: "Customer login is required." });
+      return;
+    }
+    const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, req.auth.customerId));
+    if (!customer) {
+      res.status(404).json({ error: "Customer account not found." });
+      return;
+    }
+    const status = String(customer.status ?? "").trim().toLowerCase();
+    if (status === "denied" || status === "terminated") {
+      res.status(403).json({ error: "Customer account is not active." });
+      return;
+    }
+    if (status === "pending") {
+      await db.update(customersTable).set({ status: "approved" }).where(eq(customersTable.id, customer.id));
+    }
+    const phones = await db
+      .select()
+      .from(customerPhonesTable)
+      .where(eq(customerPhonesTable.customerId, customer.id));
+    const primaryPhone = phones.sort((a, b) => a.sortOrder - b.sortOrder)[0]?.phone ?? "";
+    if (!customer.fullName || !primaryPhone) {
+      res.status(400).json({ error: "Customer profile is missing name or phone number." });
+      return;
+    }
+
+    customerName = customer.fullName;
+    customerPhone = primaryPhone;
+    bookingCustomerId = customer.id;
+    if (bookingFee === "0.00") bookingFeePaid = true;
+    if (preorderAmount === "0.00") preorderAmountPaid = true;
+  }
 
   if (!tableId || tableId <= 0) {
     res.status(400).json({ error: "tableId is required." });
@@ -282,6 +364,7 @@ router.post("/bookings", requireRoles(BOOKING_MANAGE_ROLES), async (req, res): P
     .insert(tableBookingsTable)
     .values({
       tableId,
+      customerId: bookingCustomerId,
       customerName,
       customerPhone,
       slotStartAt,

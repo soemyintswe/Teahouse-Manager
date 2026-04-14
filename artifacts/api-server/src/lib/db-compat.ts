@@ -444,6 +444,7 @@ export async function ensureDbCompatibility(): Promise<void> {
         CREATE TABLE IF NOT EXISTS table_bookings (
           id SERIAL PRIMARY KEY,
           table_id INTEGER NOT NULL,
+          customer_id INTEGER,
           customer_name TEXT NOT NULL,
           customer_phone TEXT NOT NULL,
           slot_start_at TIMESTAMPTZ NOT NULL,
@@ -467,6 +468,7 @@ export async function ensureDbCompatibility(): Promise<void> {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
         ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS table_id INTEGER;
+        ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS customer_id INTEGER;
         ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS customer_name TEXT;
         ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS customer_phone TEXT;
         ALTER TABLE table_bookings ADD COLUMN IF NOT EXISTS slot_start_at TIMESTAMPTZ;

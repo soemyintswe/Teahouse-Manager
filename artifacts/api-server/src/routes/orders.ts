@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, desc, gt, inArray, isNull, sql } from "drizzle-orm";
 import {
   db,
   ordersTable,
@@ -10,6 +10,7 @@ import {
   customerAddressesTable,
   customerPhonesTable,
   customersTable,
+  tableBookingsTable,
   tableMergeGroupsTable,
   billingAuditLogsTable,
   tableSeatSessionsTable,
@@ -313,8 +314,10 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreateOrderBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const requestedSeatSessionId = parseInteger((req.body as { seatSessionId?: unknown } | undefined)?.seatSessionId);
-  if (req.auth?.role === "customer") {
-    res.status(403).json({ error: "Customer account cannot create dine-in table orders." });
+  const isCustomer = req.auth?.role === "customer";
+  const customerId = isCustomer ? (req.auth?.customerId ?? null) : null;
+  if (isCustomer && !customerId) {
+    res.status(403).json({ error: "Customer login is required." });
     return;
   }
   if (req.auth?.role === "guest" && !canAccessTable(req, parsed.data.tableId)) {
@@ -337,12 +340,45 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
         throw error;
       }
 
+      const now = new Date();
+      const [activeCustomerBooking] = isCustomer && customerId
+        ? await tx
+            .select()
+            .from(tableBookingsTable)
+            .where(and(
+              eq(tableBookingsTable.tableId, parsed.data.tableId),
+              eq(tableBookingsTable.customerId, customerId),
+              inArray(tableBookingsTable.status, ["confirmed", "checked_in"]),
+              isNull(tableBookingsTable.checkOutAt),
+              gt(tableBookingsTable.autoCancelAt, now),
+            ))
+            .orderBy(desc(tableBookingsTable.checkInAt), desc(tableBookingsTable.slotStartAt), desc(tableBookingsTable.createdAt))
+        : [undefined];
+
+      if (isCustomer && !activeCustomerBooking) {
+        const error = new Error("Customer booking is required before opening table order.") as Error & { statusCode?: number };
+        error.statusCode = 403;
+        throw error;
+      }
+
       if (["payment_pending", "paid", "dirty"].includes(table.occupancyStatus)) {
         const error = new Error("This table is currently unavailable.") as Error & { statusCode?: number };
         error.statusCode = 409;
         throw error;
       }
       if (table.isBooked) {
+        if (isCustomer && activeCustomerBooking?.status === "confirmed" && activeCustomerBooking.checkInAt == null) {
+          // Customer with valid confirmed booking may proceed; booking state is synced after order creation.
+        } else {
+          const error = new Error("This table is reserved. Please complete booking check-in first.") as Error & {
+            statusCode?: number;
+          };
+          error.statusCode = 409;
+          throw error;
+        }
+      }
+
+      if (isCustomer && activeCustomerBooking?.status === "checked_in" && table.occupancyStatus !== "available" && table.currentOrderId != null) {
         const error = new Error("This table is reserved. Please complete booking check-in first.") as Error & {
           statusCode?: number;
         };
@@ -452,6 +488,7 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
         orderSource: "dine_in",
         billingGroupId,
         seatSessionId,
+        customerId: customerId ?? null,
         deliveryStatus: null,
         notes: parsed.data.notes ?? null,
         staffId: parsed.data.staffId ?? null,

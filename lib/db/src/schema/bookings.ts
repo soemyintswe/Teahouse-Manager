@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 export const tableBookingsTable = pgTable("table_bookings", {
   id: serial("id").primaryKey(),
   tableId: integer("table_id").notNull(),
+  customerId: integer("customer_id"),
   customerName: text("customer_name").notNull(),
   customerPhone: text("customer_phone").notNull(),
   slotStartAt: timestamp("slot_start_at", { withTimezone: true }).notNull(),
